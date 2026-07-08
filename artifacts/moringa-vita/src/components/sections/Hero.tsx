@@ -59,7 +59,11 @@ export function Hero() {
           <Button size="lg" className="bg-primary-foreground text-primary hover:bg-secondary border-none">
             Shop the Collection
           </Button>
-          <Button size="lg" variant="outline" className="text-primary-foreground border-primary-foreground hover:bg-primary-foreground hover:text-primary">
+          <Button
+            size="lg"
+            variant="outline"
+            className="relative isolate overflow-hidden text-primary-foreground border-primary-foreground bg-transparent transition-colors duration-500 ease-out hover:bg-transparent hover:text-primary before:absolute before:inset-0 before:-z-10 before:origin-left before:scale-x-0 before:bg-primary-foreground before:transition-transform before:duration-500 before:ease-out hover:before:scale-x-100"
+          >
             Explore the Origins
           </Button>
         </motion.div>
