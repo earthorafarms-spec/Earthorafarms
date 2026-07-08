@@ -64,16 +64,6 @@ export function Hero() {
           </Button>
         </motion.div>
       </div>
-
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1.5, duration: 1 }}
-        className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2"
-      >
-        <span className="text-xs uppercase tracking-widest text-primary-foreground/60">Scroll to Discover</span>
-        <div className="w-[1px] h-12 bg-gradient-to-b from-primary-foreground/60 to-transparent" />
-      </motion.div>
     </section>
   );
 }

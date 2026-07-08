@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type MouseEvent } from "react";
 import { motion, useScroll, useMotionValueEvent } from "framer-motion";
 import { ShoppingBag, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,15 @@ export function Navbar() {
   useMotionValueEvent(scrollY, "change", (latest) => {
     setIsScrolled(latest > 50);
   });
+
+  const handleNavClick = (e: MouseEvent<HTMLAnchorElement>, id: string) => {
+    e.preventDefault();
+    const target = document.getElementById(id);
+    if (!target) return;
+    const navbarOffset = 80;
+    const top = target.getBoundingClientRect().top + window.scrollY - navbarOffset;
+    window.scrollTo({ top, behavior: "smooth" });
+  };
 
   return (
     <motion.header
@@ -32,6 +41,7 @@ export function Navbar() {
             <a
               key={item}
               href={`#${item.toLowerCase()}`}
+              onClick={(e) => handleNavClick(e, item.toLowerCase())}
               className={`text-sm font-medium transition-colors hover:opacity-70 ${
                 isScrolled ? "text-foreground" : "text-primary-foreground"
               }`}
