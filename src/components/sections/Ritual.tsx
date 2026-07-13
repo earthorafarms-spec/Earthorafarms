@@ -1,5 +1,6 @@
 import { motion, useScroll, useTransform } from "framer-motion";
 import { useRef } from "react";
+import { Link } from "wouter";
 import smoothieImg from "@assets/generated_images/lifestyle_smoothie.jpg";
 import { Button } from "@/components/ui/button";
 
@@ -34,7 +35,7 @@ export function Ritual() {
               Elevate your <br/> everyday.
             </h3>
             <p className="text-foreground/70 font-light text-lg mb-8 leading-relaxed">
-              Replace the jittery crash of coffee with the sustained, natural vitality of pure green energy. Whether stirred into a morning smoothie, whisked into warm water, or taken on the go, Moringa Vita grounds your day in nature's brilliance.
+              Replace the jittery crash of coffee with the sustained, natural vitality of pure green energy. Whether stirred into a morning smoothie, whisked into warm water, or taken on the go, Earthora grounds your day in nature's brilliance.
             </p>
             <ul className="space-y-4 mb-10 text-foreground/80">
               <li className="flex items-center gap-3">
@@ -50,7 +51,9 @@ export function Ritual() {
                 <span>Pairs beautifully with citrus and ginger</span>
               </li>
             </ul>
-            <Button size="lg">Explore Recipes</Button>
+            <Link href="/recipes">
+              <Button size="lg">Explore Recipes</Button>
+            </Link>
           </motion.div>
         </div>
       </div>

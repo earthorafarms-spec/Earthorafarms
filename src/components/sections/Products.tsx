@@ -53,7 +53,7 @@ export function Products() {
               initial={{ opacity: 0, y: 40 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-50px" }}
-              transition={{ duration: 0.8, delay: index * 0.2, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: 0.8, delay: index * 0.15, ease: [0.16, 1, 0.3, 1] }}
               className="group cursor-pointer"
             >
               <div className={`relative aspect-[4/5] rounded-2xl overflow-hidden mb-6 ${product.color} flex items-center justify-center p-8`}>

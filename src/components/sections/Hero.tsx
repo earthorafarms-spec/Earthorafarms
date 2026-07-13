@@ -1,7 +1,6 @@
 import { motion, useScroll, useTransform } from "framer-motion";
 import { useRef } from "react";
 import heroBg from "@assets/generated_images/hero_leaves.jpg";
-import { Button } from "@/components/ui/button";
 
 export function Hero() {
   const ref = useRef(null);
@@ -50,30 +49,7 @@ export function Hero() {
           Experience the unmatched vitality of nature's most nutrient-dense botanical. Grown in the sun, crafted for your daily ritual.
         </motion.p>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1, ease: [0.16, 1, 0.3, 1], delay: 0.8 }}
-          className="flex flex-col sm:flex-row gap-4"
-        >
-          <Button size="lg" className="bg-primary-foreground text-primary hover:bg-secondary">
-            Shop the Collection
-          </Button>
-          <Button size="lg" variant="outline" className="text-primary-foreground border-primary-foreground hover:bg-primary-foreground hover:text-primary">
-            Explore the Origins
-          </Button>
-        </motion.div>
       </div>
-
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1.5, duration: 1 }}
-        className="absolute bottom-8 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-2"
-      >
-        <span className="text-xs uppercase tracking-widest text-primary-foreground/60">Scroll to Discover</span>
-        <div className="w-[1px] h-12 bg-gradient-to-b from-primary-foreground/60 to-transparent" />
-      </motion.div>
     </section>
   );
 }

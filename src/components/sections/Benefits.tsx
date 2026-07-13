@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { motion, type Variants } from "framer-motion";
 import { Sun, Shield, Brain, Leaf, Sparkles, Activity } from "lucide-react";
 
 const benefits = [
@@ -10,7 +10,7 @@ const benefits = [
   { icon: Leaf, title: "Pure Alkalinity", desc: "Balances body pH, reducing acidity with deep green nutrition." }
 ];
 
-const containerVars = {
+const containerVars: Variants = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
@@ -18,9 +18,9 @@ const containerVars = {
   }
 };
 
-const itemVars = {
+const itemVars: Variants = {
   hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] } }
+  show: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] as const } }
 };
 
 export function Benefits() {
