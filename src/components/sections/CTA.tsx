@@ -20,16 +20,16 @@ export function CTA() {
           <p className="text-xl text-primary-foreground/80 mb-12 font-light max-w-2xl mx-auto">
             Join thousands who have transformed their morning ritual with the pure, unmatched potency of Earthora.
           </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link href="/our-product">
-                <Button size="lg" className="bg-primary-foreground text-primary hover:bg-secondary h-14 px-8 text-lg">
+            <div className="flex flex-col sm:flex-row gap-4 justify-center items-center max-w-md mx-auto sm:max-w-none">
+              <Link href="/our-product" className="w-full sm:w-auto">
+                <Button size="lg" className="w-full sm:w-auto bg-primary-foreground text-primary hover:bg-secondary h-14 px-8 text-lg">
                   Shop the Collection
                 </Button>
               </Link>
-            <Button size="lg" variant="outline" className="border-primary-foreground text-primary-foreground hover:bg-primary-foreground hover:text-primary h-14 px-8 text-lg">
-              Join the Newsletter
-            </Button>
-          </div>
+              <Button size="lg" variant="outline" className="w-full sm:w-auto border-primary-foreground text-primary-foreground hover:bg-primary-foreground hover:text-primary h-14 px-8 text-lg">
+                Join the Newsletter
+              </Button>
+            </div>
         </motion.div>
       </div>
     </section>

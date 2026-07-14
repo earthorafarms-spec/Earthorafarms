@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation, Link } from "wouter";
 import {
-  LayoutDashboard, Package, ShoppingCart, MessageSquare, LogOut, Leaf, ChevronRight,
+  LayoutDashboard, Package, ShoppingCart, TrendingUp, Tag, LogOut, Leaf, ChevronRight,
   Inbox, Search, Menu, X, User
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -11,7 +11,8 @@ const navItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/admin/dashboard" },
   { id: "products", label: "Products", icon: Package, path: "/admin/products" },
   { id: "orders", label: "Orders", icon: ShoppingCart, path: "/admin/orders" },
-  { id: "reviews", label: "Reviews", icon: MessageSquare, path: "/admin/reviews" },
+  { id: "coupons", label: "Coupons", icon: Tag, path: "/admin/coupons" },
+  { id: "analytics", label: "Analytics", icon: TrendingUp, path: "/admin/analytics" },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
