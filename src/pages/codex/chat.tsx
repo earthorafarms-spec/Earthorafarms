@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { MessageSquare, Calendar, ShieldAlert, Monitor, Clock, RefreshCw, Search, Trash2, AlertTriangle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { useToast } from "@/hooks/use-toast";
 
 interface ChatSession {
   id: string;
@@ -74,6 +75,7 @@ export default function CodexChat() {
   } | null>(null);
 
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   // 1. Fetch Chat Sessions
   const { data: sessions = [], isLoading: loadingSessions, refetch: refetchSessions } = useQuery<ChatSession[]>({
@@ -116,32 +118,48 @@ export default function CodexChat() {
   // 3. Delete a single session (cascade deletes its messages via FK)
   const deleteSessionMutation = useMutation({
     mutationFn: async (sessionId: string) => {
-      const { error } = await supabase
+      const { error, count } = await supabase
         .from("chat_sessions")
-        .delete()
+        .delete({ count: "exact" })
         .eq("id", sessionId);
-      if (error) throw error;
+      if (error) {
+        console.error("[DELETE SESSION] Supabase error:", error);
+        throw error;
+      }
+      console.log("[DELETE SESSION] rows deleted:", count);
     },
     onSuccess: (_data, sessionId) => {
       if (selectedSessionId === sessionId) setSelectedSessionId(null);
       queryClient.invalidateQueries({ queryKey: ["codex-chat-sessions"] });
       queryClient.removeQueries({ queryKey: ["codex-chat-messages", sessionId] });
+      toast({ title: "Session deleted", description: "Chat session removed successfully." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
     },
   });
 
   // 4. Delete ALL sessions
   const deleteAllMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
+      const { error, count } = await supabase
         .from("chat_sessions")
-        .delete()
+        .delete({ count: "exact" })
         .neq("id", "00000000-0000-0000-0000-000000000000"); // delete all rows
-      if (error) throw error;
+      if (error) {
+        console.error("[DELETE ALL] Supabase error:", error);
+        throw error;
+      }
+      console.log("[DELETE ALL] rows deleted:", count);
     },
     onSuccess: () => {
       setSelectedSessionId(null);
       queryClient.invalidateQueries({ queryKey: ["codex-chat-sessions"] });
       queryClient.removeQueries({ queryKey: ["codex-chat-messages"] });
+      toast({ title: "All logs deleted", description: "All chat sessions have been removed." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
     },
   });
 
