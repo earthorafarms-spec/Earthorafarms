@@ -16,6 +16,7 @@ const Gallery = lazy(() => import('./pages/gallery'));
 const Auth = lazy(() => import('./pages/auth'));
 const Products = lazy(() => import('./pages/products'));
 const Cart = lazy(() => import('./pages/cart'));
+const Checkout = lazy(() => import('./pages/checkout'));
 const AdminLayout = lazy(() => import('./pages/admin-earthora/layout'));
 const AdminDashboard = lazy(() => import('./pages/admin-earthora/dashboard'));
 const AdminProducts = lazy(() => import('./pages/admin-earthora/products'));
@@ -375,6 +376,7 @@ function App() {
             <Route path="/gallery" component={Gallery} />
             <Route path="/our-product" component={Products} />
             <Route path="/cart" component={Cart} />
+            <Route path="/checkout" component={Checkout} />
             <Route path="/auth" component={Auth} />
             <Route path="/admin-earthora"><Redirect to="/admin-earthora/dashboard" /></Route>
             <Route path="/admin-earthora/:rest*">

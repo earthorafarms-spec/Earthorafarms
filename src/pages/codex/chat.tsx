@@ -94,7 +94,7 @@ export default function CodexChat() {
         .order("started_at", { ascending: false });
 
       if (error) throw error;
-      return data as ChatSession[];
+      return data as unknown as ChatSession[];
     },
   });
 
