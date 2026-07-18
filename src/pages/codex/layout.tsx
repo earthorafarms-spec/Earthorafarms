@@ -92,14 +92,14 @@ export default function CodexLayout({ children }: { children: React.ReactNode })
   );
 
   return (
-    <div className="min-h-[100dvh] flex bg-[#fafaf8] text-foreground selection:bg-primary/20">
+    <div className="h-screen w-screen flex bg-[#fafaf8] text-foreground selection:bg-primary/20 overflow-hidden">
       {/* Sidebar - Desktop */}
-      <aside className="hidden lg:block w-64 shrink-0">
+      <aside className="hidden lg:block w-64 shrink-0 h-full">
         <SidebarContent />
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
         {/* Header - Mobile & Desktop Actions */}
         <header className="h-20 border-b border-border/40 bg-white flex items-center justify-between px-6 lg:px-8 shrink-0">
           <div className="flex items-center gap-4 lg:hidden">
@@ -131,7 +131,7 @@ export default function CodexLayout({ children }: { children: React.ReactNode })
         </header>
 
         {/* Main Content Window */}
-        <main className="flex-1 overflow-y-auto p-6 lg:p-8">
+        <main className="flex-1 overflow-hidden p-6 lg:p-8">
           <AnimatePresence mode="wait">
             <Suspense fallback={
               <div className="flex min-h-[50dvh] items-center justify-center">

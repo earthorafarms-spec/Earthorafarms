@@ -86,7 +86,7 @@ export default function CodexChat() {
   const selectedSession = sessions.find((s) => s.id === selectedSessionId);
 
   return (
-    <div className="max-w-7xl mx-auto p-6 h-[calc(100vh-6rem)] flex flex-col gap-6 text-foreground overflow-hidden">
+    <div className="max-w-7xl mx-auto h-full w-full flex flex-col gap-6 text-foreground overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <div>
