@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Mail, Phone, MapPin, Clock, Send } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
@@ -6,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 import leavesImg from "@assets/generated_images/hero_leaves.jpg";
 
 const contactInfo = [
@@ -16,6 +18,48 @@ const contactInfo = [
 ];
 
 export default function Contact() {
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    subject: "",
+    message: "",
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const { toast } = useToast();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSubmitting(true);
+
+    const body = new URLSearchParams({
+      "form-name": "contact",
+      name: form.name,
+      email: form.email,
+      subject: form.subject,
+      message: form.message,
+    });
+
+    try {
+      const response = await fetch("/", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+      });
+
+      if (!response.ok) throw new Error("Message submission failed.");
+
+      setForm({ name: "", email: "", subject: "", message: "" });
+      toast({ title: "Message sent", description: "Thanks for reaching out. We will reply as soon as possible." });
+    } catch (submitError) {
+      const message = submitError instanceof Error ? submitError.message : "Unable to send your message right now.";
+      setError(message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="min-h-[100dvh] flex flex-col bg-background text-foreground selection:bg-primary/20">
       <Navbar />
@@ -62,31 +106,90 @@ export default function Contact() {
               <h2 className="text-sm font-medium uppercase tracking-widest text-primary mb-4">Send a Message</h2>
               <h3 className="text-3xl md:text-4xl font-serif text-foreground mb-8">Drop us a line.</h3>
 
-              <form onSubmit={(e) => e.preventDefault()} className="space-y-6">
+              <form
+                name="contact"
+                method="POST"
+                data-netlify="true"
+                netlify-honeypot="bot-field"
+                onSubmit={handleSubmit}
+                className="space-y-6"
+              >
+                <input type="hidden" name="form-name" value="contact" />
+                <p className="hidden">
+                  <label>
+                    Do not fill this out: <input name="bot-field" />
+                  </label>
+                </p>
                 <div className="grid sm:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label htmlFor="name">Full Name</Label>
-                    <Input id="name" placeholder="Jane Doe" className="h-12" />
+                    <Input
+                      id="name"
+                      name="name"
+                      placeholder="Jane Doe"
+                      value={form.name}
+                      onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+                      required
+                      className="h-12"
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="email">Email Address</Label>
-                    <Input id="email" type="email" placeholder="jane@example.com" className="h-12" />
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      placeholder="jane@example.com"
+                      value={form.email}
+                      onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
+                      required
+                      className="h-12"
+                    />
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="subject">Subject</Label>
-                  <Input id="subject" placeholder="How can we help?" className="h-12" />
+                  <Input
+                    id="subject"
+                    name="subject"
+                    placeholder="How can we help?"
+                    value={form.subject}
+                    onChange={(e) => setForm((prev) => ({ ...prev, subject: e.target.value }))}
+                    required
+                    className="h-12"
+                  />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="message">Message</Label>
-                  <Textarea id="message" placeholder="Tell us more about what's on your mind..." className="min-h-[160px] resize-none" />
+                  <Textarea
+                    id="message"
+                    name="message"
+                    placeholder="Tell us more about what's on your mind..."
+                    value={form.message}
+                    onChange={(e) => setForm((prev) => ({ ...prev, message: e.target.value }))}
+                    required
+                    minLength={10}
+                    maxLength={2000}
+                    className="min-h-[160px] resize-none"
+                  />
                 </div>
 
-                <Button type="submit" size="lg" className="h-14 px-10 text-lg w-full sm:w-auto">
+                {error && (
+                  <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                    {error}
+                  </p>
+                )}
+
+                <Button
+                  type="submit"
+                  size="lg"
+                  disabled={submitting}
+                  className="h-14 px-10 text-lg w-full sm:w-auto"
+                >
                   <Send className="w-4 h-4 mr-2" />
-                  Send Message
+                  {submitting ? "Sending..." : "Send Message"}
                 </Button>
               </form>
             </motion.div>

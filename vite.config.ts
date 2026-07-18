@@ -4,6 +4,10 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
 const port = Number(process.env.PORT) || 5173;
+const host = process.env.VITE_DEV_HOST || '127.0.0.1';
+const allowedHosts = process.env.VITE_ALLOWED_HOSTS
+  ? process.env.VITE_ALLOWED_HOSTS.split(',').map((entry) => entry.trim()).filter(Boolean)
+  : undefined;
 
 export default defineConfig({
   plugins: [
@@ -27,15 +31,15 @@ export default defineConfig({
   server: {
     port,
     strictPort: false,
-    host: '0.0.0.0',
-    allowedHosts: true,
+    host,
+    allowedHosts,
     fs: {
       strict: true,
     },
   },
   preview: {
     port: 4173,
-    host: '0.0.0.0',
-    allowedHosts: true,
+    host,
+    allowedHosts,
   },
 });

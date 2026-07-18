@@ -49,17 +49,6 @@ export default function AdminDashboard() {
   const [orders] = useState(initialOrders);
   const [activeMarket, setActiveMarket] = useState<string | null>(null);
   const [liveVisitors, setLiveVisitors] = useState(148);
-  const [mapSvg, setMapSvg] = useState<string>("");
-
-  useEffect(() => {
-    fetch("/world-map.svg")
-      .then((res) => res.text())
-      .then((text) => {
-        const cleaned = text.replace(/<\?xml.*\?>/g, "").replace(/<!DOCTYPE.*>/g, "");
-        setMapSvg(cleaned);
-      })
-      .catch((err) => console.error("Error loading world map:", err));
-  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -109,25 +98,12 @@ export default function AdminDashboard() {
 
           <div className="p-6 flex flex-col md:flex-row gap-6 items-center flex-1">
             <div className="w-full md:w-[65%] h-[280px] relative bg-[#fafaf8] rounded-xl border border-border/40 p-4 flex items-center justify-center overflow-hidden shrink-0">
-              {mapSvg ? (
-                <div
-                  className="w-full h-full flex items-center justify-center select-none pointer-events-auto cursor-pointer"
-                  dangerouslySetInnerHTML={{ __html: mapSvg }}
-                  onMouseOver={(e) => {
-                    const target = e.target as SVGElement;
-                    const path = target.closest("path");
-                    if (!path) return;
-                    const id = path.id || path.parentElement?.id;
-                    if (id === "in") setActiveMarket("India");
-                    else if (id === "us") setActiveMarket("United States");
-                    else if (id === "gb") setActiveMarket("United Kingdom");
-                    else if (id === "de") setActiveMarket("Germany");
-                  }}
-                  onMouseOut={() => setActiveMarket(null)}
-                />
-              ) : (
-                <div className="text-xs text-foreground/30 animate-pulse font-serif">Loading Map...</div>
-              )}
+              <img
+                src="/world-map.svg"
+                alt="Global market map"
+                className="w-full h-full object-contain select-none opacity-85"
+                draggable={false}
+              />
 
               <style>{`
                 #world-map {
