@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, X, Leaf, Search, Tag, Percent, Calendar, Users, Copy, Check, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/lib/supabase";
 
 interface Coupon {
   id: string;
@@ -10,22 +11,18 @@ interface Coupon {
   type: "percentage" | "fixed";
   value: number;
   minOrder: number;
-  maxUses: number;
+  maxUses: number | null;
   usedCount: number;
-  expiryDate: string;
+  expiryDate: string | null;
   status: "Active" | "Inactive";
   description: string;
 }
 
-const initialCoupons: Coupon[] = [
-  { id: "1", code: "WELCOME20", type: "percentage", value: 20, minOrder: 499, maxUses: 100, usedCount: 34, expiryDate: "31 Dec 2026", status: "Active", description: "First-time customer discount" },
-  { id: "2", code: "FREESHIP", type: "fixed", value: 99, minOrder: 699, maxUses: 200, usedCount: 78, expiryDate: "31 Dec 2026", status: "Active", description: "Free shipping coupon" },
-  { id: "3", code: "MORINGA15", type: "percentage", value: 15, minOrder: 299, maxUses: 50, usedCount: 12, expiryDate: "15 Aug 2026", status: "Active", description: "Monsoon sale" },
-  { id: "4", code: "FLAT100", type: "fixed", value: 100, minOrder: 999, maxUses: 30, usedCount: 5, expiryDate: "30 Sep 2026", status: "Inactive", description: "Flat ₹100 off on bulk orders" },
-];
+
 
 export default function AdminCoupons() {
-  const [coupons, setCoupons] = useState(initialCoupons);
+  const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const { toast } = useToast();
@@ -33,6 +30,43 @@ export default function AdminCoupons() {
   const [form, setForm] = useState({
     code: "", type: "percentage" as "percentage" | "fixed", value: "", minOrder: "", maxUses: "", expiryDate: "", description: "",
   });
+
+  const fetchCoupons = async () => {
+    try {
+
+      const { data: rawData, error } = await supabase
+        .from("coupons")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      const data = rawData as any[];
+      const mapped = data.map((c: any) => ({
+        id: c.id,
+        code: c.code,
+        type: c.type as "percentage" | "fixed",
+        value: Number(c.value),
+        minOrder: Number(c.min_order),
+        maxUses: c.max_uses,
+        usedCount: c.used_count || 0,
+        expiryDate: c.expiry_date,
+        status: (c.status.charAt(0).toUpperCase() + c.status.slice(1)) as "Active" | "Inactive",
+        description: c.description || "",
+      }));
+
+      setCoupons(mapped);
+    } catch (err: any) {
+      console.error(err);
+      toast({ title: "Fetch failed", description: err.message || "Failed to load coupons.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCoupons();
+  }, []);
 
   const openForm = () => {
     setForm({ code: "", type: "percentage", value: "", minOrder: "", maxUses: "", expiryDate: "", description: "" });
@@ -46,36 +80,61 @@ export default function AdminCoupons() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleDelete = (id: string) => {
-    setCoupons((prev) => prev.filter((c) => c.id !== id));
-    toast({ title: "Coupon deleted", description: "The coupon has been removed." });
+  const handleDelete = async (id: string) => {
+    try {
+      const { error } = await supabase.from("coupons").delete().eq("id", id);
+      if (error) throw error;
+      toast({ title: "Coupon deleted", description: "The coupon has been removed." });
+      fetchCoupons();
+    } catch (err: any) {
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
+    }
   };
 
-  const handleToggleStatus = (id: string) => {
-    setCoupons((prev) => prev.map((c) => c.id === id ? { ...c, status: c.status === "Active" ? "Inactive" : "Active" } : c));
-    toast({ title: "Status updated", description: "Coupon status has been changed." });
+  const handleToggleStatus = async (id: string) => {
+    const coupon = coupons.find(c => c.id === id);
+    if (!coupon) return;
+    const nextStatus = coupon.status === "Active" ? "inactive" : "active";
+
+    try {
+      const { error } = await (supabase.from("coupons") as any)
+        .update({ status: nextStatus })
+        .eq("id", id);
+      if (error) throw error;
+      toast({ title: "Status updated", description: "Coupon status has been updated in database." });
+      fetchCoupons();
+    } catch (err: any) {
+      toast({ title: "Update failed", description: err.message, variant: "destructive" });
+    }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!form.code || !form.value) {
       toast({ title: "Missing fields", description: "Coupon code and value are required." });
       return;
     }
-    const newCoupon: Coupon = {
-      id: String(Date.now()),
-      code: form.code.toUpperCase(),
-      type: form.type,
-      value: parseFloat(form.value) || 0,
-      minOrder: parseFloat(form.minOrder) || 0,
-      maxUses: parseInt(form.maxUses) || 0,
-      usedCount: 0,
-      expiryDate: form.expiryDate || "No expiry",
-      status: "Active",
-      description: form.description,
-    };
-    setCoupons((prev) => [newCoupon, ...prev]);
-    setShowForm(false);
-    toast({ title: "Coupon created", description: `Coupon "${form.code.toUpperCase()}" is now active.` });
+
+    try {
+      const { error } = await supabase
+        .from("coupons")
+        .insert({
+          code: form.code.toUpperCase(),
+          type: form.type,
+          value: parseFloat(form.value) || 0,
+          min_order: parseFloat(form.minOrder) || 0,
+          max_uses: form.maxUses ? parseInt(form.maxUses) : null,
+          expiry_date: form.expiryDate || null,
+          status: "active",
+          description: form.description,
+        } as any);
+
+      if (error) throw error;
+      toast({ title: "Coupon created", description: `Coupon "${form.code.toUpperCase()}" is now active.` });
+      fetchCoupons();
+      setShowForm(false);
+    } catch (err: any) {
+      toast({ title: "Creation failed", description: err.message, variant: "destructive" });
+    }
   };
 
   return (
@@ -102,93 +161,103 @@ export default function AdminCoupons() {
         </div>
 
         <div className="space-y-3">
-          {coupons.map((coupon, i) => (
-            <motion.div
-              key={coupon.id}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: i * 0.05 }}
-              className="bg-white rounded-2xl border border-border/40 p-5 hover:border-primary/20 shadow-sm hover:shadow-[0_8px_30px_rgb(0,0,0,0.02)] transition-all duration-300"
-            >
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${coupon.status === "Active" ? "bg-primary/10" : "bg-border/30"}`}>
-                    <Tag className={`w-5 h-5 ${coupon.status === "Active" ? "text-primary" : "text-foreground/30"}`} strokeWidth={1.5} />
+          {loading ? (
+            <div className="text-center py-20 text-foreground/40 text-xs">
+              Loading coupons...
+            </div>
+          ) : coupons.length === 0 ? (
+            <div className="text-center py-20 bg-white border border-border/40 rounded-2xl text-foreground/40 font-medium">
+              No coupons yet — create your first one.
+            </div>
+          ) : (
+            coupons.map((coupon, i) => (
+              <motion.div
+                key={coupon.id}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: i * 0.05 }}
+                className="bg-white rounded-2xl border border-border/40 p-5 hover:border-primary/20 shadow-sm hover:shadow-[0_8px_30px_rgb(0,0,0,0.02)] transition-all duration-300"
+              >
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-4 min-w-0">
+                    <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${coupon.status === "Active" ? "bg-primary/10" : "bg-border/30"}`}>
+                      <Tag className={`w-5 h-5 ${coupon.status === "Active" ? "text-primary" : "text-foreground/30"}`} strokeWidth={1.5} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2.5">
+                        <span className={`font-mono text-sm font-bold tracking-wider ${coupon.status === "Active" ? "text-foreground" : "text-foreground/40"}`}>
+                          {coupon.code}
+                        </span>
+                        <button
+                          onClick={() => handleCopy(coupon.code, coupon.id)}
+                          className="p-1.5 rounded-lg hover:bg-muted transition-colors text-foreground/30 hover:text-primary"
+                          title="Copy code"
+                        >
+                          {copiedId === coupon.id ? <Check className="w-3.5 h-3.5 text-green-600" strokeWidth={2} /> : <Copy className="w-3.5 h-3.5" strokeWidth={1.5} />}
+                        </button>
+                      </div>
+                      <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-1">
+                        <span className="text-xs text-foreground/50">{coupon.description}</span>
+                        {coupon.minOrder > 0 && (
+                          <>
+                            <span className="text-foreground/20">•</span>
+                            <span className="text-xs text-foreground/40">Min: {coupon.minOrder}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2.5">
-                      <span className={`font-mono text-sm font-bold tracking-wider ${coupon.status === "Active" ? "text-foreground" : "text-foreground/40"}`}>
-                        {coupon.code}
-                      </span>
+
+                  <div className="flex items-center gap-6 shrink-0">
+                    <div className="text-right">
+                      <div className="flex items-center gap-1">
+                        {coupon.type === "percentage" ? (
+                          <Percent className="w-3 h-3 text-foreground/40" strokeWidth={1.5} />
+                        ) : (
+                          <span className="text-xs text-foreground/40">₹</span>
+                        )}
+                        <span className="text-base font-bold text-foreground">
+                          {coupon.type === "percentage" ? `${coupon.value}%` : coupon.value}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-foreground/40 mt-0.5">{coupon.type === "percentage" ? "Off" : "Flat discount"}</p>
+                    </div>
+
+                    <div className="text-right">
+                      <div className="flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-foreground/30" strokeWidth={1.5} />
+                        <span className="text-xs text-foreground/60">{coupon.expiryDate}</span>
+                      </div>
+                      <div className="flex items-center gap-1 mt-0.5">
+                        <Users className="w-3 h-3 text-foreground/30" strokeWidth={1.5} />
+                        <span className="text-[10px] text-foreground/40">{coupon.usedCount}/{coupon.maxUses} used</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
                       <button
-                        onClick={() => handleCopy(coupon.code, coupon.id)}
-                        className="p-1.5 rounded-lg hover:bg-muted transition-colors text-foreground/30 hover:text-primary"
-                        title="Copy code"
+                        onClick={() => handleToggleStatus(coupon.id)}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
+                          coupon.status === "Active"
+                            ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+                            : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"
+                        }`}
                       >
-                        {copiedId === coupon.id ? <Check className="w-3.5 h-3.5 text-green-600" strokeWidth={2} /> : <Copy className="w-3.5 h-3.5" strokeWidth={1.5} />}
+                        {coupon.status}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(coupon.id)}
+                        className="p-2 rounded-lg text-foreground/30 hover:text-red-500 hover:bg-red-50 transition-colors"
+                        title="Delete coupon"
+                      >
+                        <Trash2 className="w-4 h-4" strokeWidth={1.5} />
                       </button>
                     </div>
-                    <div className="flex items-center flex-wrap gap-x-3 gap-y-1 mt-1">
-                      <span className="text-xs text-foreground/50">{coupon.description}</span>
-                      {coupon.minOrder > 0 && (
-                        <>
-                          <span className="text-foreground/20">•</span>
-                          <span className="text-xs text-foreground/40">Min: {coupon.minOrder}</span>
-                        </>
-                      )}
-                    </div>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-6 shrink-0">
-                  <div className="text-right">
-                    <div className="flex items-center gap-1">
-                      {coupon.type === "percentage" ? (
-                        <Percent className="w-3 h-3 text-foreground/40" strokeWidth={1.5} />
-                      ) : (
-                        <span className="text-xs text-foreground/40">₹</span>
-                      )}
-                      <span className="text-base font-bold text-foreground">
-                        {coupon.type === "percentage" ? `${coupon.value}%` : coupon.value}
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-foreground/40 mt-0.5">{coupon.type === "percentage" ? "Off" : "Flat discount"}</p>
-                  </div>
-
-                  <div className="text-right">
-                    <div className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3 text-foreground/30" strokeWidth={1.5} />
-                      <span className="text-xs text-foreground/60">{coupon.expiryDate}</span>
-                    </div>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <Users className="w-3 h-3 text-foreground/30" strokeWidth={1.5} />
-                      <span className="text-[10px] text-foreground/40">{coupon.usedCount}/{coupon.maxUses} used</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleToggleStatus(coupon.id)}
-                      className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-all ${
-                        coupon.status === "Active"
-                          ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
-                          : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"
-                      }`}
-                    >
-                      {coupon.status}
-                    </button>
-                    <button
-                      onClick={() => handleDelete(coupon.id)}
-                      className="p-2 rounded-lg text-foreground/30 hover:text-red-500 hover:bg-red-50 transition-colors"
-                      title="Delete coupon"
-                    >
-                      <Trash2 className="w-4 h-4" strokeWidth={1.5} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            ))
+          )}
         </div>
       </motion.div>
 

@@ -16,13 +16,15 @@ const Gallery = lazy(() => import('./pages/gallery'));
 const Auth = lazy(() => import('./pages/auth'));
 const Products = lazy(() => import('./pages/products'));
 const Cart = lazy(() => import('./pages/cart'));
-const AdminLayout = lazy(() => import('./pages/admin/layout'));
-const AdminDashboard = lazy(() => import('./pages/admin/dashboard'));
-const AdminProducts = lazy(() => import('./pages/admin/products'));
-const AdminOrders = lazy(() => import('./pages/admin/orders'));
-const AdminAnalytics = lazy(() => import('./pages/admin/analytics'));
-const AdminCoupons = lazy(() => import('./pages/admin/coupons'));
-const AdminChat = lazy(() => import('./pages/admin/chat'));
+const AdminLayout = lazy(() => import('./pages/admin-earthora/layout'));
+const AdminDashboard = lazy(() => import('./pages/admin-earthora/dashboard'));
+const AdminProducts = lazy(() => import('./pages/admin-earthora/products'));
+const AdminOrders = lazy(() => import('./pages/admin-earthora/orders'));
+const AdminAnalytics = lazy(() => import('./pages/admin-earthora/analytics'));
+const AdminCoupons = lazy(() => import('./pages/admin-earthora/coupons'));
+const AdminFestive = lazy(() => import('./pages/admin-earthora/festive'));
+const AdminSettings = lazy(() => import('./pages/admin-earthora/settings'));
+const AdminChat = lazy(() => import('./pages/admin-earthora/chat'));
 
 const CodexLayout = lazy(() => import('./pages/codex/layout'));
 const CodexDashboard = lazy(() => import('./pages/codex/dashboard'));
@@ -374,19 +376,21 @@ function App() {
             <Route path="/our-product" component={Products} />
             <Route path="/cart" component={Cart} />
             <Route path="/auth" component={Auth} />
-            <Route path="/admin"><Redirect to="/admin/dashboard" /></Route>
-            <Route path="/admin/:rest*">
+            <Route path="/admin-earthora"><Redirect to="/admin-earthora/dashboard" /></Route>
+            <Route path="/admin-earthora/:rest*">
               {() => (
                 <AdminGate>
                   <AdminLayout>
                     <Switch>
-                      <Route path="/admin/dashboard"><AdminDashboard /></Route>
-                      <Route path="/admin/products"><AdminProducts /></Route>
-                      <Route path="/admin/orders"><AdminOrders /></Route>
-                      <Route path="/admin/coupons"><AdminCoupons /></Route>
-                      <Route path="/admin/chat"><AdminChat /></Route>
-                      <Route path="/admin/analytics"><AdminAnalytics /></Route>
-                      <Route><Redirect to="/admin/dashboard" /></Route>
+                      <Route path="/admin-earthora/dashboard"><AdminDashboard /></Route>
+                      <Route path="/admin-earthora/products"><AdminProducts /></Route>
+                      <Route path="/admin-earthora/orders"><AdminOrders /></Route>
+                      <Route path="/admin-earthora/coupons"><AdminCoupons /></Route>
+                      <Route path="/admin-earthora/festive"><AdminFestive /></Route>
+                      <Route path="/admin-earthora/chat"><AdminChat /></Route>
+                      <Route path="/admin-earthora/analytics"><AdminAnalytics /></Route>
+                      <Route path="/admin-earthora/settings"><AdminSettings /></Route>
+                      <Route><Redirect to="/admin-earthora/dashboard" /></Route>
                     </Switch>
                   </AdminLayout>
                 </AdminGate>

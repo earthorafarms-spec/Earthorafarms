@@ -1,19 +1,21 @@
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useLocation, Link } from "wouter";
+import { useLocation } from "wouter";
 import {
   LayoutDashboard, Package, ShoppingCart, TrendingUp, Tag, LogOut, Leaf, ChevronRight,
-  Inbox, Search, Menu, X, User, MessageSquare
+  Inbox, Search, Menu, X, Sparkles, Settings, MessageSquare
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const navItems = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/admin/dashboard" },
-  { id: "products", label: "Products", icon: Package, path: "/admin/products" },
-  { id: "orders", label: "Orders", icon: ShoppingCart, path: "/admin/orders" },
-  { id: "coupons", label: "Coupons", icon: Tag, path: "/admin/coupons" },
-  { id: "chat", label: "AI Chat Logs", icon: MessageSquare, path: "/admin/chat" },
-  { id: "analytics", label: "Analytics", icon: TrendingUp, path: "/admin/analytics" },
+  { id: "dashboard",  label: "Dashboard",     icon: LayoutDashboard, path: "/admin-earthora/dashboard" },
+  { id: "products",   label: "Products",       icon: Package,         path: "/admin-earthora/products" },
+  { id: "orders",     label: "Orders",         icon: ShoppingCart,    path: "/admin-earthora/orders" },
+  { id: "coupons",    label: "Coupons",        icon: Tag,             path: "/admin-earthora/coupons" },
+  { id: "festive",    label: "Festive Deals",  icon: Sparkles,        path: "/admin-earthora/festive" },
+  { id: "chat",       label: "AI Chat Logs",   icon: MessageSquare,   path: "/admin-earthora/chat" },
+  { id: "analytics", label: "Analytics",      icon: TrendingUp,      path: "/admin-earthora/analytics" },
+  { id: "settings",  label: "Settings",       icon: Settings,        path: "/admin-earthora/settings" },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -21,7 +23,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { toast } = useToast();
 
-  const activeTab = location.replace("/admin/", "").replace("/admin", "") || "dashboard";
+  const activeTab = location.replace("/admin-earthora/", "").replace("/admin-earthora", "") || "dashboard";
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full bg-primary text-primary-foreground">
@@ -79,7 +81,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
         <button
           onClick={() => {
+            // Sign out of the session and redirect
+            sessionStorage.removeItem("admin_authenticated");
+            sessionStorage.removeItem("admin_password");
+            localStorage.removeItem("admin_session");
             toast({ title: "Signed Out", description: "You have been logged out of the session." });
+            setLocation("/");
           }}
           className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all"
         >
@@ -167,7 +174,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </header>
 
         <div className="flex-1 p-6 md:p-10 max-w-7xl w-full mx-auto">
-          {children}
+          <Suspense fallback={
+            <div className="flex items-center justify-center h-48">
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-7 h-7 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+                <span className="text-xs text-foreground/30 font-medium">Loading…</span>
+              </div>
+            </div>
+          }>
+            {children}
+          </Suspense>
         </div>
       </main>
     </div>
