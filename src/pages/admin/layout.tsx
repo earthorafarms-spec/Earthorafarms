@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useLocation, Link } from "wouter";
 import {
   LayoutDashboard, Package, ShoppingCart, TrendingUp, Tag, LogOut, Leaf, ChevronRight,
-  Inbox, Search, Menu, X, User
+  Inbox, Search, Menu, X, User, MessageSquare
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -12,6 +12,7 @@ const navItems = [
   { id: "products", label: "Products", icon: Package, path: "/admin/products" },
   { id: "orders", label: "Orders", icon: ShoppingCart, path: "/admin/orders" },
   { id: "coupons", label: "Coupons", icon: Tag, path: "/admin/coupons" },
+  { id: "chat", label: "AI Chat Logs", icon: MessageSquare, path: "/admin/chat" },
   { id: "analytics", label: "Analytics", icon: TrendingUp, path: "/admin/analytics" },
 ];
 

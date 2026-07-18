@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Route, Switch, Router as WouterRouter, Redirect } from 'wouter';
+import { ChatWidget } from './components/chat/ChatWidget';
 import Home from './pages/home';
 import Recipes from './pages/recipes';
 import Contact from './pages/contact';
@@ -15,6 +16,7 @@ import AdminProducts from './pages/admin/products';
 import AdminOrders from './pages/admin/orders';
 import AdminAnalytics from './pages/admin/analytics';
 import AdminCoupons from './pages/admin/coupons';
+import AdminChat from './pages/admin/chat';
 import ScrollToTop from './components/ScrollToTop';
 
 const queryClient = new QueryClient();
@@ -117,7 +119,8 @@ function App() {
                     <Route path="/admin/products"><AdminProducts /></Route>
                     <Route path="/admin/orders"><AdminOrders /></Route>
                     <Route path="/admin/coupons"><AdminCoupons /></Route>
-                  <Route path="/admin/analytics"><AdminAnalytics /></Route>
+                    <Route path="/admin/chat"><AdminChat /></Route>
+                    <Route path="/admin/analytics"><AdminAnalytics /></Route>
                     <Route><Redirect to="/admin/dashboard" /></Route>
                   </Switch>
                 </AdminLayout>
@@ -131,6 +134,7 @@ function App() {
           </Route>
         </Switch>
       </WouterRouter>
+      <ChatWidget />
     </QueryClientProvider>
   );
 }
