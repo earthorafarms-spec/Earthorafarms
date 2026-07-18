@@ -1,0 +1,167 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-admin-password, x-codex-password",
+};
+
+function constantTimeEqual(a: string, b: string): boolean {
+  const encoder = new TextEncoder();
+  const ab = encoder.encode(a);
+  const bb = encoder.encode(b);
+  let mismatch = ab.length !== bb.length ? 1 : 0;
+  const len = Math.max(ab.length, bb.length);
+  const aPadded = new Uint8Array(len);
+  const bPadded = new Uint8Array(len);
+  aPadded.set(ab);
+  bPadded.set(bb);
+  for (let i = 0; i < len; i++) {
+    mismatch |= aPadded[i] ^ bPadded[i];
+  }
+  return mismatch === 0;
+}
+
+async function verifyPassword(
+  supabase: ReturnType<typeof createClient>,
+  password: string,
+  domain: string,
+): Promise<boolean> {
+  if (domain === "admin") {
+    const envPassword = Deno.env.get("ADMIN_PASSWORD");
+    if (envPassword) {
+      return constantTimeEqual(password, envPassword);
+    }
+    const { data } = await supabase
+      .from("admin_settings")
+      .select("value")
+      .eq("key", "admin_password")
+      .single();
+    if (!data) return false;
+    return constantTimeEqual(password, data.value);
+  }
+
+  if (domain === "codex") {
+    const { data } = await supabase
+      .from("admin_settings")
+      .select("value")
+      .eq("key", "codex_password")
+      .single();
+    if (!data) return false;
+    return constantTimeEqual(password, data.value);
+  }
+
+  return false;
+}
+
+function generateOtp(): string {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+async function sendEmail(otp: string, domain: string): Promise<void> {
+  const apiKey = Deno.env.get("RESEND_API_KEY");
+  if (!apiKey) {
+    console.log(`[send-otp] OTP for ${domain}: ${otp}`);
+    return;
+  }
+
+  const domainLabel = domain === "admin" ? "Admin Portal" : "Codex Developer Console";
+
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: "Earthora Farms <onboarding@resend.dev>",
+      to: "earthorafarms@gmail.com",
+      subject: `Your ${domainLabel} OTP Code`,
+      html: `
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#fafaf8;border-radius:16px;">
+          <h2 style="color:#1b4332;margin:0 0 8px;">${domainLabel}</h2>
+          <p style="color:#666;font-size:14px;margin:0 0 24px;">Use the OTP below to complete sign-in.</p>
+          <div style="background:#fff;border-radius:12px;padding:24px;text-align:center;border:1px solid #eee;">
+            <span style="font-size:36px;font-weight:700;letter-spacing:8px;color:#1b4332;font-family:monospace;">${otp}</span>
+          </div>
+          <p style="color:#999;font-size:12px;margin-top:20px;">This code expires in 5 minutes. If you didn't request this, ignore this email.</p>
+        </div>
+      `,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`[send-otp] Resend error: ${res.status} ${body}`);
+  }
+}
+
+Deno.serve(async (req: Request): Promise<Response> => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  try {
+    const body = await req.json();
+    const password: string | undefined = body?.password;
+    const domain: string | undefined = body?.domain;
+
+    if (!password || typeof password !== "string") {
+      return new Response(
+        JSON.stringify({ ok: false, error: "No password provided" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    if (!domain || !["admin", "codex"].includes(domain)) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Invalid domain" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    );
+
+    const valid = await verifyPassword(supabase, password, domain);
+    if (!valid) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Incorrect password" }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    const otp = generateOtp();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+    const { error: insertErr } = await supabase.from("otp_codes").insert({
+      otp,
+      domain,
+      expires_at: expiresAt,
+      used: false,
+    });
+
+    if (insertErr) {
+      console.error("[send-otp] DB insert error:", insertErr);
+      return new Response(
+        JSON.stringify({ ok: false, error: "Failed to generate OTP" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    await sendEmail(otp, domain);
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch {
+    return new Response(
+      JSON.stringify({ ok: false, error: "Invalid request" }),
+      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+});

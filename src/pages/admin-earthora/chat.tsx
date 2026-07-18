@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { MessageSquare, Calendar, ShieldAlert, Monitor, Clock, RefreshCw, Search } from "lucide-react";
+import { MessageSquare, Calendar, ShieldAlert, Monitor, Clock, RefreshCw, Search, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 interface ChatSession {
@@ -80,6 +80,34 @@ export default function AdminChat() {
 
   const selectedSession = sessions.find((s) => s.id === selectedSessionId);
 
+  // 3. Delete Single Session
+  const handleDeleteSession = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this chat session?")) return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from("chat_sessions") as any).delete().eq("id", id);
+      if (error) throw error;
+      setSelectedSessionId(null);
+      refetchSessions();
+    } catch (err) {
+      alert("Failed to delete session: " + (err as Error).message);
+    }
+  };
+
+  // 4. Clear All Logs
+  const handleClearAllLogs = async () => {
+    if (!confirm("WARNING: This will permanently delete ALL chat sessions and messages. Continue?")) return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from("chat_sessions") as any).delete().neq("id", "00000000-0000-0000-0000-000000000000"); // deletes all
+      if (error) throw error;
+      setSelectedSessionId(null);
+      refetchSessions();
+    } catch (err) {
+      alert("Failed to clear logs: " + (err as Error).message);
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 md:p-6 text-foreground">
       {/* Header */}
@@ -88,13 +116,22 @@ export default function AdminChat() {
           <h1 className="text-2xl md:text-3xl font-serif font-bold text-foreground">AI Chat Logs</h1>
           <p className="text-xs md:text-sm text-foreground/50">Analyze customer queries, bot response quality, and blocked actions.</p>
         </div>
-        <button
-          onClick={() => refetchSessions()}
-          className="flex items-center gap-2 px-4 py-2 bg-[#1b4332]/5 hover:bg-[#1b4332]/10 border border-[#1b4332]/10 rounded-xl text-xs text-[#1b4332] transition-all font-medium"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          Refresh Feed
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleClearAllLogs}
+            className="flex items-center gap-2 px-4 py-2 bg-red-50 hover:bg-red-100 border border-red-200/50 rounded-xl text-xs text-red-600 transition-all font-medium"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Clear All Logs
+          </button>
+          <button
+            onClick={() => refetchSessions()}
+            className="flex items-center gap-2 px-4 py-2 bg-[#1b4332]/5 hover:bg-[#1b4332]/10 border border-[#1b4332]/10 rounded-xl text-xs text-[#1b4332] transition-all font-medium"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Refresh Feed
+          </button>
+        </div>
       </div>
 
       {/* Grid Layout */}

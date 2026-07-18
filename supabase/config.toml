@@ -1,0 +1,13 @@
+# supabase/config.toml
+
+[functions.send-otp]
+verify_jwt = false
+
+[functions.verify-otp]
+verify_jwt = false
+
+[functions.verify-codex]
+verify_jwt = false
+
+[functions.verify-admin]
+verify_jwt = false

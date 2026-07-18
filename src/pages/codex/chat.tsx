@@ -86,9 +86,9 @@ export default function CodexChat() {
   const selectedSession = sessions.find((s) => s.id === selectedSessionId);
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto p-6 bg-[#fafaf8] min-h-screen text-foreground">
+    <div className="max-w-7xl mx-auto p-6 h-[calc(100vh-6rem)] flex flex-col gap-6 text-foreground overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between shrink-0">
         <div>
           <h1 className="text-3xl font-serif font-bold text-foreground">AI Chat Analytics</h1>
           <p className="text-sm text-foreground/50">Analyze customer queries, bot response quality, and block actions.</p>
@@ -103,11 +103,11 @@ export default function CodexChat() {
       </div>
 
       {/* Grid Layout */}
-      <div className="grid lg:grid-cols-[340px_1fr] gap-6">
+      <div className="grid lg:grid-cols-[340px_1fr] gap-6 flex-1 min-h-0 overflow-hidden">
 
         {/* Sidebar: Session List */}
-        <div className="bg-white border border-border/40 rounded-2xl p-4 flex flex-col h-[650px] shadow-[0_2px_16px_rgb(0,0,0,0.01)]">
-          <div className="relative mb-4">
+        <div className="bg-white border border-border/40 rounded-2xl p-4 flex flex-col h-full shadow-[0_2px_16px_rgb(0,0,0,0.01)] overflow-hidden">
+          <div className="relative mb-4 shrink-0">
             <Search className="absolute left-3 top-2.5 w-4 h-4 text-foreground/30" />
             <input
               type="text"
@@ -136,11 +136,10 @@ export default function CodexChat() {
                   <button
                     key={session.id}
                     onClick={() => setSelectedSessionId(session.id)}
-                    className={`w-full text-left p-3.5 rounded-xl border transition-all flex flex-col gap-1.5 ${
-                      isActive
+                    className={`w-full text-left p-3.5 rounded-xl border transition-all flex flex-col gap-1.5 ${isActive
                         ? "bg-primary/5 border-primary/20 shadow-[0_1px_8px_rgba(0,0,0,0.02)]"
                         : "bg-transparent border-border/30 hover:bg-[#fafaf8] hover:border-border/60"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center justify-between w-full">
                       <span className="font-serif text-sm font-semibold text-foreground leading-none">
@@ -167,7 +166,7 @@ export default function CodexChat() {
         </div>
 
         {/* Chat Transcript Panel */}
-        <div className="bg-white border border-border/40 rounded-2xl h-[650px] flex flex-col overflow-hidden shadow-[0_2px_16px_rgb(0,0,0,0.01)]">
+        <div className="bg-white border border-border/40 rounded-2xl h-full flex flex-col overflow-hidden shadow-[0_2px_16px_rgb(0,0,0,0.01)]">
           {selectedSession ? (
             <>
               {/* Transcript Header */}
@@ -204,14 +203,13 @@ export default function CodexChat() {
                       className={`flex gap-3.5 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}
                     >
                       <div
-                        className={`max-w-[70%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-[0_1px_4px_rgba(0,0,0,0.02)] ${
-                          msg.role === "user"
+                        className={`max-w-[70%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-[0_1px_4px_rgba(0,0,0,0.02)] ${msg.role === "user"
                             ? "bg-primary text-primary-foreground rounded-tr-sm"
                             : "bg-[#fafaf8] border border-border/40 text-foreground/80 rounded-tl-sm"
-                        }`}
+                          }`}
                       >
                         {msg.content}
-                        
+
                         {msg.is_blocked && (
                           <div className="mt-2.5 pt-2 border-t border-red-200/40 flex items-center gap-1.5 text-[10px] text-red-500 font-medium">
                             <ShieldAlert className="w-3.5 h-3.5" />
