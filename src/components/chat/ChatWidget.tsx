@@ -235,7 +235,14 @@ export function ChatWidget() {
               ...history,
             ],
             stream: true,
-            options: { temperature: 0.5, num_predict: 200 },
+            options: {
+              temperature: 0.3,
+              num_predict: 80, // shorter responses = faster answers
+              num_ctx: 1024,   // small context = less processing overhead
+              num_thread: 4,   // optimizes CPU multi-core utilization
+              top_k: 20,
+              top_p: 0.9,
+            },
           }),
         });
 

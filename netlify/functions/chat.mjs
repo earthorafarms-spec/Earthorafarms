@@ -68,8 +68,10 @@ export async function handler(event) {
         ],
         stream: false,
         options: {
-          temperature: 0.5,
-          num_predict: 200,
+          temperature: 0.3,
+          num_predict: 80,
+          num_ctx: 1024,
+          num_thread: 4,
         },
       }),
     });
