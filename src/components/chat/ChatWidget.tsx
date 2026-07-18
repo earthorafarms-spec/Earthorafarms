@@ -3,6 +3,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Send, Leaf, Loader2, ChevronDown, WifiOff } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
+// In dev (npm run dev), Netlify functions aren't available — call Ollama directly.
+// In production (Netlify deploy), use the serverless function to keep the URL server-side.
+const IS_DEV = import.meta.env.DEV;
+const OLLAMA_BASE_URL = import.meta.env.VITE_OLLAMA_BASE_URL ?? "http://localhost:11434";
+const OLLAMA_MODEL = "gemma3:4b";
 const CHAT_ENDPOINT = "/.netlify/functions/chat";
 const MAX_MESSAGE_LENGTH = 800;
 
@@ -196,21 +201,70 @@ export function ChatWidget() {
     abortRef.current = new AbortController();
 
     try {
-      const res = await fetch(CHAT_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        signal: abortRef.current.signal,
-        body: JSON.stringify({ messages: history }),
-      });
+      let reply = "";
 
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+      if (IS_DEV) {
+        // ── Development: call Ollama directly with streaming ──────────────────
+        const res = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: abortRef.current.signal,
+          body: JSON.stringify({
+            model: OLLAMA_MODEL,
+            messages: history,
+            stream: true,
+            options: { temperature: 0.5, num_predict: 200 },
+          }),
+        });
 
-      const reply = String(data?.message || "I'm not sure about that. Please reach out to query@earthorafarms.com.");
-      setMessages((prev) =>
-        prev.map((m) => (m.id === botId ? { ...m, content: reply } : m)),
-      );
-      await logMessage(sId, "assistant", reply, Boolean(data?.blocked));
+        if (!res.ok || !res.body) throw new Error(`Ollama HTTP ${res.status}`);
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          const lines = decoder.decode(value, { stream: true }).split("\n").filter(Boolean);
+          for (const line of lines) {
+            try {
+              const chunk = JSON.parse(line);
+              const token: string = chunk?.message?.content ?? "";
+              if (token) {
+                reply += token;
+                setMessages((prev) =>
+                  prev.map((m) => (m.id === botId ? { ...m, content: reply } : m)),
+                );
+              }
+            } catch { /* ignore malformed chunks */ }
+          }
+        }
+      } else {
+        // ── Production: call Netlify serverless function ──────────────────────
+        const res = await fetch(CHAT_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          signal: abortRef.current.signal,
+          body: JSON.stringify({ messages: history }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+        reply = String(data?.message ?? "I'm not sure about that. Please reach out to query@earthorafarms.com.");
+
+        setMessages((prev) =>
+          prev.map((m) => (m.id === botId ? { ...m, content: reply } : m)),
+        );
+      }
+
+      if (!reply) {
+        reply = "I'm not sure about that. Please reach out to query@earthorafarms.com.";
+        setMessages((prev) =>
+          prev.map((m) => (m.id === botId ? { ...m, content: reply } : m)),
+        );
+      }
+
+      await logMessage(sId, "assistant", reply, false);
     } catch (err: unknown) {
       const isAbort = err instanceof Error && err.name === "AbortError";
       const isNetwork = err instanceof TypeError && err.message.includes("Failed to fetch");
