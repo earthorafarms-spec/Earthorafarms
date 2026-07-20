@@ -290,3 +290,37 @@ CREATE POLICY "Allow anon/authenticated operations" ON otp_codes FOR ALL TO anon
 GRANT USAGE ON SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
+
+-- ── Storage: product-images bucket ────────────────────────────────────────────
+-- Create the bucket if it doesn't exist (idempotent)
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+  'product-images',
+  'product-images',
+  true,
+  10485760,  -- 10 MB
+  ARRAY['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+)
+ON CONFLICT (id) DO UPDATE SET
+  public = true,
+  file_size_limit = 10485760,
+  allowed_mime_types = ARRAY['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+
+-- Open storage RLS policies so anon/authenticated can read & upload
+DROP POLICY IF EXISTS "Public read product images" ON storage.objects;
+CREATE POLICY "Public read product images"
+ON storage.objects FOR SELECT
+TO anon, authenticated
+USING (bucket_id = 'product-images');
+
+DROP POLICY IF EXISTS "Anon/auth upload product images" ON storage.objects;
+CREATE POLICY "Anon/auth upload product images"
+ON storage.objects FOR INSERT
+TO anon, authenticated
+WITH CHECK (bucket_id = 'product-images');
+
+DROP POLICY IF EXISTS "Anon/auth update product images" ON storage.objects;
+CREATE POLICY "Anon/auth update product images"
+ON storage.objects FOR UPDATE
+TO anon, authenticated
+USING (bucket_id = 'product-images');
