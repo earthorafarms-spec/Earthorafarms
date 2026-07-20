@@ -26,7 +26,6 @@ const AdminOrders = lazy(() => import('./pages/admin-earthora/orders'));
 const AdminAnalytics = lazy(() => import('./pages/admin-earthora/analytics'));
 const AdminCoupons = lazy(() => import('./pages/admin-earthora/coupons'));
 const AdminFestive = lazy(() => import('./pages/admin-earthora/festive'));
-const AdminChat = lazy(() => import('./pages/admin-earthora/chat'));
 const AdminSettings = lazy(() => import('./pages/admin-earthora/settings'));
 
 // ── Codex pages ───────────────────────────────────────────────────────────────
@@ -35,7 +34,6 @@ const CodexDashboard = lazy(() => import('./pages/codex/dashboard'));
 const CodexAnalytics = lazy(() => import('./pages/codex/analytics'));
 const CodexReports = lazy(() => import('./pages/codex/reports'));
 const CodexSettings = lazy(() => import('./pages/codex/settings'));
-const CodexChat = lazy(() => import('./pages/codex/chat'));
 
 // ── Query client ──────────────────────────────────────────────────────────────
 const queryClient = new QueryClient({
@@ -340,7 +338,6 @@ function App() {
                         <Route path="/admin-earthora/orders"><AdminOrders /></Route>
                         <Route path="/admin-earthora/coupons"><AdminCoupons /></Route>
                         <Route path="/admin-earthora/festive"><AdminFestive /></Route>
-                        <Route path="/admin-earthora/chat"><AdminChat /></Route>
                         <Route path="/admin-earthora/analytics"><AdminAnalytics /></Route>
                         <Route path="/admin-earthora/settings"><AdminSettings /></Route>
                         <Route><Redirect to="/admin-earthora/dashboard" /></Route>
@@ -358,7 +355,6 @@ function App() {
                         <Route path="/codex/dashboard"><CodexDashboard /></Route>
                         <Route path="/codex/analytics"><CodexAnalytics /></Route>
                         <Route path="/codex/reports"><CodexReports /></Route>
-                        <Route path="/codex/chat"><CodexChat /></Route>
                         <Route path="/codex/settings"><CodexSettings /></Route>
                         <Route><Redirect to="/codex/dashboard" /></Route>
                       </Switch>

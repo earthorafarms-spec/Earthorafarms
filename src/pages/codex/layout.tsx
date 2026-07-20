@@ -10,7 +10,6 @@ const navItems = [
   { id: "dashboard", label: "Dashboard",   icon: LayoutDashboard, path: "/codex/dashboard" },
   { id: "analytics", label: "Analytics",   icon: Activity,        path: "/codex/analytics" },
   { id: "reports",   label: "Reports",     icon: FileText,        path: "/codex/reports" },
-  { id: "chat",      label: "AI Chat Log", icon: MessageSquare,   path: "/codex/chat" },
   { id: "settings",  label: "Settings",    icon: Settings,        path: "/codex/settings" },
 ];
 

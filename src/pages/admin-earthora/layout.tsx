@@ -13,7 +13,6 @@ const navItems = [
   { id: "orders",     label: "Orders",         icon: ShoppingCart,    path: "/admin-earthora/orders" },
   { id: "coupons",    label: "Coupons",        icon: Tag,             path: "/admin-earthora/coupons" },
   { id: "festive",    label: "Festive Deals",  icon: Sparkles,        path: "/admin-earthora/festive" },
-  { id: "chat",       label: "AI Chat Logs",   icon: MessageSquare,   path: "/admin-earthora/chat" },
   { id: "analytics", label: "Analytics",      icon: TrendingUp,      path: "/admin-earthora/analytics" },
   { id: "settings",  label: "Settings",       icon: Settings,        path: "/admin-earthora/settings" },
 ];
