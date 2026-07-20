@@ -513,6 +513,8 @@ ALTER TABLE festival_details ENABLE ROW LEVEL SECURITY;
 ALTER TABLE festival_deal_products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE analytics_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON products;
 CREATE POLICY "Allow anon/authenticated operations" ON products FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
@@ -561,6 +563,12 @@ CREATE POLICY "Allow anon/authenticated operations" ON users FOR ALL TO anon, au
 
 DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON analytics_events;
 CREATE POLICY "Allow anon/authenticated operations" ON analytics_events FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON orders;
+CREATE POLICY "Allow anon/authenticated operations" ON orders FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON order_items;
+CREATE POLICY "Allow anon/authenticated operations" ON order_items FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
 -- ── Grant Schema & Table Access Privileges ────────────────────────────────────
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
