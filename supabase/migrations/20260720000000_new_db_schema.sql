@@ -185,43 +185,124 @@ CREATE TRIGGER update_Orders_modtime
 BEFORE UPDATE ON "Orders"
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Backward compatibility views for Orders & order_items
+-- Backward compatibility tables for Orders & order_items
 DROP VIEW IF EXISTS order_items;
 DROP VIEW IF EXISTS orders;
 
-CREATE OR REPLACE VIEW orders AS
-SELECT 
-  o.id::text as id,
-  o.id::text as order_number,
-  o.order_user_id as user_id,
-  coalesce(oh.order_status, 'pending') as status,
-  (o.order_product_quantity::numeric * o.order_product_price::numeric) as total_amount,
-  -- build shipping address from User_details of the ordering user
-  jsonb_build_object(
-    'name', coalesce(ud.user_name, o.order_user_id),
-    'email', o.order_user_id,
-    'phone', coalesce(ud.user_phone, ''),
-    'address', coalesce(ud.user_address, ''),
-    'city', coalesce(ud.user_city, ''),
-    'state', coalesce(ud.user_state, ''),
-    'zip', coalesce(ud.user_zip, ''),
-    'country', coalesce(ud.user_country, '')
-  ) as shipping_address,
-  o.order_created_at as created_at
-FROM "Orders" o
-LEFT JOIN "Order_history" oh ON oh.order_id = o.id::text
-LEFT JOIN "User_details" ud ON ud.user_email = o.order_user_id;
+CREATE TABLE IF NOT EXISTS orders (
+  id VARCHAR(255) PRIMARY KEY,
+  order_number VARCHAR(255) NOT NULL,
+  user_id VARCHAR(255) NOT NULL,
+  status VARCHAR(100) DEFAULT 'pending',
+  total_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+  shipping_address JSONB NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
 
-CREATE OR REPLACE VIEW order_items AS
-SELECT 
-  id::text as id,
-  id::text as order_id,
-  order_product_id as product_id,
-  order_product_quantity::numeric as quantity,
-  order_product_price::numeric as unit_price,
-  (order_product_quantity::numeric * order_product_price::numeric) as total_price,
-  order_created_at as created_at
-FROM "Orders";
+CREATE TABLE IF NOT EXISTS order_items (
+  id SERIAL PRIMARY KEY,
+  order_id VARCHAR(255) NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  quantity INTEGER NOT NULL DEFAULT 1,
+  unit_price NUMERIC(10,2) NOT NULL,
+  total_price NUMERIC(10,2) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Trigger to sync "Orders" inserts to orders & order_items tables
+CREATE OR REPLACE FUNCTION sync_orders_trigger()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_name TEXT;
+  v_phone TEXT;
+  v_address TEXT;
+  v_city TEXT;
+  v_state TEXT;
+  v_zip TEXT;
+  v_country TEXT;
+  v_order_id VARCHAR(255);
+BEGIN
+  -- Get user details if they exist
+  SELECT user_name, user_phone, user_address, user_city, user_state, user_zip, user_country
+  INTO v_name, v_phone, v_address, v_city, v_state, v_zip, v_country
+  FROM "User_details"
+  WHERE user_email = NEW.order_user_id
+  LIMIT 1;
+
+  -- Use the first inserted item's ID as the order ID group
+  SELECT id::text INTO v_order_id
+  FROM "Orders"
+  WHERE order_user_id = NEW.order_user_id 
+    AND order_created_at >= NEW.order_created_at - interval '2 seconds'
+  ORDER BY id ASC
+  LIMIT 1;
+
+  IF v_order_id IS NULL THEN
+    v_order_id := NEW.id::text;
+  END IF;
+
+  -- Insert parent order if not exists
+  INSERT INTO orders (id, order_number, user_id, status, total_amount, shipping_address, created_at)
+  VALUES (
+    v_order_id,
+    v_order_id,
+    NEW.order_user_id,
+    'pending',
+    0,
+    jsonb_build_object(
+      'name', coalesce(v_name, NEW.order_user_id),
+      'email', NEW.order_user_id,
+      'phone', coalesce(v_phone, ''),
+      'address', coalesce(v_address, ''),
+      'city', coalesce(v_city, ''),
+      'state', coalesce(v_state, ''),
+      'zip', coalesce(v_zip, ''),
+      'country', coalesce(v_country, '')
+    ),
+    NEW.order_created_at
+  )
+  ON CONFLICT (id) DO NOTHING;
+
+  -- Insert order item
+  INSERT INTO order_items (order_id, product_id, quantity, unit_price, total_price, created_at)
+  VALUES (
+    v_order_id,
+    NEW.order_product_id::uuid,
+    NEW.order_product_quantity::numeric::integer,
+    NEW.order_product_price::numeric,
+    (NEW.order_product_quantity::numeric * NEW.order_product_price::numeric),
+    NEW.order_created_at
+  );
+
+  -- Recalculate total amount
+  UPDATE orders
+  SET total_amount = (SELECT sum(total_price) FROM order_items WHERE order_id = v_order_id)
+  WHERE id = v_order_id;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_sync_orders ON "Orders";
+CREATE TRIGGER trigger_sync_orders
+AFTER INSERT ON "Orders"
+FOR EACH ROW EXECUTE FUNCTION sync_orders_trigger();
+
+-- Trigger to sync status updates from Order_history to orders
+CREATE OR REPLACE FUNCTION sync_order_status_trigger()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE orders
+  SET status = NEW.order_status
+  WHERE id = NEW.order_id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_sync_order_status ON "Order_history";
+CREATE TRIGGER trigger_sync_order_status
+AFTER INSERT OR UPDATE ON "Order_history"
+FOR EACH ROW EXECUTE FUNCTION sync_order_status_trigger();
 
 -- ── 8. Payments TABLE ─────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS "Payments" (
