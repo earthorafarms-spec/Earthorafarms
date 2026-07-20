@@ -1,5 +1,11 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+declare const Deno: {
+  env: { get(key: string): string | undefined };
+  serve(handler: (req: Request) => Response | Promise<Response>): void;
+};
+
+
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -28,27 +34,49 @@ async function verifyPassword(
   password: string,
   domain: string,
 ): Promise<boolean> {
+  console.log(`[send-otp] verifyPassword called for domain: ${domain}`);
+  
   if (domain === "admin") {
     const envPassword = Deno.env.get("ADMIN_PASSWORD");
     if (envPassword) {
+      console.log("[send-otp] Verifying against ADMIN_PASSWORD env var");
       return constantTimeEqual(password, envPassword);
     }
-    const { data } = await supabase
+    
+    console.log("[send-otp] Verifying against DB admin_settings table");
+    const { data, error } = await supabase
       .from("admin_settings")
       .select("value")
       .eq("key", "admin_password")
       .single();
-    if (!data) return false;
+      
+    if (error) {
+      console.error("[send-otp] DB error querying admin_password:", error);
+      return false;
+    }
+    if (!data) {
+      console.error("[send-otp] No admin_password row found in admin_settings");
+      return false;
+    }
     return constantTimeEqual(password, data.value);
   }
 
   if (domain === "codex") {
-    const { data } = await supabase
+    console.log("[send-otp] Verifying codex key against DB admin_settings table");
+    const { data, error } = await supabase
       .from("admin_settings")
       .select("value")
       .eq("key", "codex_password")
       .single();
-    if (!data) return false;
+      
+    if (error) {
+      console.error("[send-otp] DB error querying codex_password:", error);
+      return false;
+    }
+    if (!data) {
+      console.error("[send-otp] No codex_password row found in admin_settings");
+      return false;
+    }
     return constantTimeEqual(password, data.value);
   }
 
