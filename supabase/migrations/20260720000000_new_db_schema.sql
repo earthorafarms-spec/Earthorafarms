@@ -370,10 +370,10 @@ DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON "Admin_analytics"
 CREATE POLICY "Allow anon/authenticated operations" ON "Admin_analytics" FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON admin_settings;
-CREATE POLICY "Allow anon/authenticated operations" ON admin_settings FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+-- Locked: No public policies exist for admin_settings. Only service_role can access.
 
 DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON otp_codes;
-CREATE POLICY "Allow anon/authenticated operations" ON otp_codes FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+-- Locked: No public policies exist for otp_codes. Only service_role can access.
 
 DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON coupon_details;
 CREATE POLICY "Allow anon/authenticated operations" ON coupon_details FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);

@@ -76,3 +76,35 @@ visitor_updated_at timestamp default current_timestamp on update current_timesta
 
 
 Right now do this and also see the frontend if any of the field is extra in the db schema and is not in the fronend and add that in the frontend 
+
+
+Okay now let's go on admin side, crete a DB for product listing form which is in admin-earthora/products page it should have the following schema:
+id int primary key auto_increment
+product_slug varchar(255) not null unique
+product_name varchar(255) not null
+product_description text not null
+product_category varchar(255) not null
+product_price varchar(255) not null
+product_image varchar(255) not null
+product_created_at timestamp default current_timestamp
+product_updated_at timestamp default current_timestamp on update current_timestamp  check the Add New Product from and add all the fields that are in that forms and not here and all of them must be not null do add the logic that as soon as the user add teh product images in the Add New Product form then it should be uploaded to the storage and the url should be stored in the db in the product_image field and similar will happen in the updates field too
+
+
+Now create a DB for coupon page it should have the coupon_details table name and the data schema should be:
+id int primary key auto_increment
+coupon_code varchar(255) not null unique
+coupon_discount_type varchar(255) not null (coupon_discount_type can be percentage or flat amount)
+coupon_discount_amount varchar(255) not null (coupon_discount_amount can be percentage or flat amount)
+coupon_discount_value varchar(255) not null (coupon_discount_value can be percentage or flat amount)
+coupon_description text not null
+coupon_created_at timestamp default current_timestamp
+coupon_updated_at timestamp default current_timestamp on update current_timestamp take the rest of the field from the Create Coupon from as well
+
+Now create a DB for festival Deals with the table name festival_details and the data schema must be:
+id int primary key auto_increment
+festival_title varchar(255) not null
+festival_description text not null
+festival_start_date timestamp default current_timestamp
+festival_end_date timestamp default current_timestamp on update current_timestamp take the rest of the field from the Create Festival Deal from as well also add more fields after reading the Create Festive Deal form 
+
+When the user orders something from the website then there order details all the things from the order table must be shown in the admin-earthora/orders and from here the user can change the status like the order is processing, packed or delivered 

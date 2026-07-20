@@ -43,7 +43,7 @@ export default function AdminProducts() {
 
   const [form, setForm] = useState({
     name: "", mrp: "", price: "", tag: "", badge: "", stockText: "", stock: "", description: "",
-    highlights: [""], rating: "",
+    highlights: [""], rating: "", category: "moringa",
   });
   const [images, setImages] = useState<string[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -186,7 +186,7 @@ export default function AdminProducts() {
   };
 
   const openForm = () => {
-    setForm({ name: "", mrp: "", price: "", tag: "", badge: "", stockText: "In Stock", stock: "", description: "", highlights: [""], rating: "4.5" });
+    setForm({ name: "", mrp: "", price: "", tag: "", badge: "", stockText: "In Stock", stock: "", description: "", highlights: [""], rating: "4.5", category: "moringa" });
     setImages([]);
     setSelectedFiles([]);
     setShowForm(true);
@@ -295,6 +295,7 @@ export default function AdminProducts() {
           highlights: form.highlights.filter((h) => h.trim()),
           rating: parseFloat(form.rating) || 4.5,
           images: finalImages as any,
+          category: form.category || "moringa",
         })
         .select()
         .single();
@@ -593,7 +594,7 @@ export default function AdminProducts() {
                         </div>
                       )}
 
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-3 gap-4">
                         <div>
                           <label className="text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5 block">Tag / Subtitle</label>
                           <input type="text" value={form.tag} onChange={(e) => setForm({ ...form, tag: e.target.value })} placeholder="500mg · 90 Capsules" className="w-full h-11 px-4 text-sm bg-white border border-border/40 rounded-xl outline-none focus:border-primary/30 focus:ring-2 focus:ring-primary/5 transition-all placeholder:text-foreground/25" />
@@ -601,6 +602,10 @@ export default function AdminProducts() {
                         <div>
                           <label className="text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5 block">Badge</label>
                           <input type="text" value={form.badge} onChange={(e) => setForm({ ...form, badge: e.target.value })} placeholder="Best Seller, New, etc." className="w-full h-11 px-4 text-sm bg-white border border-border/40 rounded-xl outline-none focus:border-primary/30 focus:ring-2 focus:ring-primary/5 transition-all placeholder:text-foreground/25" />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5 block">Category *</label>
+                          <input type="text" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. moringa, amla" className="w-full h-11 px-4 text-sm bg-white border border-border/40 rounded-xl outline-none focus:border-primary/30 focus:ring-2 focus:ring-primary/5 transition-all placeholder:text-foreground/25" />
                         </div>
                       </div>
 
