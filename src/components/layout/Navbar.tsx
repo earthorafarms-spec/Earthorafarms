@@ -5,6 +5,7 @@ import { Link } from "wouter";
 import { ShoppingBag, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/contexts/cart-context";
+import { useAuth } from "@/contexts/auth-context";
 
 const navLinks = [
   { label: "Home", href: "/" },
@@ -20,6 +21,7 @@ export function Navbar() {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const { cartCount } = useCart();
+  const { user, signOut } = useAuth();
   const { scrollY } = useScroll();
 
   useEffect(() => {
@@ -73,11 +75,21 @@ export function Navbar() {
                 </span>
               )}
             </Link>
-            <Link href="/auth">
-              <Button variant={isScrolled ? "default" : "secondary"} className="hidden md:inline-flex bg-white text-primary hover:bg-white/90">
-                Log In
+            {user ? (
+              <Button
+                variant={isScrolled ? "default" : "secondary"}
+                className="hidden md:inline-flex bg-white text-primary hover:bg-white/90 border border-border/20 font-medium"
+                onClick={() => signOut()}
+              >
+                Log Out
               </Button>
-            </Link>
+            ) : (
+              <Link href="/auth">
+                <Button variant={isScrolled ? "default" : "secondary"} className="hidden md:inline-flex bg-white text-primary hover:bg-white/90">
+                  Log In
+                </Button>
+              </Link>
+            )}
             <button
               onClick={() => setIsMobileOpen(!isMobileOpen)}
               className={`md:hidden p-2 ${isScrolled ? "text-foreground" : "text-primary-foreground"}`}
