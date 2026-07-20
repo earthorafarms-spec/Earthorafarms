@@ -195,3 +195,8 @@ CREATE POLICY "Allow anon/authenticated operations" ON admin_settings FOR ALL TO
 
 DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON otp_codes;
 CREATE POLICY "Allow anon/authenticated operations" ON otp_codes FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- ── Grant Schema & Table Access Privileges ────────────────────────────────────
+GRANT USAGE ON SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated;
