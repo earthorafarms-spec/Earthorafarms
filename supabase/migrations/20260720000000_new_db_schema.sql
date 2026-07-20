@@ -588,3 +588,81 @@ CREATE POLICY "Anon/auth update product images"
 ON storage.objects FOR UPDATE
 TO anon, authenticated
 USING (bucket_id = 'product-images');
+
+-- ── 16. Backfill existing orders from "Orders" table if not synced ─────────────
+DO $$
+DECLARE
+  r RECORD;
+  v_name TEXT;
+  v_phone TEXT;
+  v_address TEXT;
+  v_city TEXT;
+  v_state TEXT;
+  v_zip TEXT;
+  v_country TEXT;
+  v_order_id VARCHAR(255);
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'Orders') THEN
+    FOR r IN SELECT * FROM "Orders" ORDER BY id ASC LOOP
+      -- Get user details
+      SELECT user_name, user_phone, user_address, user_city, user_state, user_zip, user_country
+      INTO v_name, v_phone, v_address, v_city, v_state, v_zip, v_country
+      FROM "User_details"
+      WHERE user_email = r.order_user_id
+      LIMIT 1;
+
+      -- Group items by checking if we have an item created around the same time
+      SELECT id::text INTO v_order_id
+      FROM "Orders"
+      WHERE order_user_id = r.order_user_id 
+        AND order_created_at >= r.order_created_at - interval '2 seconds'
+      ORDER BY id ASC
+      LIMIT 1;
+
+      IF v_order_id IS NULL THEN
+        v_order_id := r.id::text;
+      END IF;
+
+      -- Insert parent order if not exists
+      INSERT INTO orders (id, order_number, user_id, status, total_amount, shipping_address, created_at)
+      VALUES (
+        v_order_id,
+        v_order_id,
+        r.order_user_id,
+        coalesce((SELECT order_status FROM "Order_history" WHERE order_id = v_order_id LIMIT 1), 'pending'),
+        0,
+        jsonb_build_object(
+          'name', coalesce(v_name, r.order_user_id),
+          'email', r.order_user_id,
+          'phone', coalesce(v_phone, ''),
+          'address', coalesce(v_address, ''),
+          'city', coalesce(v_city, ''),
+          'state', coalesce(v_state, ''),
+          'zip', coalesce(v_zip, ''),
+          'country', coalesce(v_country, '')
+        ),
+        r.order_created_at
+      )
+      ON CONFLICT (id) DO NOTHING;
+
+      -- Insert order item
+      IF EXISTS (SELECT 1 FROM products WHERE id = r.order_product_id::uuid) THEN
+        INSERT INTO order_items (order_id, product_id, quantity, unit_price, total_price, created_at)
+        VALUES (
+          v_order_id,
+          r.order_product_id::uuid,
+          r.order_product_quantity::numeric::integer,
+          r.order_product_price::numeric,
+          (r.order_product_quantity::numeric * r.order_product_price::numeric),
+          r.order_created_at
+        )
+        ON CONFLICT DO NOTHING;
+      END IF;
+
+      -- Recalculate total amount
+      UPDATE orders
+      SET total_amount = (SELECT sum(total_price) FROM order_items WHERE order_id = v_order_id)
+      WHERE id = v_order_id;
+    END LOOP;
+  END IF;
+END $$;
