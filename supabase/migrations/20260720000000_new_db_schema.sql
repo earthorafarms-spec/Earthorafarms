@@ -98,6 +98,8 @@ BEFORE UPDATE ON coupon_details
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Backward compatibility view for frontend coupons queries
+DROP VIEW IF EXISTS coupons;
+DROP TABLE IF EXISTS coupons CASCADE;
 CREATE OR REPLACE VIEW coupons AS
 SELECT 
   id::text as id,
@@ -277,6 +279,8 @@ CREATE TABLE IF NOT EXISTS festival_deal_products (
 );
 
 -- Backward compatibility views for festive deals queries
+DROP VIEW IF EXISTS festive_deals;
+DROP TABLE IF EXISTS festive_deals CASCADE;
 CREATE OR REPLACE VIEW festive_deals AS
 SELECT 
   id::text as id,
@@ -298,6 +302,8 @@ FROM (
   FROM festival_details
 ) fd;
 
+DROP VIEW IF EXISTS festive_deal_products;
+DROP TABLE IF EXISTS festive_deal_products CASCADE;
 CREATE OR REPLACE VIEW festive_deal_products AS
 SELECT 
   id,
