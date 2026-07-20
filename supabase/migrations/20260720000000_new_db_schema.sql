@@ -382,7 +382,6 @@ CREATE POLICY "Allow anon/authenticated operations" ON festival_deal_products FO
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
-GRANT ALL ON ALL VIEWS IN SCHEMA public TO anon, authenticated, service_role;
 
 -- ── Storage: product-images bucket ────────────────────────────────────────────
 -- Create the bucket if it doesn't exist (idempotent)
