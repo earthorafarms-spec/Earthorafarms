@@ -227,7 +227,7 @@ export default function Products() {
             </div>
           </div>
 
-          <motion.div variants={containerVars} initial="hidden" whileInView="show" viewport={{ once: true, margin: "-50px" }}
+          <motion.div variants={containerVars} initial="hidden" animate={isLoading ? "hidden" : "show"}
             className="grid md:grid-cols-2 lg:grid-cols-4 gap-6"
           >
             {isLoading
@@ -240,11 +240,17 @@ export default function Products() {
                   className="bg-card rounded-xl border border-border/60 overflow-hidden flex flex-col transition-shadow duration-300 hover:shadow-md cursor-pointer"
                 >
                   <div className="relative aspect-square bg-white flex items-center justify-center p-6 border-b border-border/30">
-                    <img
-                      src={hoveredId === p.id ? p.imageHover : p.imageMain}
-                      alt={p.name}
-                      className="w-full h-full object-contain transition-all duration-500"
-                    />
+                    {p.imageMain ? (
+                      <img
+                        src={hoveredId === p.id ? p.imageHover : p.imageMain}
+                        alt={p.name}
+                        className="w-full h-full object-contain transition-all duration-500"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-muted/40 rounded-lg">
+                        <span className="text-4xl">🌿</span>
+                      </div>
+                    )}
                     {p.badge && (
                       <span className="absolute top-3 left-3 px-2.5 py-1 text-[11px] font-bold bg-primary text-primary-foreground rounded">
                         {p.badge}
