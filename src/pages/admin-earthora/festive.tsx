@@ -81,25 +81,25 @@ export default function AdminFestive() {
   const fetchDeals = async () => {
     try {
       const { data: rawDeals, error } = await supabase
-        .from("festive_deals")
-        .select("*, festive_deal_products(product_id)")
-        .order("created_at", { ascending: false });
+        .from("festival_details")
+        .select("*, festival_deal_products(product_id)")
+        .order("id", { ascending: false });
 
       if (error) throw error;
 
       const mapped = (rawDeals as any[]).map((d: any) => ({
-        id: d.id,
-        title: d.title,
+        id: String(d.id),
+        title: d.festival_title,
         festivalName: d.festival_name,
-        description: d.description || "",
+        description: d.festival_description || "",
         bannerImage: d.banner_image || "",
         discountType: d.discount_type as "percentage" | "fixed",
         discountValue: Number(d.discount_value),
-        startsAt: d.starts_at?.slice(0, 10) ?? "",
-        endsAt: d.ends_at?.slice(0, 10) ?? "",
-        status: (d.status === "active" ? "Active" : "Inactive") as "Active" | "Inactive",
-        productIds: (d.festive_deal_products || []).map((p: any) => p.product_id),
-        productCount: (d.festive_deal_products || []).length,
+        startsAt: d.festival_start_date?.slice(0, 10) ?? "",
+        endsAt: d.festival_end_date?.slice(0, 10) ?? "",
+        status: (d.festival_status === "active" ? "Active" : "Inactive") as "Active" | "Inactive",
+        productIds: (d.festival_deal_products || []).map((p: any) => p.product_id),
+        productCount: (d.festival_deal_products || []).length,
       }));
       setDeals(mapped);
     } catch (err: any) {
@@ -171,33 +171,32 @@ export default function AdminFestive() {
     setSaving(true);
     try {
       const payload = {
-        title: form.title,
+        festival_title: form.title,
         festival_name: form.festivalName,
-        description: form.description || null,
+        festival_description: form.description || "",
         banner_image: form.bannerImage || null,
         discount_type: form.discountType,
         discount_value: parseFloat(form.discountValue) || 0,
-        starts_at: new Date(form.startsAt).toISOString(),
-        ends_at: new Date(form.endsAt).toISOString(),
-        status: "active",
-        updated_at: new Date().toISOString(),
+        festival_start_date: new Date(form.startsAt).toISOString(),
+        festival_end_date: new Date(form.endsAt).toISOString(),
+        festival_status: "active",
       };
 
-      let dealId = editId;
+      let dealId: number | null = editId ? parseInt(editId) : null;
 
-      if (editId) {
-        const { error } = await (supabase.from("festive_deals") as any).update(payload).eq("id", editId);
+      if (editId && dealId) {
+        const { error } = await supabase.from("festival_details").update(payload).eq("id", dealId);
         if (error) throw error;
-        await supabase.from("festive_deal_products").delete().eq("deal_id", editId);
+        await supabase.from("festival_deal_products").delete().eq("deal_id", dealId);
       } else {
-        const { data, error } = await (supabase.from("festive_deals") as any).insert(payload).select().single();
+        const { data, error } = await supabase.from("festival_details").insert(payload).select().single();
         if (error) throw error;
         dealId = (data as any).id;
       }
 
       if (form.productIds.length > 0 && dealId) {
         const links = form.productIds.map((pid) => ({ deal_id: dealId, product_id: pid }));
-        await supabase.from("festive_deal_products").insert(links as any);
+        await supabase.from("festival_deal_products").insert(links as any);
       }
 
       toast({ title: editId ? "Deal updated" : "Deal created", description: `"${form.title}" is now live.` });
@@ -215,7 +214,7 @@ export default function AdminFestive() {
     if (!deal) return;
     const next = deal.status === "Active" ? "inactive" : "active";
     try {
-      const { error } = await (supabase.from("festive_deals") as any).update({ status: next }).eq("id", id);
+      const { error } = await supabase.from("festival_details").update({ festival_status: next }).eq("id", parseInt(id));
       if (error) throw error;
       toast({ title: "Status updated" });
       fetchDeals();
@@ -226,7 +225,7 @@ export default function AdminFestive() {
 
   const handleDelete = async (id: string) => {
     try {
-      const { error } = await supabase.from("festive_deals").delete().eq("id", id);
+      const { error } = await supabase.from("festival_details").delete().eq("id", parseInt(id));
       if (error) throw error;
       toast({ title: "Deal deleted" });
       fetchDeals();

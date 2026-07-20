@@ -18,6 +18,10 @@ BEGIN
       NEW.updated_at = NOW();
    ELSIF TG_TABLE_NAME = 'inventory' THEN
       NEW.updated_at = NOW();
+   ELSIF TG_TABLE_NAME = 'coupon_details' THEN
+      NEW.coupon_updated_at = NOW();
+   ELSIF TG_TABLE_NAME = 'festival_details' THEN
+      NEW.festival_end_date = NOW();
    END IF;
    RETURN NEW;
 END;
@@ -29,6 +33,7 @@ CREATE TABLE IF NOT EXISTS products (
   slug VARCHAR(100) UNIQUE NOT NULL,
   name VARCHAR(255) NOT NULL,
   description TEXT,
+  category VARCHAR(100) DEFAULT 'moringa',
   mrp NUMERIC(10,2) NOT NULL,
   price NUMERIC(10,2) NOT NULL,
   tag VARCHAR(100),
@@ -70,20 +75,43 @@ CREATE TRIGGER update_inventory_modtime
 BEFORE UPDATE ON inventory
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- ── 3. COUPONS TABLE ──────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS coupons (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  code VARCHAR(50) UNIQUE NOT NULL,
-  type VARCHAR(20) NOT NULL CHECK (type IN ('percentage','fixed')),
-  value NUMERIC(10,2) NOT NULL,
-  min_order NUMERIC(10,2) DEFAULT 0,
-  max_uses INTEGER,
-  used_count INTEGER DEFAULT 0,
-  expiry_date DATE,
-  status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active','inactive')),
-  description TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
+-- ── 3. COUPON DETAILS TABLE ───────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS coupon_details (
+  id SERIAL PRIMARY KEY,
+  coupon_code VARCHAR(255) NOT NULL UNIQUE,
+  coupon_discount_type VARCHAR(255) NOT NULL CHECK (coupon_discount_type IN ('percentage', 'fixed')),
+  coupon_discount_amount NUMERIC(10,2) NOT NULL,
+  coupon_discount_value NUMERIC(10,2) NOT NULL,
+  coupon_min_order NUMERIC(10,2) DEFAULT 0,
+  coupon_max_uses INT,
+  coupon_used_count INT DEFAULT 0,
+  coupon_expiry_date DATE,
+  coupon_status VARCHAR(20) DEFAULT 'active' CHECK (coupon_status IN ('active', 'inactive')),
+  coupon_description TEXT NOT NULL,
+  coupon_created_at TIMESTAMPTZ DEFAULT now(),
+  coupon_updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+DROP TRIGGER IF EXISTS update_coupon_details_modtime ON coupon_details;
+CREATE TRIGGER update_coupon_details_modtime
+BEFORE UPDATE ON coupon_details
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Backward compatibility view for frontend coupons queries
+CREATE OR REPLACE VIEW coupons AS
+SELECT 
+  id::text as id,
+  coupon_code as code,
+  coupon_discount_type::text as type,
+  coupon_discount_value as value,
+  coupon_min_order as min_order,
+  coupon_max_uses as max_uses,
+  coupon_used_count as used_count,
+  coupon_expiry_date as expiry_date,
+  coupon_status as status,
+  coupon_description as description,
+  coupon_created_at as created_at
+FROM coupon_details;
 
 -- ── 4. User_details TABLE ─────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS "User_details" (
@@ -221,6 +249,62 @@ CREATE TABLE IF NOT EXISTS otp_codes (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ── 13. FESTIVAL DETAILS TABLE ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS festival_details (
+  id SERIAL PRIMARY KEY,
+  festival_title VARCHAR(255) NOT NULL,
+  festival_name VARCHAR(255) NOT NULL,
+  festival_description TEXT NOT NULL,
+  banner_image VARCHAR(255),
+  discount_type VARCHAR(20) NOT NULL CHECK (discount_type IN ('percentage', 'fixed')),
+  discount_value NUMERIC(10,2) NOT NULL,
+  festival_status VARCHAR(20) DEFAULT 'active' CHECK (festival_status IN ('active', 'inactive')),
+  festival_start_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  festival_end_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+DROP TRIGGER IF EXISTS update_festival_details_modtime ON festival_details;
+CREATE TRIGGER update_festival_details_modtime
+BEFORE UPDATE ON festival_details
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Junction table linking products to festival deals
+CREATE TABLE IF NOT EXISTS festival_deal_products (
+  id SERIAL PRIMARY KEY,
+  deal_id INT REFERENCES festival_details(id) ON DELETE CASCADE,
+  product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+  UNIQUE(deal_id, product_id)
+);
+
+-- Backward compatibility views for festive deals queries
+CREATE OR REPLACE VIEW festive_deals AS
+SELECT 
+  id::text as id,
+  festival_title as title,
+  festival_name as festival_name,
+  festival_description as description,
+  banner_image as banner_image,
+  discount_type as discount_type,
+  discount_value as discount_value,
+  festival_start_date as starts_at,
+  festival_end_date as ends_at,
+  festival_status as status,
+  created_at as created_at,
+  updated_at as updated_at
+FROM (
+  SELECT 
+    id, festival_title, festival_name, festival_description, banner_image, discount_type, discount_value, festival_start_date, festival_end_date, festival_status,
+    festival_start_date as created_at, festival_end_date as updated_at
+  FROM festival_details
+) fd;
+
+CREATE OR REPLACE VIEW festive_deal_products AS
+SELECT 
+  id,
+  deal_id::text as deal_id,
+  product_id
+FROM festival_deal_products;
+
 -- ── Seed Product Catalog ──────────────────────────────────────────────────────
 INSERT INTO products (slug, name, description, mrp, price, tag, badge, rating, highlights, images, created_at, updated_at) VALUES 
 ('capsules', 'Earthora Organic Moringa Capsules', 'Our premium moringa capsules deliver the full nutritional profile of fresh moringa leaves in a convenient daily format. Sourced from our family farm.', 999.00, 699.00, '500mg · 90 Capsules', 'Best Seller', 4.60, ARRAY['500 mg organic moringa leaf per capsule', '90 vegetable capsules — 3 month supply', 'No fillers, binders, or flow agents', 'Third-party tested for purity & potency'], '[{"url": "/assets/generated_images/product_capsules.jpg"}]'::jsonb, now(), now()),
@@ -239,7 +323,6 @@ ON CONFLICT (product_id) DO NOTHING;
 -- ── Enable RLS & Open Policies ───────────────────────────────────────────────
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE inventory ENABLE ROW LEVEL SECURITY;
-ALTER TABLE coupons ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "User_details" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Contact_details" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Cart_details" ENABLE ROW LEVEL SECURITY;
@@ -249,15 +332,15 @@ ALTER TABLE "Order_history" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Admin_analytics" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE otp_codes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE coupon_details ENABLE ROW LEVEL SECURITY;
+ALTER TABLE festival_details ENABLE ROW LEVEL SECURITY;
+ALTER TABLE festival_deal_products ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON products;
 CREATE POLICY "Allow anon/authenticated operations" ON products FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON inventory;
 CREATE POLICY "Allow anon/authenticated operations" ON inventory FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON coupons;
-CREATE POLICY "Allow anon/authenticated operations" ON coupons FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON "User_details";
 CREATE POLICY "Allow anon/authenticated operations" ON "User_details" FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
@@ -286,10 +369,20 @@ CREATE POLICY "Allow anon/authenticated operations" ON admin_settings FOR ALL TO
 DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON otp_codes;
 CREATE POLICY "Allow anon/authenticated operations" ON otp_codes FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON coupon_details;
+CREATE POLICY "Allow anon/authenticated operations" ON coupon_details FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON festival_details;
+CREATE POLICY "Allow anon/authenticated operations" ON festival_details FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON festival_deal_products;
+CREATE POLICY "Allow anon/authenticated operations" ON festival_deal_products FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
 -- ── Grant Schema & Table Access Privileges ────────────────────────────────────
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT ALL ON ALL VIEWS IN SCHEMA public TO anon, authenticated, service_role;
 
 -- ── Storage: product-images bucket ────────────────────────────────────────────
 -- Create the bucket if it doesn't exist (idempotent)

@@ -35,24 +35,24 @@ export default function AdminCoupons() {
     try {
 
       const { data: rawData, error } = await supabase
-        .from("coupons")
+        .from("coupon_details")
         .select("*")
-        .order("created_at", { ascending: false });
+        .order("coupon_created_at", { ascending: false });
 
       if (error) throw error;
 
       const data = rawData as any[];
       const mapped = data.map((c: any) => ({
-        id: c.id,
-        code: c.code,
-        type: c.type as "percentage" | "fixed",
-        value: Number(c.value),
-        minOrder: Number(c.min_order),
-        maxUses: c.max_uses,
-        usedCount: c.used_count || 0,
-        expiryDate: c.expiry_date,
-        status: (c.status.charAt(0).toUpperCase() + c.status.slice(1)) as "Active" | "Inactive",
-        description: c.description || "",
+        id: String(c.id),
+        code: c.coupon_code,
+        type: c.coupon_discount_type as "percentage" | "fixed",
+        value: Number(c.coupon_discount_value),
+        minOrder: Number(c.coupon_min_order),
+        maxUses: c.coupon_max_uses,
+        usedCount: c.coupon_used_count || 0,
+        expiryDate: c.coupon_expiry_date,
+        status: (c.coupon_status.charAt(0).toUpperCase() + c.coupon_status.slice(1)) as "Active" | "Inactive",
+        description: c.coupon_description || "",
       }));
 
       setCoupons(mapped);
@@ -82,7 +82,7 @@ export default function AdminCoupons() {
 
   const handleDelete = async (id: string) => {
     try {
-      const { error } = await supabase.from("coupons").delete().eq("id", id);
+      const { error } = await supabase.from("coupon_details").delete().eq("id", parseInt(id));
       if (error) throw error;
       toast({ title: "Coupon deleted", description: "The coupon has been removed." });
       fetchCoupons();
@@ -97,9 +97,9 @@ export default function AdminCoupons() {
     const nextStatus = coupon.status === "Active" ? "inactive" : "active";
 
     try {
-      const { error } = await (supabase.from("coupons") as any)
-        .update({ status: nextStatus })
-        .eq("id", id);
+      const { error } = await (supabase.from("coupon_details") as any)
+        .update({ coupon_status: nextStatus })
+        .eq("id", parseInt(id));
       if (error) throw error;
       toast({ title: "Status updated", description: "Coupon status has been updated in database." });
       fetchCoupons();
@@ -115,17 +115,19 @@ export default function AdminCoupons() {
     }
 
     try {
+      const val = parseFloat(form.value) || 0;
       const { error } = await supabase
-        .from("coupons")
+        .from("coupon_details")
         .insert({
-          code: form.code.toUpperCase(),
-          type: form.type,
-          value: parseFloat(form.value) || 0,
-          min_order: parseFloat(form.minOrder) || 0,
-          max_uses: form.maxUses ? parseInt(form.maxUses) : null,
-          expiry_date: form.expiryDate || null,
-          status: "active",
-          description: form.description,
+          coupon_code: form.code.toUpperCase(),
+          coupon_discount_type: form.type,
+          coupon_discount_amount: val, // mapping value
+          coupon_discount_value: val,  // mapping value
+          coupon_min_order: parseFloat(form.minOrder) || 0,
+          coupon_max_uses: form.maxUses ? parseInt(form.maxUses) : null,
+          coupon_expiry_date: form.expiryDate || null,
+          coupon_status: "active",
+          coupon_description: form.description,
         } as any);
 
       if (error) throw error;

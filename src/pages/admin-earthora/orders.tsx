@@ -10,6 +10,7 @@ function statusBadge(status: string) {
   const map: Record<string, string> = {
     delivered: "bg-green-50 text-green-700 border-green-200",
     shipped: "bg-blue-50 text-blue-700 border-blue-200",
+    packed: "bg-orange-50 text-orange-700 border-orange-200",
     processing: "bg-amber-50 text-amber-700 border-amber-200",
     pending: "bg-gray-50 text-gray-500 border-gray-200",
     cancelled: "bg-red-50 text-red-500 border-red-200",
@@ -58,14 +59,15 @@ export default function AdminOrders() {
   };
 
   const cycleStatus = async (orderId: string, currentStatus: string) => {
-    const statuses = ["pending", "processing", "shipped", "delivered", "cancelled", "refunded"];
+    const statuses = ["pending", "processing", "packed", "delivered", "cancelled"];
     const nextIdx = (statuses.indexOf(currentStatus.toLowerCase()) + 1) % statuses.length;
     const nextStatus = statuses[nextIdx];
     
     try {
-      const { error } = await (supabase.from("orders") as any)
-        .update({ status: nextStatus })
-        .eq("id", orderId);
+      const { error } = await supabase
+        .from("Order_history")
+        .update({ order_status: nextStatus })
+        .eq("order_id", orderId);
       if (error) throw error;
       toast({ title: "Order updated", description: `Status changed to ${nextStatus}.` });
       fetchOrders();
