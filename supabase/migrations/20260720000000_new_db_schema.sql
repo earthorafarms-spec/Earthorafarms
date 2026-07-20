@@ -186,8 +186,20 @@ BEFORE UPDATE ON "Orders"
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Backward compatibility tables for Orders & order_items
-DROP VIEW IF EXISTS order_items;
-DROP VIEW IF EXISTS orders;
+DO $$ 
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'orders' AND relkind = 'v') THEN
+    DROP VIEW orders CASCADE;
+  ELSIF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'orders' AND relkind = 'r') THEN
+    DROP TABLE orders CASCADE;
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'order_items' AND relkind = 'v') THEN
+    DROP VIEW order_items CASCADE;
+  ELSIF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'order_items' AND relkind = 'r') THEN
+    DROP TABLE order_items CASCADE;
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS orders (
   id VARCHAR(255) PRIMARY KEY,
