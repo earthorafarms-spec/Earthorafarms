@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { ArrowLeft, CreditCard, Shield, Truck, Sparkles, CheckCircle2, Ticket, Wallet } from "lucide-react";
@@ -105,7 +105,7 @@ export default function Checkout() {
 
       // Check min order validation
       if (Number(data.min_order) > subtotal) {
-        setCouponError(`Minimum order amount of Γé╣${data.min_order} required.`);
+        setCouponError(`Minimum order amount of ₹${data.min_order} required.`);
         setAppliedCoupon(null);
         return;
       }
@@ -118,7 +118,7 @@ export default function Checkout() {
       }
 
       setAppliedCoupon(data);
-      toast({ title: "Coupon Applied!", description: `Discount of Γé╣${data.value} is applied.` });
+      toast({ title: "Coupon Applied!", description: `Discount of ₹${data.value} is applied.` });
     } catch (e: any) {
       setCouponError(e.message || "Failed to validate coupon.");
     } finally {
@@ -215,7 +215,7 @@ export default function Checkout() {
               </div>
               <div className="flex justify-between text-xs text-foreground/50 border-t border-border/30 pt-2 mt-2">
                 <span>Total amount:</span>
-                <span className="font-bold text-foreground">Γé╣{totalAmount.toFixed(2)}</span>
+                <span className="font-bold text-foreground">₹{totalAmount.toFixed(2)}</span>
               </div>
             </div>
             <Button size="lg" className="w-full h-12 text-sm" onClick={() => setLocation("/")}>
@@ -401,7 +401,7 @@ export default function Checkout() {
                         <span className="font-semibold text-foreground shrink-0">{item.quantity}x</span>
                         <span className="text-foreground/75 truncate">{item.name}</span>
                       </div>
-                      <span className="font-semibold text-foreground shrink-0">Γé╣{(item.price * item.quantity).toFixed(2)}</span>
+                      <span className="font-semibold text-foreground shrink-0">₹{(item.price * item.quantity).toFixed(2)}</span>
                     </div>
                   ))}
                 </div>
@@ -438,12 +438,12 @@ export default function Checkout() {
                 <div className="space-y-2 text-xs mb-4 border-t border-border/20 pt-4">
                   <div className="flex justify-between text-foreground/60">
                     <span>Subtotal</span>
-                    <span>Γé╣{subtotal.toFixed(2)}</span>
+                    <span>₹{subtotal.toFixed(2)}</span>
                   </div>
                   {discountAmount > 0 && (
                     <div className="flex justify-between text-green-700 font-semibold">
                       <span>Discount</span>
-                      <span>- Γé╣{discountAmount.toFixed(2)}</span>
+                      <span>- ₹{discountAmount.toFixed(2)}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-foreground/60">
@@ -455,7 +455,7 @@ export default function Checkout() {
                 <div className="border-t border-border/40 pt-4 mb-6">
                   <div className="flex justify-between text-sm font-bold text-foreground">
                     <span>Total Amount</span>
-                    <span>Γé╣{totalAmount.toFixed(2)}</span>
+                    <span>₹{totalAmount.toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -464,7 +464,7 @@ export default function Checkout() {
                   onClick={handlePlaceOrder}
                   disabled={isSubmitting || items.length === 0}
                 >
-                  {isSubmitting ? "Processing..." : `Pay Γé╣${totalAmount.toFixed(2)}`}
+                  {isSubmitting ? "Processing..." : `Pay ₹${totalAmount.toFixed(2)}`}
                 </Button>
 
                 <div className="mt-4 flex items-center justify-center gap-1 text-[11px] text-foreground/40 hover:text-foreground/70 transition-colors cursor-pointer" onClick={() => setLocation("/cart")}>
