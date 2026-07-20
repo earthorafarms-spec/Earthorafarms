@@ -2,8 +2,24 @@ import { supabase } from "./supabase";
 
 export async function trackPageView(pageName: string) {
   try {
-    const geoResponse = await fetch("https://ipwho.is/").catch(() => null);
-    const geoData = geoResponse ? await geoResponse.json().catch(() => null) : null;
+    let geoData: any = null;
+    try {
+      const cached = sessionStorage.getItem("earthora_visitor_geo");
+      if (cached) {
+        geoData = JSON.parse(cached);
+      } else {
+        // Fetch only if not cached to prevent rate limit (429) issues
+        const geoResponse = await fetch("https://ipwho.is/");
+        if (geoResponse.ok) {
+          geoData = await geoResponse.json();
+          if (geoData && geoData.success !== false) {
+            sessionStorage.setItem("earthora_visitor_geo", JSON.stringify(geoData));
+          }
+        }
+      }
+    } catch (e) {
+      // Silent error handler
+    }
     
     const visitor_ip = geoData?.ip || "127.0.0.1";
     const visitor_country = geoData?.country || "Localhost";
@@ -46,6 +62,6 @@ export async function trackPageView(pageName: string) {
         visitor_city
       });
   } catch (err) {
-    console.error("Failed to track page view:", err);
+    // Silent error handler for database connection drops
   }
 }
