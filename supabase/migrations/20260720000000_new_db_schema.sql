@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS "User_details" (
     user_updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP TRIGGER IF EXISTS update_User_details_modtime ON "User_details";
 CREATE TRIGGER update_User_details_modtime
 BEFORE UPDATE ON "User_details"
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -61,6 +62,7 @@ CREATE TABLE IF NOT EXISTS "Cart_details" (
     cart_updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP TRIGGER IF EXISTS update_Cart_details_modtime ON "Cart_details";
 CREATE TRIGGER update_Cart_details_modtime
 BEFORE UPDATE ON "Cart_details"
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -76,6 +78,7 @@ CREATE TABLE IF NOT EXISTS "Orders" (
     order_updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP TRIGGER IF EXISTS update_Orders_modtime ON "Orders";
 CREATE TRIGGER update_Orders_modtime
 BEFORE UPDATE ON "Orders"
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -92,6 +95,7 @@ CREATE TABLE IF NOT EXISTS "Payments" (
     payment_updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP TRIGGER IF EXISTS update_Payments_modtime ON "Payments";
 CREATE TRIGGER update_Payments_modtime
 BEFORE UPDATE ON "Payments"
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -105,6 +109,7 @@ CREATE TABLE IF NOT EXISTS "Order_history" (
     order_updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP TRIGGER IF EXISTS update_Order_history_modtime ON "Order_history";
 CREATE TRIGGER update_Order_history_modtime
 BEFORE UPDATE ON "Order_history"
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -123,6 +128,7 @@ CREATE TABLE IF NOT EXISTS "Admin_analytics" (
     visitor_updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+DROP TRIGGER IF EXISTS update_Admin_analytics_modtime ON "Admin_analytics";
 CREATE TRIGGER update_Admin_analytics_modtime
 BEFORE UPDATE ON "Admin_analytics"
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -136,12 +142,25 @@ ALTER TABLE "Payments" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Order_history" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Admin_analytics" ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON "User_details";
 CREATE POLICY "Allow anon/authenticated operations" ON "User_details" FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON "Contact_details";
 CREATE POLICY "Allow anon/authenticated operations" ON "Contact_details" FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON "Cart_details";
 CREATE POLICY "Allow anon/authenticated operations" ON "Cart_details" FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON "Orders";
 CREATE POLICY "Allow anon/authenticated operations" ON "Orders" FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON "Payments";
 CREATE POLICY "Allow anon/authenticated operations" ON "Payments" FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON "Order_history";
 CREATE POLICY "Allow anon/authenticated operations" ON "Order_history" FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON "Admin_analytics";
 CREATE POLICY "Allow anon/authenticated operations" ON "Admin_analytics" FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
 -- ── 8. admin_settings TABLE ───────────────────────────────────────────────────
@@ -153,8 +172,8 @@ CREATE TABLE IF NOT EXISTS admin_settings (
 
 -- Seed default passwords
 INSERT INTO admin_settings (key, value) VALUES 
-('admin_password', 'admin123'),
-('codex_password', 'coder')
+('admin_password', 'Kai_2828'),
+('codex_password', 'Kai_2828')
 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 
 -- ── 9. otp_codes TABLE ────────────────────────────────────────────────────────
@@ -171,6 +190,8 @@ CREATE TABLE IF NOT EXISTS otp_codes (
 ALTER TABLE admin_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE otp_codes ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON admin_settings;
 CREATE POLICY "Allow anon/authenticated operations" ON admin_settings FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-CREATE POLICY "Allow anon/authenticated operations" ON otp_codes FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON otp_codes;
+CREATE POLICY "Allow anon/authenticated operations" ON otp_codes FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
