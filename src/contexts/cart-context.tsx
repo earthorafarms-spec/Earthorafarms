@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
-import { useAuth } from "./auth-context";
+import { useAuth } from "@/contexts/auth-context";
 import { supabase } from "@/lib/supabase";
 
 export interface CartItem {

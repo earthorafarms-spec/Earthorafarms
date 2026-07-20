@@ -1,12 +1,12 @@
 import { lazy, Suspense, useState, useEffect } from 'react';
-import { supabase } from './lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Route, Switch, Router as WouterRouter, Redirect, useLocation } from 'wouter';
-import { CartProvider } from './contexts/cart-context';
-import { AuthProvider } from './contexts/auth-context';
-import { trackPageView } from './lib/analytics';
-import ScrollToTop from './components/ScrollToTop';
-import { ChatWidget } from './components/chat/ChatWidget';
+import { CartProvider } from '@/contexts/cart-context';
+import { AuthProvider } from '@/contexts/auth-context';
+import { trackPageView } from '@/lib/analytics';
+import ScrollToTop from '@/components/ScrollToTop';
+import { ChatWidget } from '@/components/chat/ChatWidget';
 
 // ── Public pages ──────────────────────────────────────────────────────────────
 const Home = lazy(() => import('./pages/home'));
