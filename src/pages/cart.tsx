@@ -142,7 +142,9 @@ export default function Cart() {
                     <span>₹{subtotal.toFixed(2)}</span>
                   </div>
                 </div>
-                <Button className="w-full h-12 text-sm mb-3">Proceed to Checkout</Button>
+                <Link href="/checkout">
+                  <Button className="w-full h-12 text-sm mb-3">Proceed to Checkout</Button>
+                </Link>
                 <Link href="/our-product">
                   <span className="flex items-center justify-center gap-1.5 text-xs text-foreground/40 hover:text-foreground/70 transition-colors cursor-pointer">
                     <ArrowLeft className="w-3.5 h-3.5" />

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import { Clock, User, Leaf, X, ChevronRight } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
@@ -47,7 +47,7 @@ const recipes: Recipe[] = [
   },
   {
     title: "Moringa & Ginger Wellness Shot",
-    description: "A concentrated wellness boost — bright, invigorating, and packed with antioxidants to start your day.",
+    description: "A concentrated wellness boost ΓÇö bright, invigorating, and packed with antioxidants to start your day.",
     image: leavesImg,
     time: "3 min",
     author: "Earthora Kitchen",
@@ -88,7 +88,7 @@ const recipes: Recipe[] = [
   },
   {
     title: "Moringa Matcha Latte",
-    description: "The ultimate superfood latte — earthy moringa meets ceremonial matcha for a calm, focused energy.",
+    description: "The ultimate superfood latte ΓÇö earthy moringa meets ceremonial matcha for a calm, focused energy.",
     image: powderImg2,
     time: "7 min",
     author: "Earthora Kitchen",
@@ -102,14 +102,14 @@ const recipes: Recipe[] = [
     ],
     instructions: [
       "Sift the matcha and moringa powder into a wide mug to remove any clumps.",
-      "Add 2 oz of hot water (about 80°C/175°F) and whisk in a W-motion using a bamboo whisk until a frothy layer forms.",
+      "Add 2 oz of hot water (about 80┬░C/175┬░F) and whisk in a W-motion using a bamboo whisk until a frothy layer forms.",
       "Warm and froth the oat milk until pillowy.",
       "Slowly pour the frothed oat milk into the mug, stir in maple syrup, and finish with a dash of cinnamon."
     ]
   },
   {
     title: "Moringa Pesto Pasta",
-    description: "A vibrant twist on classic pesto — moringa adds an earthy depth and a stunning emerald hue.",
+    description: "A vibrant twist on classic pesto ΓÇö moringa adds an earthy depth and a stunning emerald hue.",
     image: leavesImg2,
     time: "20 min",
     author: "Earthora Kitchen",
@@ -132,7 +132,7 @@ const recipes: Recipe[] = [
   },
   {
     title: "Moringa Energy Bites",
-    description: "No-bake, nutrient-dense bites that travel anywhere — your pocket-sized green vitality.",
+    description: "No-bake, nutrient-dense bites that travel anywhere ΓÇö your pocket-sized green vitality.",
     image: smoothieImg,
     time: "15 min",
     author: "Earthora Kitchen",

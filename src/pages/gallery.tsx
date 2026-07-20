@@ -1,4 +1,4 @@
-import { motion, type Variants } from "framer-motion";
+﻿import { motion, type Variants } from "framer-motion";
 import { useState } from "react";
 import { Maximize2, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
@@ -69,7 +69,7 @@ export default function Gallery() {
               transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.3 }}
               className="text-lg md:text-xl text-primary-foreground/80 font-light max-w-2xl"
             >
-              A glimpse into the living fields where we grow and care for our moringa — from seedling to harvest, rooted in nature.
+              A glimpse into the living fields where we grow and care for our moringa ΓÇö from seedling to harvest, rooted in nature.
             </motion.p>
           </div>
         </div>
