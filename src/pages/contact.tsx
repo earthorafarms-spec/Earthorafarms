@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import leavesImg from "@assets/generated_images/hero_leaves.jpg";
+import { supabase } from "@/lib/supabase";
 
 const contactInfo = [
   { icon: Mail, label: "Email", value: "hello@earthorafarms.com", href: "mailto:hello@earthorafarms.com" },
@@ -21,7 +22,7 @@ export default function Contact() {
   const [form, setForm] = useState({
     name: "",
     email: "",
-    subject: "",
+    phone: "",
     message: "",
   });
   const [submitting, setSubmitting] = useState(false);
@@ -33,24 +34,19 @@ export default function Contact() {
     setError("");
     setSubmitting(true);
 
-    const body = new URLSearchParams({
-      "form-name": "contact",
-      name: form.name,
-      email: form.email,
-      subject: form.subject,
-      message: form.message,
-    });
-
     try {
-      const response = await fetch("/", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body,
-      });
+      const { error: dbErr } = await supabase
+        .from("Contact_details")
+        .insert({
+          contact_name: form.name,
+          contact_email: form.email,
+          contact_phone: form.phone,
+          contact_message: form.message,
+        });
 
-      if (!response.ok) throw new Error("Message submission failed.");
+      if (dbErr) throw dbErr;
 
-      setForm({ name: "", email: "", subject: "", message: "" });
+      setForm({ name: "", email: "", phone: "", message: "" });
       toast({ title: "Message sent", description: "Thanks for reaching out. We will reply as soon as possible." });
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Unable to send your message right now.";
@@ -149,13 +145,14 @@ export default function Contact() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="subject">Subject</Label>
+                  <Label htmlFor="phone">Phone Number</Label>
                   <Input
-                    id="subject"
-                    name="subject"
-                    placeholder="How can we help?"
-                    value={form.subject}
-                    onChange={(e) => setForm((prev) => ({ ...prev, subject: e.target.value }))}
+                    id="phone"
+                    name="phone"
+                    type="tel"
+                    placeholder="e.g. 9876543210"
+                    value={form.phone}
+                    onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
                     required
                     className="h-12"
                   />

@@ -21,7 +21,9 @@ export default function Checkout() {
   const [phone, setPhone] = useState("");
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
+  const [state, setState] = useState("");
   const [postalCode, setPostalCode] = useState("");
+  const [country, setCountry] = useState("");
 
   // Coupon
   const [couponCode, setCouponCode] = useState("");
@@ -55,9 +57,28 @@ export default function Checkout() {
       return;
     }
 
-    setEmail(user.email ?? "");
-    setName(user.user_metadata?.name ?? user.user_metadata?.full_name ?? "");
-    setPhone(user.phone ?? "");
+    // Prefill from User_details table
+    supabase
+      .from("User_details")
+      .select("*")
+      .eq("user_email", user.email)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setEmail(data.user_email || user.email || "");
+          setName(data.user_name || user.user_metadata?.name || "");
+          setPhone(data.user_phone || "");
+          setAddress(data.user_address || "");
+          setCity(data.user_city || "");
+          setState(data.user_state || "");
+          setPostalCode(data.user_zip || "");
+          setCountry(data.user_country || "");
+        } else {
+          setEmail(user.email || "");
+          setName(user.user_metadata?.name || user.user_metadata?.full_name || "");
+          setPhone(user.phone || "");
+        }
+      });
   }, [user, authLoading]);
 
   if (authLoading) {
@@ -129,8 +150,8 @@ export default function Checkout() {
     e.preventDefault();
     if (items.length === 0) return;
 
-    if (!name || !email || !phone || !address || !city || !postalCode) {
-      toast({ title: "Missing fields", description: "Please fill in all checkout details.", variant: "destructive" });
+    if (!name || !email || !phone || !address || !city || !state || !postalCode || !country) {
+      toast({ title: "Missing fields", description: "Please fill in all shipping details.", variant: "destructive" });
       return;
     }
 
@@ -141,50 +162,66 @@ export default function Checkout() {
 
     setIsSubmitting(true);
     try {
-      // Format items array for the place_order RPC
-      const dbItems = [];
-      for (const item of items) {
-        // Resolve target uuid
-        const { data: prodData } = await (supabase
-          .from("products") as any)
-          .select("id")
-          .eq("slug", item.id)
-          .single();
-        
-        dbItems.push({
-          product_id: prodData?.id || item.id,
-          quantity: item.quantity,
+      // 1. Update user shipping details in User_details
+      const { error: userUpdateErr } = await supabase
+        .from("User_details")
+        .update({
+          user_name: name,
+          user_phone: phone,
+          user_address: address,
+          user_city: city,
+          user_state: state,
+          user_zip: postalCode,
+          user_country: country,
+        })
+        .eq("user_email", user?.email);
+
+      if (userUpdateErr) console.error("Error updating user details:", userUpdateErr);
+
+      // 2. Insert items into Orders
+      const orderRows = items.map((item) => ({
+        order_user_id: user?.email || "",
+        order_product_id: item.id,
+        order_product_quantity: String(item.quantity),
+        order_product_price: String(item.price),
+      }));
+
+      const { data: insertedOrders, error: orderInsertErr } = await supabase
+        .from("Orders")
+        .insert(orderRows)
+        .select();
+
+      if (orderInsertErr) throw orderInsertErr;
+
+      const orderReferenceId = String(insertedOrders?.[0]?.id || Date.now());
+      const transactionId = `TXN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+      // 3. Insert into Payments
+      const { error: paymentErr } = await supabase
+        .from("Payments")
+        .insert({
+          payment_order_id: orderReferenceId,
+          payment_amount: String(totalAmount),
+          payment_status: "completed",
+          payment_method: "UPI",
+          payment_transaction_id: transactionId,
         });
-      }
 
-      const shippingAddress = {
-        name,
-        phone,
-        address,
-        city,
-        postal_code: postalCode,
-      };
+      if (paymentErr) console.error("Error creating payment record:", paymentErr);
 
-      const { data, error } = await (supabase.rpc as any)("place_order", {
-        p_platform: "website",
-        p_platform_order_id: null,
-        p_user_id: user?.id || null,
-        p_items: dbItems,
-        p_coupon_code: appliedCoupon ? appliedCoupon.code : null,
-        p_shipping_address: shippingAddress,
-        p_shipping_amount: shippingAmount,
-      });
+      // 4. Insert into Order_history
+      const { error: historyErr } = await supabase
+        .from("Order_history")
+        .insert({
+          order_id: orderReferenceId,
+          order_status: "pending",
+        });
 
-      if (error) throw error;
-      const res = data as any;
+      if (historyErr) console.error("Error creating order history:", historyErr);
 
-      if (res.success) {
-        setOrderSuccess({ ...res, method: paymentMethod });
-        clearCart();
-        toast({ title: "Order placed successfully!", description: `Order Number: ${res.order_number}` });
-      } else {
-        toast({ title: "Stock reservation failed", description: res.error || "Please check items stock.", variant: "destructive" });
-      }
+      setOrderSuccess({ order_number: orderReferenceId, method: paymentMethod });
+      clearCart();
+      toast({ title: "Order placed successfully!", description: `Order ID: ${orderReferenceId}` });
     } catch (err: any) {
       toast({ title: "Order error", description: err.message || "An unexpected error occurred.", variant: "destructive" });
     } finally {
@@ -302,8 +339,8 @@ export default function Checkout() {
                   </div>
                 </div>
 
-                <div className="grid md:grid-cols-3 gap-4">
-                  <div className="md:col-span-2">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
                     <label className="block text-xs font-medium text-foreground/60 mb-1.5">Address</label>
                     <input
                       type="text"
@@ -315,6 +352,20 @@ export default function Checkout() {
                     />
                   </div>
                   <div>
+                    <label className="block text-xs font-medium text-foreground/60 mb-1.5">State</label>
+                    <input
+                      type="text"
+                      required
+                      value={state}
+                      onChange={e => setState(e.target.value)}
+                      placeholder="e.g. Maharashtra"
+                      className="w-full px-3.5 py-2.5 text-sm bg-background border border-border/60 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/40"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
                     <label className="block text-xs font-medium text-foreground/60 mb-1.5">Postal Code</label>
                     <input
                       type="text"
@@ -322,6 +373,17 @@ export default function Checkout() {
                       value={postalCode}
                       onChange={e => setPostalCode(e.target.value)}
                       placeholder="400001"
+                      className="w-full px-3.5 py-2.5 text-sm bg-background border border-border/60 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/40"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-foreground/60 mb-1.5">Country</label>
+                    <input
+                      type="text"
+                      required
+                      value={country}
+                      onChange={e => setCountry(e.target.value)}
+                      placeholder="e.g. India"
                       className="w-full px-3.5 py-2.5 text-sm bg-background border border-border/60 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/40"
                     />
                   </div>

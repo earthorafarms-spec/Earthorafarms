@@ -53,6 +53,16 @@ export default function Auth() {
           },
         });
         if (error) throw error;
+
+        const { error: dbError } = await supabase
+          .from("User_details")
+          .insert({
+            user_email: email.trim(),
+            user_password: password,
+            user_name: fullName.trim()
+          });
+
+        if (dbError) console.error("Error saving user details to DB:", dbError);
         toast({ title: "Account created", description: "Please check your email to confirm your account." });
       }
     } catch (error) {
