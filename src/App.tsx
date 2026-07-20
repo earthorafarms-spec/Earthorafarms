@@ -3,6 +3,7 @@ import { supabase } from './lib/supabase';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Route, Switch, Router as WouterRouter, Redirect } from 'wouter';
 import { CartProvider } from './contexts/cart-context';
+import { AuthProvider } from './contexts/auth-context';
 import ScrollToTop from './components/ScrollToTop';
 import { ChatWidget } from './components/chat/ChatWidget';
 
@@ -311,70 +312,72 @@ function CodexGate({ children }: { children: React.ReactNode }) {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <CartProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <ScrollToTop />
-          <Suspense fallback={<PageLoader />}>
-            <Switch>
-              {/* Public routes */}
-              <Route path="/" component={Home} />
-              <Route path="/recipes" component={Recipes} />
-              <Route path="/contact" component={Contact} />
-              <Route path="/health-benefits" component={HealthBenefits} />
-              <Route path="/gallery" component={Gallery} />
-              <Route path="/our-product" component={Products} />
-              <Route path="/cart" component={Cart} />
-              <Route path="/checkout" component={Checkout} />
-              <Route path="/auth" component={Auth} />
+      <AuthProvider>
+        <CartProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+            <ScrollToTop />
+            <Suspense fallback={<PageLoader />}>
+              <Switch>
+                {/* Public routes */}
+                <Route path="/" component={Home} />
+                <Route path="/recipes" component={Recipes} />
+                <Route path="/contact" component={Contact} />
+                <Route path="/health-benefits" component={HealthBenefits} />
+                <Route path="/gallery" component={Gallery} />
+                <Route path="/our-product" component={Products} />
+                <Route path="/cart" component={Cart} />
+                <Route path="/checkout" component={Checkout} />
+                <Route path="/auth" component={Auth} />
 
-              {/* Admin routes */}
-              <Route path="/admin-earthora"><Redirect to="/admin-earthora/dashboard" /></Route>
-              <Route path="/admin-earthora/:rest*">
-                <AdminGate>
-                  <AdminLayout>
-                    <Switch>
-                      <Route path="/admin-earthora/dashboard"><AdminDashboard /></Route>
-                      <Route path="/admin-earthora/products"><AdminProducts /></Route>
-                      <Route path="/admin-earthora/orders"><AdminOrders /></Route>
-                      <Route path="/admin-earthora/coupons"><AdminCoupons /></Route>
-                      <Route path="/admin-earthora/festive"><AdminFestive /></Route>
-                      <Route path="/admin-earthora/chat"><AdminChat /></Route>
-                      <Route path="/admin-earthora/analytics"><AdminAnalytics /></Route>
-                      <Route path="/admin-earthora/settings"><AdminSettings /></Route>
-                      <Route><Redirect to="/admin-earthora/dashboard" /></Route>
-                    </Switch>
-                  </AdminLayout>
-                </AdminGate>
-              </Route>
+                {/* Admin routes */}
+                <Route path="/admin-earthora"><Redirect to="/admin-earthora/dashboard" /></Route>
+                <Route path="/admin-earthora/:rest*">
+                  <AdminGate>
+                    <AdminLayout>
+                      <Switch>
+                        <Route path="/admin-earthora/dashboard"><AdminDashboard /></Route>
+                        <Route path="/admin-earthora/products"><AdminProducts /></Route>
+                        <Route path="/admin-earthora/orders"><AdminOrders /></Route>
+                        <Route path="/admin-earthora/coupons"><AdminCoupons /></Route>
+                        <Route path="/admin-earthora/festive"><AdminFestive /></Route>
+                        <Route path="/admin-earthora/chat"><AdminChat /></Route>
+                        <Route path="/admin-earthora/analytics"><AdminAnalytics /></Route>
+                        <Route path="/admin-earthora/settings"><AdminSettings /></Route>
+                        <Route><Redirect to="/admin-earthora/dashboard" /></Route>
+                      </Switch>
+                    </AdminLayout>
+                  </AdminGate>
+                </Route>
 
-              {/* Codex routes */}
-              <Route path="/codex"><Redirect to="/codex/dashboard" /></Route>
-              <Route path="/codex/:rest*">
-                <CodexGate>
-                  <CodexLayout>
-                    <Switch>
-                      <Route path="/codex/dashboard"><CodexDashboard /></Route>
-                      <Route path="/codex/analytics"><CodexAnalytics /></Route>
-                      <Route path="/codex/reports"><CodexReports /></Route>
-                      <Route path="/codex/chat"><CodexChat /></Route>
-                      <Route path="/codex/settings"><CodexSettings /></Route>
-                      <Route><Redirect to="/codex/dashboard" /></Route>
-                    </Switch>
-                  </CodexLayout>
-                </CodexGate>
-              </Route>
+                {/* Codex routes */}
+                <Route path="/codex"><Redirect to="/codex/dashboard" /></Route>
+                <Route path="/codex/:rest*">
+                  <CodexGate>
+                    <CodexLayout>
+                      <Switch>
+                        <Route path="/codex/dashboard"><CodexDashboard /></Route>
+                        <Route path="/codex/analytics"><CodexAnalytics /></Route>
+                        <Route path="/codex/reports"><CodexReports /></Route>
+                        <Route path="/codex/chat"><CodexChat /></Route>
+                        <Route path="/codex/settings"><CodexSettings /></Route>
+                        <Route><Redirect to="/codex/dashboard" /></Route>
+                      </Switch>
+                    </CodexLayout>
+                  </CodexGate>
+                </Route>
 
-              {/* 404 */}
-              <Route>
-                <div className="flex h-screen items-center justify-center bg-background">
-                  <h1 className="text-2xl text-primary font-serif">Page not found</h1>
-                </div>
-              </Route>
-            </Switch>
-          </Suspense>
-        </WouterRouter>
-        <ChatWidget />
-      </CartProvider>
+                {/* 404 */}
+                <Route>
+                  <div className="flex h-screen items-center justify-center bg-background">
+                    <h1 className="text-2xl text-primary font-serif">Page not found</h1>
+                  </div>
+                </Route>
+              </Switch>
+            </Suspense>
+          </WouterRouter>
+          <ChatWidget />
+        </CartProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }
