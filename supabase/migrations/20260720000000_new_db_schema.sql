@@ -185,6 +185,44 @@ CREATE TRIGGER update_Orders_modtime
 BEFORE UPDATE ON "Orders"
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- Backward compatibility views for Orders & order_items
+DROP VIEW IF EXISTS order_items;
+DROP VIEW IF EXISTS orders;
+
+CREATE OR REPLACE VIEW orders AS
+SELECT 
+  o.id::text as id,
+  o.id::text as order_number,
+  o.order_user_id as user_id,
+  coalesce(oh.order_status, 'pending') as status,
+  (o.order_product_quantity::numeric * o.order_product_price::numeric) as total_amount,
+  -- build shipping address from User_details of the ordering user
+  jsonb_build_object(
+    'name', coalesce(ud.user_name, o.order_user_id),
+    'email', o.order_user_id,
+    'phone', coalesce(ud.user_phone, ''),
+    'address', coalesce(ud.user_address, ''),
+    'city', coalesce(ud.user_city, ''),
+    'state', coalesce(ud.user_state, ''),
+    'zip', coalesce(ud.user_zip, ''),
+    'country', coalesce(ud.user_country, '')
+  ) as shipping_address,
+  o.order_created_at as created_at
+FROM "Orders" o
+LEFT JOIN "Order_history" oh ON oh.order_id = o.id::text
+LEFT JOIN "User_details" ud ON ud.user_email = o.order_user_id;
+
+CREATE OR REPLACE VIEW order_items AS
+SELECT 
+  id::text as id,
+  id::text as order_id,
+  order_product_id as product_id,
+  order_product_quantity::numeric as quantity,
+  order_product_price::numeric as unit_price,
+  (order_product_quantity::numeric * order_product_price::numeric) as total_price,
+  order_created_at as created_at
+FROM "Orders";
+
 -- ── 8. Payments TABLE ─────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS "Payments" (
     id SERIAL PRIMARY KEY,
