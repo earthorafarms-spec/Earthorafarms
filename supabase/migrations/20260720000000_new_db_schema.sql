@@ -258,6 +258,25 @@ CREATE TABLE IF NOT EXISTS otp_codes (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
+-- ── 14. USERS TABLE ───────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS users (
+  id UUID PRIMARY KEY,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  role VARCHAR(50) DEFAULT 'customer',
+  is_verified BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- ── 15. ANALYTICS EVENTS TABLE ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS analytics_events (
+  id SERIAL PRIMARY KEY,
+  event_type VARCHAR(100) NOT NULL,
+  properties JSONB DEFAULT '{}',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- ── 13. FESTIVAL DETAILS TABLE ────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS festival_details (
   id SERIAL PRIMARY KEY,
@@ -361,6 +380,8 @@ ALTER TABLE otp_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE coupon_details ENABLE ROW LEVEL SECURITY;
 ALTER TABLE festival_details ENABLE ROW LEVEL SECURITY;
 ALTER TABLE festival_deal_products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE analytics_events ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON products;
 CREATE POLICY "Allow anon/authenticated operations" ON products FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
@@ -403,6 +424,12 @@ CREATE POLICY "Allow anon/authenticated operations" ON festival_details FOR ALL 
 
 DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON festival_deal_products;
 CREATE POLICY "Allow anon/authenticated operations" ON festival_deal_products FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON users;
+CREATE POLICY "Allow anon/authenticated operations" ON users FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON analytics_events;
+CREATE POLICY "Allow anon/authenticated operations" ON analytics_events FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
 -- ── Grant Schema & Table Access Privileges ────────────────────────────────────
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
