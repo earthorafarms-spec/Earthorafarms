@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Leaf, Eye, EyeOff, Mail, Lock, User, Check, ArrowRight } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/auth-context";
 import { supabase } from "@/lib/supabase";
 import leavesImg from "@assets/generated_images/hero_leaves_2.jpg";
+import { useEffect } from "react";
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -18,6 +20,16 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [formError, setFormError] = useState("");
   const { toast } = useToast();
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (user) {
+      const redirectPath = sessionStorage.getItem("post_auth_redirect") || "/";
+      sessionStorage.removeItem("post_auth_redirect");
+      setLocation(redirectPath);
+    }
+  }, [user, setLocation]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

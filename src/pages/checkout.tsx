@@ -23,15 +23,6 @@ export default function Checkout() {
   const [city, setCity] = useState("");
   const [postalCode, setPostalCode] = useState("");
 
-  // Auth modal states
-  const [isLogin, setIsLogin] = useState(true);
-  const [showPassword, setShowPassword] = useState(false);
-  const [authFullName, setAuthFullName] = useState("");
-  const [authEmail, setAuthEmail] = useState("");
-  const [authPassword, setAuthPassword] = useState("");
-  const [authLoadingState, setAuthLoadingState] = useState(false);
-  const [authError, setAuthError] = useState("");
-  
   // Coupon
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<any | null>(null);
@@ -50,45 +41,24 @@ export default function Checkout() {
   const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const shippingAmount = 0; // free shipping
 
-  // Prefill user data when logged in
+  // Auth gate & prefill user data
   useEffect(() => {
     if (authLoading) return;
-    if (user) {
-      setEmail(user.email ?? "");
-      setName(user.user_metadata?.name ?? user.user_metadata?.full_name ?? "");
-      setPhone(user.phone ?? "");
-    }
-  }, [user, authLoading]);
 
-  const handleAuthSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError("");
-    setAuthLoadingState(true);
-    try {
-      if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: authEmail.trim(),
-          password: authPassword,
-        });
-        if (error) throw error;
-        toast({ title: "Signed in", description: "Proceeding to checkout..." });
-      } else {
-        const { error } = await supabase.auth.signUp({
-          email: authEmail.trim(),
-          password: authPassword,
-          options: {
-            data: { name: authFullName.trim() },
-          },
-        });
-        if (error) throw error;
-        toast({ title: "Account created", description: "Please check your email to confirm your account." });
-      }
-    } catch (error: any) {
-      setAuthError(error.message || "Authentication failed.");
-    } finally {
-      setAuthLoadingState(false);
+    if (!user) {
+      sessionStorage.setItem("post_auth_redirect", "/checkout");
+      toast({
+        title: "Sign in required",
+        description: "Please log in or create an account to proceed to checkout.",
+      });
+      setLocation("/auth");
+      return;
     }
-  };
+
+    setEmail(user.email ?? "");
+    setName(user.user_metadata?.name ?? user.user_metadata?.full_name ?? "");
+    setPhone(user.phone ?? "");
+  }, [user, authLoading]);
 
   if (authLoading) {
     return (
@@ -252,131 +222,6 @@ export default function Checkout() {
             </Button>
           </div>
         </section>
-        <Footer />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-[100dvh] flex flex-col bg-[#fafaf8]">
-        <Navbar />
-        <div className="flex-1 flex items-center justify-center p-6 my-20">
-          <div className="w-full max-w-sm bg-white rounded-3xl border border-border/40 p-8 shadow-[0_8px_30px_rgb(0,0,0,0.02)]">
-            {/* Auth Form Header */}
-            <div className="flex flex-col items-center gap-3 mb-8">
-              <div className="w-11 h-11 rounded-full bg-primary/10 flex items-center justify-center">
-                <Leaf className="w-5.5 h-5.5 text-primary" strokeWidth={1.5} />
-              </div>
-              <div className="text-center font-sans">
-                <h2 className="text-2xl font-serif font-bold text-foreground">
-                  {isLogin ? "Sign in to checkout" : "Create an account"}
-                </h2>
-                <p className="text-xs text-foreground/45 mt-1 font-light">
-                  {isLogin ? "Please log in to your account to proceed" : "Join us to manage orders & track shipping"}
-                </p>
-              </div>
-            </div>
-
-            {/* Login/Signup Tabs */}
-            <div className="bg-muted/70 rounded-xl p-1 mb-6 flex border border-border/20 font-sans">
-              <button
-                type="button"
-                onClick={() => { setIsLogin(true); setAuthError(""); }}
-                className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all duration-300 ${isLogin ? "bg-background text-foreground shadow-sm" : "text-foreground/50 hover:text-foreground"}`}
-              >
-                Log In
-              </button>
-              <button
-                type="button"
-                onClick={() => { setIsLogin(false); setAuthError(""); }}
-                className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all duration-300 ${!isLogin ? "bg-background text-foreground shadow-sm" : "text-foreground/50 hover:text-foreground"}`}
-              >
-                Sign Up
-              </button>
-            </div>
-
-            {/* Form fields */}
-            <form onSubmit={handleAuthSubmit} className="space-y-4 font-sans">
-              {!isLogin && (
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-semibold text-foreground/50 uppercase tracking-wider block">Full Name</label>
-                  <div className="relative">
-                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/30" />
-                    <input
-                      type="text"
-                      placeholder="Jane Doe"
-                      value={authFullName}
-                      onChange={(e) => setAuthFullName(e.target.value)}
-                      className="w-full h-11 pl-10 pr-4 text-sm bg-background border border-border/50 rounded-xl outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/40 transition-all text-left"
-                      required
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-semibold text-foreground/50 uppercase tracking-wider block">Email Address</label>
-                <div className="relative">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/30" />
-                  <input
-                    type="email"
-                    placeholder="jane@example.com"
-                    value={authEmail}
-                    onChange={(e) => setAuthEmail(e.target.value)}
-                    className="w-full h-11 pl-10 pr-4 text-sm bg-background border border-border/50 rounded-xl outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/40 transition-all text-left"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-semibold text-foreground/50 uppercase tracking-wider block">Password</label>
-                <div className="relative">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/30" />
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    value={authPassword}
-                    onChange={(e) => setAuthPassword(e.target.value)}
-                    className="w-full h-11 pl-10 pr-10 text-sm bg-background border border-border/50 rounded-xl outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/40 transition-all text-left"
-                    required
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-foreground/30 hover:text-foreground/60 transition-colors"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              {authError && (
-                <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
-                  {authError}
-                </p>
-              )}
-
-              <Button
-                type="submit"
-                disabled={authLoadingState}
-                className="w-full h-12 text-sm shadow-sm transition-all duration-300 mt-2"
-              >
-                {authLoadingState ? "Please wait..." : isLogin ? "Sign In" : "Register"}
-              </Button>
-            </form>
-
-            {/* Back to Cart Action */}
-            <div
-              className="mt-6 flex items-center justify-center gap-1 text-[11px] text-foreground/45 hover:text-primary transition-colors cursor-pointer font-sans"
-              onClick={() => setLocation("/cart")}
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              Return to Cart
-            </div>
-          </div>
-        </div>
         <Footer />
       </div>
     );
