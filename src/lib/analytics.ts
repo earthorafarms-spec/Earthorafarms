@@ -2,11 +2,11 @@ import { supabase } from "./supabase";
 
 export async function trackPageView(pageName: string) {
   try {
-    const geoResponse = await fetch("https://ipapi.co/json/").catch(() => null);
+    const geoResponse = await fetch("https://ipwho.is/").catch(() => null);
     const geoData = geoResponse ? await geoResponse.json().catch(() => null) : null;
     
     const visitor_ip = geoData?.ip || "127.0.0.1";
-    const visitor_country = geoData?.country_name || "Localhost";
+    const visitor_country = geoData?.country || "Localhost";
     const visitor_city = geoData?.city || "Localhost";
 
     const ua = navigator.userAgent;
