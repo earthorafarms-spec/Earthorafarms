@@ -143,3 +143,34 @@ CREATE POLICY "Allow anon/authenticated operations" ON "Orders" FOR ALL TO anon,
 CREATE POLICY "Allow anon/authenticated operations" ON "Payments" FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow anon/authenticated operations" ON "Order_history" FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "Allow anon/authenticated operations" ON "Admin_analytics" FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- ── 8. admin_settings TABLE ───────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS admin_settings (
+    key VARCHAR(100) PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Seed default passwords
+INSERT INTO admin_settings (key, value) VALUES 
+('admin_password', 'admin123'),
+('codex_password', 'coder')
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
+
+-- ── 9. otp_codes TABLE ────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS otp_codes (
+    id SERIAL PRIMARY KEY,
+    otp VARCHAR(6) NOT NULL,
+    domain VARCHAR(50) NOT NULL,
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    used BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Enable RLS & Open Policies
+ALTER TABLE admin_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE otp_codes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow anon/authenticated operations" ON admin_settings FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+CREATE POLICY "Allow anon/authenticated operations" ON otp_codes FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
