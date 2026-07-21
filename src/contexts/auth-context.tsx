@@ -1,6 +1,7 @@
-﻿import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
-import type { User, Session } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
+﻿import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import type { User, Session } from '@supabase/supabase-js';
+import { supabase } from '@/lib/supabase';
+import { syncUserProfile } from '@/lib/api';
 
 interface AuthContextType {
   user: User | null;
@@ -16,73 +17,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const syncUser = useCallback((u: User) => {
+    syncUserProfile({
+      id: u.id,
+      email: u.email ?? '',
+      user_metadata: u.user_metadata as { name?: string } | undefined,
+      email_confirmed_at: u.email_confirmed_at,
+    }).catch(() => {});
+  }, []);
+
   useEffect(() => {
-    // 1. Seed session from storage immediately (avoids flash of unauthenticated UI)
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        const u = session.user;
-        try {
-          await (supabase.from("users") as any).upsert(
-            {
-              id: u.id,
-              email: u.email ?? "",
-              name: u.user_metadata?.name ?? u.email?.split("@")[0] ?? "",
-              role: "customer",
-              is_verified: u.email_confirmed_at != null,
-            },
-            { onConflict: "id" }
-          );
-        } catch (e) {
-          console.error("Failed to sync user table on mount:", e);
-        }
-      }
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
+      const u = s?.user ?? null;
+      setUser(u);
+      if (u) syncUser(u);
       setLoading(false);
     });
 
-    // 2. Keep state in sync with any auth event (login, logout, token refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
-
-        // 3. Upsert public.users row on every SIGNED_IN so social logins
-        //    also get a row without extra code in auth.tsx.
-        if (_event === "SIGNED_IN" && session?.user) {
-          const u = session.user;
-          await (supabase.from("users") as any).upsert(
-            {
-              id: u.id,
-              email: u.email ?? "",
-              name: u.user_metadata?.name ?? u.email?.split("@")[0] ?? "",
-              role: "customer",
-              is_verified: u.email_confirmed_at != null,
-            },
-            { onConflict: "id" }
-          );
-        }
-      }
-    );
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      setSession(s);
+      const u = s?.user ?? null;
+      setUser(u);
+      setLoading(false);
+      if (event === 'SIGNED_IN' && u) syncUser(u);
+    });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [syncUser]);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     try {
       await supabase.auth.signOut();
     } catch (e) {
-      console.warn("Supabase signOut API error (handled):", e);
+      console.warn('Supabase signOut error:', e);
     } finally {
       setUser(null);
       setSession(null);
-      sessionStorage.removeItem("admin_authenticated");
-      sessionStorage.removeItem("admin_password");
-      sessionStorage.removeItem("codex_authenticated");
-      sessionStorage.removeItem("codex_password");
+      sessionStorage.removeItem('admin_authenticated');
+      sessionStorage.removeItem('admin_password');
+      sessionStorage.removeItem('codex_authenticated');
+      sessionStorage.removeItem('codex_password');
     }
-  };
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, session, loading, signOut }}>
@@ -93,6 +70,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth(): AuthContextType {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used inside <AuthProvider>");
+  if (!ctx) throw new Error('useAuth must be used inside <AuthProvider>');
   return ctx;
 }

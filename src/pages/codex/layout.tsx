@@ -2,7 +2,7 @@ import { useState, Suspense } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
 import {
-  LayoutDashboard, Activity, FileText, Settings, LogOut, Terminal, Code2, Menu, X, MessageSquare
+  LayoutDashboard, Activity, FileText, Settings, LogOut, Terminal, Code2, Menu, X
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 

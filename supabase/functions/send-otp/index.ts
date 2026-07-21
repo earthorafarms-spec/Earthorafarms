@@ -125,6 +125,43 @@ async function sendEmail(otp: string, domain: string): Promise<void> {
   }
 }
 
+function getClientIp(req: Request): string {
+  const forwarded = req.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0].trim();
+  return req.headers.get("x-real-ip") || "unknown";
+}
+
+async function checkRateLimit(
+  supabase: ReturnType<typeof createClient>,
+  ip: string,
+  action: string,
+  maxAttempts = 5,
+  windowMinutes = 15,
+): Promise<{ allowed: boolean; remaining: number }> {
+  const since = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
+  const { count } = await supabase
+    .from("rate_limit_attempts")
+    .select("id", { count: "exact", head: true })
+    .eq("ip_address", ip)
+    .eq("action", action)
+    .gte("attempted_at", since);
+
+  const attemptCount = count ?? 0;
+  return { allowed: attemptCount < maxAttempts, remaining: Math.max(0, maxAttempts - attemptCount) };
+}
+
+async function recordAttempt(
+  supabase: ReturnType<typeof createClient>,
+  ip: string,
+  action: string,
+): Promise<void> {
+  await supabase.from("rate_limit_attempts").insert({
+    ip_address: ip,
+    action,
+    attempted_at: new Date().toISOString(),
+  });
+}
+
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -154,8 +191,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
+    const clientIp = getClientIp(req);
+    const rateCheck = await checkRateLimit(supabase, clientIp, `send-otp:${domain}`);
+    if (!rateCheck.allowed) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Too many attempts. Try again later." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     const valid = await verifyPassword(supabase, password, domain);
     if (!valid) {
+      await recordAttempt(supabase, clientIp, `send-otp:${domain}`);
       return new Response(
         JSON.stringify({ ok: false, error: "Incorrect password" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },

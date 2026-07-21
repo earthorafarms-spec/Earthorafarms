@@ -2,10 +2,12 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion, useScroll, useMotionValueEvent, AnimatePresence } from "framer-motion";
 import { Link } from "wouter";
-import { ShoppingBag, Menu, X } from "lucide-react";
+import { ShoppingBag, Menu, X, Heart, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/contexts/cart-context";
 import { useAuth } from "@/contexts/auth-context";
+import { supabase } from "@/lib/supabase";
+import { UserDashboardModal } from "@/components/user/UserDashboardModal";
 
 const navLinks = [
   { label: "Home", href: "/" },
@@ -20,6 +22,8 @@ export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isDashboardOpen, setIsDashboardOpen] = useState(false);
+  const [favoritesCount, setFavoritesCount] = useState(0);
   const { cartCount } = useCart();
   const { user, signOut } = useAuth();
   const { scrollY } = useScroll();
@@ -27,6 +31,28 @@ export function Navbar() {
   useEffect(() => {
     setMounted(true);
     return () => setMounted(false);
+  }, []);
+
+  // Fetch initial favorites count
+  useEffect(() => {
+    const email = user?.email;
+    if (!email) {
+      setFavoritesCount(0);
+      return;
+    }
+    (supabase.from("favorite_details") as any)
+      .select("id", { count: "exact", head: true })
+      .eq("user_email", email)
+      .then(({ count }: { count: number | null }) => setFavoritesCount(count || 0));
+  }, [user]);
+
+  // Listen for optimistic wishlist changes from product cards
+  useEffect(() => {
+    const handler = (e: Event) => {
+      setFavoritesCount((prev) => Math.max(0, prev + (e as CustomEvent<number>).detail));
+    };
+    window.addEventListener("wishlist-changed" as any, handler);
+    return () => window.removeEventListener("wishlist-changed" as any, handler);
   }, []);
 
   useMotionValueEvent(scrollY, "change", (latest) => {
@@ -37,10 +63,12 @@ export function Navbar() {
     setIsMobileOpen(false);
   };
 
+  const textClr = isScrolled ? "text-foreground" : "text-primary-foreground";
+
   return (
     <>
       <motion.header
-        className={`fixed top-0 w-full z-50 transition-colors duration-500 border-b ${
+        className={`fixed top-0 w-full z-50 transition-colors duration-500 border-b ${textClr} ${
           isScrolled ? "bg-background/90 backdrop-blur-md border-border/50 shadow-sm" : "bg-transparent border-transparent"
         }`}
         initial={{ y: -100 }}
@@ -57,9 +85,7 @@ export function Navbar() {
           <nav className="hidden md:flex items-center gap-8">
             {navLinks.map((link) => (
               <Link key={link.label} href={link.href}>
-                <span className={`text-sm font-medium transition-colors hover:opacity-70 cursor-pointer ${
-                  isScrolled ? "text-foreground" : "text-primary-foreground"
-                }`}>
+                <span className="text-sm font-medium transition-colors hover:opacity-70 cursor-pointer">
                   {link.label}
                 </span>
               </Link>
@@ -67,7 +93,26 @@ export function Navbar() {
           </nav>
 
           <div className="flex items-center gap-4">
-            <Link href="/cart" className={`relative p-2 transition-opacity hover:opacity-70 ${isScrolled ? "text-foreground" : "text-primary-foreground"}`}>
+            {user && (
+              <>
+                <Link href="/favorites" className="relative p-2 transition-opacity hover:opacity-70">
+                  <Heart className="w-5 h-5" />
+                  {favoritesCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 flex items-center justify-center bg-accent text-[10px] font-bold text-white rounded-full animate-pulse">
+                      {favoritesCount}
+                    </span>
+                  )}
+                </Link>
+                <button
+                  onClick={() => setIsDashboardOpen(true)}
+                  className="p-2 transition-opacity hover:opacity-70"
+                  title="My Account Settings"
+                >
+                  <Settings className="w-5 h-5" />
+                </button>
+              </>
+            )}
+            <Link href="/cart" className="relative p-2 transition-opacity hover:opacity-70">
               <ShoppingBag className="w-5 h-5" />
               {cartCount > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 flex items-center justify-center bg-accent text-[10px] font-bold text-white rounded-full">
@@ -92,7 +137,7 @@ export function Navbar() {
             )}
             <button
               onClick={() => setIsMobileOpen(!isMobileOpen)}
-              className={`md:hidden p-2 ${isScrolled ? "text-foreground" : "text-primary-foreground"}`}
+              className="md:hidden p-2"
             >
               {isMobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
             </button>
@@ -145,6 +190,8 @@ export function Navbar() {
         </AnimatePresence>,
         document.body
       )}
+
+      <UserDashboardModal isOpen={isDashboardOpen} onClose={() => setIsDashboardOpen(false)} />
     </>
   );
 }

@@ -59,13 +59,19 @@ export default function AdminOrders() {
   };
 
   const cycleStatus = async (orderId: string, currentStatus: string) => {
-    const statuses = ["pending", "processing", "packed", "delivered", "cancelled"];
-    const nextIdx = (statuses.indexOf(currentStatus.toLowerCase()) + 1) % statuses.length;
-    const nextStatus = statuses[nextIdx];
+    const statusLower = currentStatus.toLowerCase();
+    if (statusLower === "delivered" || statusLower === "cancelled") {
+      toast({ title: "Order finalized", description: `Order is already ${currentStatus}. Status cannot be cycled further.` });
+      return;
+    }
+    const statuses = ["pending", "processing", "packed", "delivered"];
+    const currentIdx = statuses.indexOf(statusLower);
+    if (currentIdx === -1) return;
+    const nextStatus = statuses[currentIdx + 1];
     
     try {
-      const { error } = await supabase
-        .from("Order_history")
+      const { error } = await (supabase
+        .from("Order_history") as any)
         .update({ order_status: nextStatus })
         .eq("order_id", orderId);
       if (error) throw error;
@@ -93,7 +99,6 @@ export default function AdminOrders() {
     return () => {
       supabase.removeChannel(channel);
     };
-    return undefined;
   }, []);
 
   return (

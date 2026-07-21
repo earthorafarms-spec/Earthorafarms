@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS "Contact_details" (
     contact_name VARCHAR(255) NOT NULL,
     contact_email VARCHAR(255) NOT NULL,
     contact_phone VARCHAR(255) NOT NULL,
+    contact_topic VARCHAR(255),
     contact_message TEXT NOT NULL,
     contact_created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -286,6 +287,15 @@ BEGIN
     NEW.order_created_at
   );
 
+  -- Decrement stock in inventory
+  UPDATE inventory
+  SET total_stock = CASE 
+    WHEN (total_stock - NEW.order_product_quantity::numeric::integer) < 0 THEN 0 
+    ELSE (total_stock - NEW.order_product_quantity::numeric::integer) 
+  END,
+  updated_at = NOW()
+  WHERE product_id = NEW.order_product_id::uuid;
+
   -- Recalculate total amount
   UPDATE orders
   SET total_amount = (SELECT sum(total_price) FROM order_items WHERE order_id = v_order_id)
@@ -372,12 +382,6 @@ CREATE TABLE IF NOT EXISTS admin_settings (
     value TEXT NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
-
--- Seed default passwords
-INSERT INTO admin_settings (key, value) VALUES 
-('admin_password', 'Kai_2828'),
-('codex_password', 'Kai_2828')
-ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 
 -- ── 12. otp_codes TABLE ───────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS otp_codes (
@@ -686,3 +690,207 @@ BEGIN
     END LOOP;
   END IF;
 END $$;
+
+-- ── 17. REVIEW DETAILS TABLE ──────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS review_details (
+  id SERIAL PRIMARY KEY,
+  review_product_id VARCHAR(255) NOT NULL,
+  review_user_id VARCHAR(255) NOT NULL,
+  review_rating VARCHAR(255) NOT NULL,
+  review_comment TEXT NOT NULL,
+  review_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  review_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+DROP TRIGGER IF EXISTS update_review_details_modtime ON review_details;
+CREATE TRIGGER update_review_details_modtime
+BEFORE UPDATE ON review_details
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Enable RLS
+ALTER TABLE review_details ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON review_details;
+CREATE POLICY "Allow anon/authenticated operations" ON review_details FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- ── 18. FESTIVAL DETAILS TABLE ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS festival_details (
+  id SERIAL PRIMARY KEY,
+  festival_title VARCHAR(255) NOT NULL,
+  festival_name VARCHAR(255) NOT NULL,
+  festival_description TEXT,
+  banner_image TEXT,
+  discount_type VARCHAR(50) NOT NULL,
+  discount_value NUMERIC NOT NULL,
+  festival_start_date TIMESTAMP NOT NULL,
+  festival_end_date TIMESTAMP NOT NULL,
+  festival_status VARCHAR(50) NOT NULL DEFAULT 'active'
+);
+
+-- Enable RLS
+ALTER TABLE festival_details ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON festival_details;
+CREATE POLICY "Allow anon/authenticated operations" ON festival_details FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- ── 19. FESTIVAL DEAL PRODUCTS TABLE ──────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS festival_deal_products (
+  deal_id INTEGER REFERENCES festival_details(id) ON DELETE CASCADE,
+  product_id VARCHAR(255) NOT NULL,
+  PRIMARY KEY (deal_id, product_id)
+);
+
+-- Enable RLS
+ALTER TABLE festival_deal_products ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON festival_deal_products;
+CREATE POLICY "Allow anon/authenticated operations" ON festival_deal_products FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- ── 20. ENSURE PRODUCTS HAS CATEGORY COLUMN ───────────────────────────────────
+ALTER TABLE products ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'moringa';
+
+-- ── 21. CUSTOMER RESTOCK REQUESTS TABLE ───────────────────────────────────────
+CREATE TABLE IF NOT EXISTS customer_restock_requests (
+  id SERIAL PRIMARY KEY,
+  product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+  customer_phone VARCHAR(50) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'waiting',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  notified_at TIMESTAMP
+);
+
+-- Enable RLS
+ALTER TABLE customer_restock_requests ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON customer_restock_requests;
+CREATE POLICY "Allow anon/authenticated operations" ON customer_restock_requests FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- Grant privileges
+GRANT ALL ON customer_restock_requests TO anon, authenticated, service_role;
+
+-- ── 22. RESTOCK PRODUCT FUNCTION ──────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION restock_product(
+  p_product_id UUID,
+  p_quantity INTEGER,
+  p_notes TEXT DEFAULT 'Restocked via admin portal'
+)
+RETURNS VOID AS $$
+BEGIN
+  INSERT INTO inventory (product_id, total_stock, reserved_stock, low_stock_threshold)
+  VALUES (p_product_id, p_quantity, 0, 15)
+  ON CONFLICT (product_id)
+  DO UPDATE SET 
+    total_stock = inventory.total_stock + EXCLUDED.total_stock,
+    updated_at = NOW();
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION restock_product TO anon, authenticated, service_role;
+
+ALTER TABLE "Contact_details" ADD COLUMN IF NOT EXISTS contact_topic VARCHAR(255);
+
+-- ── 24. FAVORITE DETAILS TABLE ────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS favorite_details (
+  id SERIAL PRIMARY KEY,
+  user_email VARCHAR(255) NOT NULL,
+  product_id VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_email, product_id)
+);
+
+-- Enable RLS
+ALTER TABLE favorite_details ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON favorite_details;
+CREATE POLICY "Allow anon/authenticated operations" ON favorite_details FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+
+-- Grant privileges
+GRANT ALL ON favorite_details TO anon, authenticated, service_role;
+
+-- ── 25. ENSURE USER DETAILS HAS ADDITIONAL ADDRESSES COLUMN ───────────────────
+ALTER TABLE "User_details" ADD COLUMN IF NOT EXISTS additional_addresses JSONB DEFAULT '[]';
+
+-- ── 26. SMS ALERT LOGS TABLE ──────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS sms_alert_logs (
+  id SERIAL PRIMARY KEY,
+  triggered_by VARCHAR(255) NOT NULL,
+  product_id VARCHAR(255),
+  product_name VARCHAR(255) NOT NULL,
+  stock_at_alert INTEGER NOT NULL,
+  threshold INTEGER NOT NULL,
+  recipients TEXT[] NOT NULL,
+  status VARCHAR(50) DEFAULT 'pending',
+  provider_message_id VARCHAR(255),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Enable RLS
+ALTER TABLE sms_alert_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Allow anon/authenticated operations" ON sms_alert_logs;
+CREATE POLICY "Allow anon/authenticated operations" ON sms_alert_logs FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+GRANT ALL ON sms_alert_logs TO anon, authenticated, service_role;
+
+-- ── 27. LOW STOCK TRIGGER FUNCTION ─────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION trigger_low_stock_sms()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_product_name TEXT;
+  v_admin_phone TEXT;
+  v_recipients TEXT[];
+BEGIN
+  -- Trigger if stock falls below the threshold (15 units)
+  -- Only trigger when stock transitions to below threshold, or if it was null, or if alert was never sent
+  IF NEW.total_stock < NEW.low_stock_threshold AND 
+     (OLD.total_stock >= NEW.low_stock_threshold OR OLD.total_stock IS NULL OR NEW.alert_sent_at IS NULL) THEN
+     
+     -- Retrieve product name
+     SELECT name INTO v_product_name FROM products WHERE id = NEW.product_id;
+     
+     -- Get the admin phone number from admin_settings
+     SELECT value INTO v_admin_phone FROM admin_settings WHERE key = 'admin_phone' LIMIT 1;
+     
+     -- Default admin phone fallback if not in settings
+     IF v_admin_phone IS NULL OR v_admin_phone = '' THEN
+       v_admin_phone := '9876543210';
+     END IF;
+     
+     v_recipients := ARRAY[v_admin_phone];
+     
+     -- Write to logs
+     INSERT INTO sms_alert_logs (
+       triggered_by,
+       product_id,
+       product_name,
+       stock_at_alert,
+       threshold,
+       recipients,
+       status
+     ) VALUES (
+       'auto_trigger',
+       NEW.product_id::text,
+       coalesce(v_product_name, 'Unknown Product'),
+       NEW.total_stock,
+       NEW.low_stock_threshold,
+       v_recipients,
+       'pending'
+     );
+     
+     NEW.alert_sent_at := NOW();
+  END IF;
+  
+  -- Reset alert timestamp if stock is replenished
+  IF NEW.total_stock >= NEW.low_stock_threshold THEN
+     NEW.alert_sent_at := NULL;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trigger_low_stock_sms_alert ON inventory;
+CREATE TRIGGER trigger_low_stock_sms_alert
+BEFORE UPDATE ON inventory
+FOR EACH ROW
+EXECUTE FUNCTION trigger_low_stock_sms();
+
+GRANT EXECUTE ON FUNCTION trigger_low_stock_sms TO anon, authenticated, service_role;

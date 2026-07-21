@@ -23,6 +23,7 @@ export default function Contact() {
     name: "",
     email: "",
     phone: "",
+    topic: "",
     message: "",
   });
   const [submitting, setSubmitting] = useState(false);
@@ -35,18 +36,18 @@ export default function Contact() {
     setSubmitting(true);
 
     try {
-      const { error: dbErr } = await supabase
-        .from("Contact_details")
+      const { error: dbErr } = await (supabase.from("Contact_details") as any)
         .insert({
           contact_name: form.name,
           contact_email: form.email,
           contact_phone: form.phone,
+          contact_topic: form.topic,
           contact_message: form.message,
         });
 
       if (dbErr) throw dbErr;
 
-      setForm({ name: "", email: "", phone: "", message: "" });
+      setForm({ name: "", email: "", phone: "", topic: "", message: "" });
       toast({ title: "Message sent", description: "Thanks for reaching out. We will reply as soon as possible." });
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Unable to send your message right now.";
@@ -83,7 +84,7 @@ export default function Contact() {
               transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.3 }}
               className="text-lg md:text-xl text-primary-foreground/80 font-light max-w-2xl"
             >
-              Whether you have a question about our products, want to partner with us, or just want to say hello — we're all ears.
+              Whether you have a question about our products, want to partner with us, or just want to say hello, we're all ears.
             </motion.p>
           </div>
         </div>
@@ -103,19 +104,9 @@ export default function Contact() {
               <h3 className="text-3xl md:text-4xl font-serif text-foreground mb-8">Drop us a line.</h3>
 
               <form
-                name="contact"
-                method="POST"
-                data-netlify="true"
-                netlify-honeypot="bot-field"
                 onSubmit={handleSubmit}
                 className="space-y-6"
               >
-                <input type="hidden" name="form-name" value="contact" />
-                <p className="hidden">
-                  <label>
-                    Do not fill this out: <input name="bot-field" />
-                  </label>
-                </p>
                 <div className="grid sm:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label htmlFor="name">Full Name</Label>
@@ -144,18 +135,33 @@ export default function Contact() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <Input
-                    id="phone"
-                    name="phone"
-                    type="tel"
-                    placeholder="e.g. 9876543210"
-                    value={form.phone}
-                    onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
-                    required
-                    className="h-12"
-                  />
+                <div className="grid sm:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Phone Number</Label>
+                    <Input
+                      id="phone"
+                      name="phone"
+                      type="tel"
+                      placeholder="e.g. 9876543210"
+                      value={form.phone}
+                      onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
+                      required
+                      className="h-12"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="topic">Topic / Subject</Label>
+                    <Input
+                      id="topic"
+                      name="topic"
+                      placeholder="e.g. Question about Moringa capsules"
+                      value={form.topic}
+                      onChange={(e) => setForm((prev) => ({ ...prev, topic: e.target.value }))}
+                      required
+                      className="h-12"
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-2">

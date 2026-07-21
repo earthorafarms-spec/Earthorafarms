@@ -87,7 +87,11 @@ export default function Cart() {
                   className="flex gap-5 bg-card rounded-xl p-5 border border-border/50"
                 >
                   <div className="w-24 h-24 rounded-xl bg-white border border-border/30 flex items-center justify-center p-3 shrink-0">
-                    <img src={item.image} alt={item.name} className="w-full h-full object-contain" />
+                    {item.image ? (
+                      <img src={item.image} alt={item.name} className="w-full h-full object-contain" />
+                    ) : (
+                      <span className="text-2xl">🌿</span>
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="text-sm font-medium text-foreground truncate">{item.name}</h3>

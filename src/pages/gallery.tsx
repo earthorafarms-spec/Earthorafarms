@@ -13,14 +13,14 @@ import farmSeedlings from "@assets/generated_images/farm_seedlings.png";
 import farmSunsetAerial from "@assets/generated_images/farm_sunset_aerial.png";
 
 const galleryItems = [
-  { src: farmFieldWide,       alt: "Wide view of our moringa farm at golden hour" },
-  { src: leavesImg,           alt: "Sunlit moringa leaves swaying in the breeze" },
-  { src: farmHarvestWorkers,  alt: "Farmers hand-harvesting fresh moringa leaves" },
-  { src: farmLeavesCloseup,   alt: "Close-up of dewy moringa leaves in the morning" },
-  { src: farmMoringaTree,     alt: "A mature moringa tree standing tall on the farm" },
-  { src: leavesImg2,          alt: "Cluster of vibrant green moringa leaves" },
-  { src: farmSeedlings,       alt: "Young moringa seedlings in our farm nursery" },
-  { src: farmSunsetAerial,    alt: "Aerial view of the farm stretching at sunset" },
+  { src: farmFieldWide, alt: "Wide view of our moringa farm at golden hour" },
+  { src: leavesImg, alt: "Sunlit moringa leaves swaying in the breeze" },
+  { src: farmHarvestWorkers, alt: "Farmers hand-harvesting fresh moringa leaves" },
+  { src: farmLeavesCloseup, alt: "Close-up of dewy moringa leaves in the morning" },
+  { src: farmMoringaTree, alt: "A mature moringa tree standing tall on the farm" },
+  { src: leavesImg2, alt: "Cluster of vibrant green moringa leaves" },
+  { src: farmSeedlings, alt: "Young moringa seedlings in our farm nursery" },
+  { src: farmSunsetAerial, alt: "Aerial view of the farm stretching at sunset" },
 ];
 
 const containerVars: Variants = {
@@ -69,7 +69,7 @@ export default function Gallery() {
               transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.3 }}
               className="text-lg md:text-xl text-primary-foreground/80 font-light max-w-2xl"
             >
-              A glimpse into the living fields where we grow and care for our moringa ΓÇö from seedling to harvest, rooted in nature.
+              A glimpse into the living fields where we grow and care for our moringa from seedling to harvest, rooted in nature.
             </motion.p>
           </div>
         </div>

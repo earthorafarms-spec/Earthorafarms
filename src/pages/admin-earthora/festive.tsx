@@ -185,18 +185,18 @@ export default function AdminFestive() {
       let dealId: number | null = editId ? parseInt(editId) : null;
 
       if (editId && dealId) {
-        const { error } = await supabase.from("festival_details").update(payload).eq("id", dealId);
+        const { error } = await (supabase.from("festival_details") as any).update(payload).eq("id", dealId);
         if (error) throw error;
-        await supabase.from("festival_deal_products").delete().eq("deal_id", dealId);
+        await (supabase.from("festival_deal_products") as any).delete().eq("deal_id", dealId);
       } else {
-        const { data, error } = await supabase.from("festival_details").insert(payload).select().single();
+        const { data, error } = await (supabase.from("festival_details") as any).insert(payload).select().single();
         if (error) throw error;
         dealId = (data as any).id;
       }
 
       if (form.productIds.length > 0 && dealId) {
         const links = form.productIds.map((pid) => ({ deal_id: dealId, product_id: pid }));
-        await supabase.from("festival_deal_products").insert(links as any);
+        await (supabase.from("festival_deal_products") as any).insert(links as any);
       }
 
       toast({ title: editId ? "Deal updated" : "Deal created", description: `"${form.title}" is now live.` });
@@ -214,7 +214,7 @@ export default function AdminFestive() {
     if (!deal) return;
     const next = deal.status === "Active" ? "inactive" : "active";
     try {
-      const { error } = await supabase.from("festival_details").update({ festival_status: next }).eq("id", parseInt(id));
+      const { error } = await (supabase.from("festival_details") as any).update({ festival_status: next }).eq("id", parseInt(id));
       if (error) throw error;
       toast({ title: "Status updated" });
       fetchDeals();

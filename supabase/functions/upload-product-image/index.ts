@@ -12,6 +12,22 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-admin-password",
 };
 
+function constantTimeEqual(a: string, b: string): boolean {
+  const encoder = new TextEncoder();
+  const ab = encoder.encode(a);
+  const bb = encoder.encode(b);
+  let mismatch = ab.length !== bb.length ? 1 : 0;
+  const len = Math.max(ab.length, bb.length);
+  const aPadded = new Uint8Array(len);
+  const bPadded = new Uint8Array(len);
+  aPadded.set(ab);
+  bPadded.set(bb);
+  for (let i = 0; i < len; i++) {
+    mismatch |= aPadded[i] ^ bPadded[i];
+  }
+  return mismatch === 0;
+}
+
 // @ts-ignore
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
@@ -30,10 +46,45 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const productSlug = formData.get("product_slug") as string;
     const isPrimary = formData.get("is_primary") === "true";
     const altText = formData.get("alt") as string;
+    const password = formData.get("password") as string;
 
     if (!file || !productId || !productSlug) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
         status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    // Verify admin password before allowing upload
+    if (!password) {
+      return new Response(JSON.stringify({ error: "Admin password required" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      });
+    }
+
+    const envPassword = Deno.env.get("ADMIN_PASSWORD");
+    let passwordOk = false;
+
+    if (envPassword) {
+      passwordOk = constantTimeEqual(password, envPassword);
+    }
+
+    if (!passwordOk) {
+      const { data: pwData } = await supabase
+        .from("admin_settings")
+        .select("value")
+        .eq("key", "admin_password")
+        .single();
+
+      if (pwData) {
+        passwordOk = constantTimeEqual(password, pwData.value);
+      }
+    }
+
+    if (!passwordOk) {
+      return new Response(JSON.stringify({ error: "Invalid admin password" }), {
+        status: 403,
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       });
     }

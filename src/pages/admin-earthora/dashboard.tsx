@@ -2,8 +2,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import {
-  TrendingUp, ShoppingCart, Package, MessageSquare, ChevronRight, Clock,
-  Leaf, AlertCircle
+  TrendingUp, ShoppingCart, Package, MessageSquare, ChevronRight, Clock
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
@@ -97,12 +96,11 @@ export default function AdminDashboard() {
 
       setOrders(mappedOrders);
 
-      const deliveredRevenue = dbOrders
-        .filter((o: any) => o.status.toLowerCase() === "delivered")
-        .reduce((sum: number, o: any) => sum + Number(o.total_amount), 0);
+      const totalRevenue = dbOrders
+        .reduce((sum: number, o: any) => sum + Number(o.total_amount || 0), 0);
 
       setStats({
-        revenue: deliveredRevenue,
+        revenue: totalRevenue,
         ordersTotal: dbOrders.length,
         productsTotal: dbProducts.length,
         pendingReviews: lowStockCount, // display low stock products count in review spot or alert
@@ -119,10 +117,9 @@ export default function AdminDashboard() {
       twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
 
       const { data: pageViews, error: pvErr } = await supabase
-        .from("analytics_events")
-        .select("properties, created_at")
-        .eq("event_type", "page_view")
-        .gte("created_at", twoYearsAgo.toISOString());
+        .from("Admin_analytics")
+        .select("visitor_country, visitor_created_at")
+        .gte("visitor_created_at", twoYearsAgo.toISOString());
 
       if (pvErr) throw pvErr;
 
@@ -139,7 +136,7 @@ export default function AdminDashboard() {
 
       if (pageViews) {
         for (const ev of pageViews as any[]) {
-          const country = ev.properties?.country || "Unknown";
+          const country = ev.visitor_country || "Unknown";
           countryTraffic[country] = (countryTraffic[country] || 0) + 1;
           totalTraffic++;
         }
@@ -186,10 +183,9 @@ export default function AdminDashboard() {
       const recentCutoff = new Date(Date.now() - recentMinutes * 60 * 1000).toISOString();
 
       const { count: recentSessions } = await supabase
-        .from("analytics_events")
-        .select("session_id", { count: "exact", head: true })
-        .eq("event_type", "page_view")
-        .gte("created_at", recentCutoff);
+        .from("Admin_analytics")
+        .select("id", { count: "exact", head: true })
+        .gte("visitor_created_at", recentCutoff);
 
       setLiveVisitors(recentSessions || 0);
     } catch {

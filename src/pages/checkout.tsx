@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, CreditCard, Shield, Truck, Sparkles, CheckCircle2, Ticket, Wallet, Leaf, Eye, EyeOff, Mail, Lock, User } from "lucide-react";
+import { ArrowLeft, CreditCard, Shield, Sparkles, CheckCircle2, Ticket, Wallet } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
@@ -58,25 +58,25 @@ export default function Checkout() {
     }
 
     // Prefill from User_details table
-    supabase
-      .from("User_details")
+    const emailAddr = user.email;
+    (supabase.from("User_details") as any)
       .select("*")
-      .eq("user_email", user.email)
+      .eq("user_email", emailAddr)
       .maybeSingle()
-      .then(({ data }) => {
+      .then(({ data }: { data: Record<string, unknown> | null }) => {
         if (data) {
-          setEmail(data.user_email || user.email || "");
-          setName(data.user_name || user.user_metadata?.name || "");
-          setPhone(data.user_phone || "");
-          setAddress(data.user_address || "");
-          setCity(data.user_city || "");
-          setState(data.user_state || "");
-          setPostalCode(data.user_zip || "");
-          setCountry(data.user_country || "");
+          setEmail((data.user_email as string) || emailAddr || "");
+          setName((data.user_name as string) || user?.user_metadata?.name || "");
+          setPhone((data.user_phone as string) || "");
+          setAddress((data.user_address as string) || "");
+          setCity((data.user_city as string) || "");
+          setState((data.user_state as string) || "");
+          setPostalCode((data.user_zip as string) || "");
+          setCountry((data.user_country as string) || "");
         } else {
-          setEmail(user.email || "");
-          setName(user.user_metadata?.name || user.user_metadata?.full_name || "");
-          setPhone(user.phone || "");
+          setEmail(emailAddr || "");
+          setName(user?.user_metadata?.name || user?.user_metadata?.full_name || "");
+          setPhone(user?.phone || "");
         }
       });
   }, [user, authLoading]);
@@ -163,8 +163,7 @@ export default function Checkout() {
     setIsSubmitting(true);
     try {
       // 1. Update user shipping details in User_details
-      const { error: userUpdateErr } = await supabase
-        .from("User_details")
+      const { error: userUpdateErr } = await (supabase.from("User_details") as any)
         .update({
           user_name: name,
           user_phone: phone,
@@ -186,8 +185,7 @@ export default function Checkout() {
         order_product_price: String(item.price),
       }));
 
-      const { data: insertedOrders, error: orderInsertErr } = await supabase
-        .from("Orders")
+      const { data: insertedOrders, error: orderInsertErr } = await (supabase.from("Orders") as any)
         .insert(orderRows)
         .select();
 
@@ -197,8 +195,7 @@ export default function Checkout() {
       const transactionId = `TXN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
       // 3. Insert into Payments
-      const { error: paymentErr } = await supabase
-        .from("Payments")
+      const { error: paymentErr } = await (supabase.from("Payments") as any)
         .insert({
           payment_order_id: orderReferenceId,
           payment_amount: String(totalAmount),
@@ -210,8 +207,7 @@ export default function Checkout() {
       if (paymentErr) console.error("Error creating payment record:", paymentErr);
 
       // 4. Insert into Order_history
-      const { error: historyErr } = await supabase
-        .from("Order_history")
+      const { error: historyErr } = await (supabase.from("Order_history") as any)
         .insert({
           order_id: orderReferenceId,
           order_status: "pending",

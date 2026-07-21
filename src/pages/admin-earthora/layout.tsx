@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
 import {
   LayoutDashboard, Package, ShoppingCart, TrendingUp, Tag, LogOut, Leaf, ChevronRight,
-  Inbox, Search, Menu, X, Sparkles, Settings, MessageSquare
+  Inbox, Search, Menu, X, Sparkles, Settings
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 

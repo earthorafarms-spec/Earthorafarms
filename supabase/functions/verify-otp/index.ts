@@ -7,6 +7,41 @@ const corsHeaders: Record<string, string> = {
     "authorization, x-client-info, apikey, content-type, x-admin-password, x-codex-password",
 };
 
+function getClientIp(req: Request): string {
+  const forwarded = req.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0].trim();
+  return req.headers.get("x-real-ip") || "unknown";
+}
+
+async function checkRateLimit(
+  supabase: ReturnType<typeof createClient>,
+  ip: string,
+  action: string,
+  maxAttempts = 5,
+  windowMinutes = 15,
+): Promise<boolean> {
+  const since = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
+  const { count } = await supabase
+    .from("rate_limit_attempts")
+    .select("id", { count: "exact", head: true })
+    .eq("ip_address", ip)
+    .eq("action", action)
+    .gte("attempted_at", since);
+  return (count ?? 0) < maxAttempts;
+}
+
+async function recordAttempt(
+  supabase: ReturnType<typeof createClient>,
+  ip: string,
+  action: string,
+): Promise<void> {
+  await supabase.from("rate_limit_attempts").insert({
+    ip_address: ip,
+    action,
+    attempted_at: new Date().toISOString(),
+  });
+}
+
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -36,6 +71,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
+    const clientIp = getClientIp(req);
+    if (!await checkRateLimit(supabase, clientIp, `verify-otp:${domain}`)) {
+      return new Response(
+        JSON.stringify({ ok: false, error: "Too many attempts. Try again later." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
     const now = new Date().toISOString();
 
     const { data, error } = await supabase
@@ -56,6 +99,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     if (!data || data.length === 0) {
+      await recordAttempt(supabase, clientIp, `verify-otp:${domain}`);
       return new Response(
         JSON.stringify({ ok: false, error: "Invalid or expired OTP" }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } },

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
-  TrendingUp, ShoppingCart, Eye, Clock, Search, ArrowUpRight, ArrowDownRight,
+  ShoppingCart, Eye, Clock, ArrowUpRight, ArrowDownRight,
   Globe, ChevronRight, Calendar, Loader2, IndianRupee, Package
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -69,17 +69,15 @@ export default function AdminAnalytics() {
 
       // Page views
       const { count: currentViews } = await supabase
-        .from("analytics_events")
+        .from("Admin_analytics")
         .select("id", { count: "exact", head: true })
-        .eq("event_type", "page_view")
-        .gte("created_at", since);
+        .gte("visitor_created_at", since);
 
       const { count: previousViews } = await supabase
-        .from("analytics_events")
+        .from("Admin_analytics")
         .select("id", { count: "exact", head: true })
-        .eq("event_type", "page_view")
-        .gte("created_at", previousSince)
-        .lt("created_at", since);
+        .gte("visitor_created_at", previousSince)
+        .lt("visitor_created_at", since);
 
       setPageViews(currentViews || 0);
 
@@ -135,11 +133,10 @@ export default function AdminAnalytics() {
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
       const { data: monthlyRaw } = await supabase
-        .from("analytics_events")
-        .select("created_at")
-        .eq("event_type", "page_view")
-        .gte("created_at", sixMonthsAgo.toISOString())
-        .order("created_at", { ascending: true });
+        .from("Admin_analytics")
+        .select("visitor_created_at")
+        .gte("visitor_created_at", sixMonthsAgo.toISOString())
+        .order("visitor_created_at", { ascending: true });
 
       if (monthlyRaw) {
         const byMonth: Record<string, number> = {};
@@ -155,7 +152,7 @@ export default function AdminAnalytics() {
         }
 
         for (const ev of monthlyRaw as any[]) {
-          const d = new Date(ev.created_at);
+          const d = new Date(ev.visitor_created_at);
           const key = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
           if (byMonth[key] !== undefined) {
             byMonth[key]++;
@@ -166,17 +163,18 @@ export default function AdminAnalytics() {
         setMonthlyViews(monthKeys.map((k, i) => ({ month: months[i]?.month || k.split(" ")[0], views: byMonth[k] })));
       }
 
-      // Traffic sources (from platform field + properties)
+      // Traffic sources (mapped from visitor_device / visitor_browser)
       const { data: sourceRaw } = await supabase
-        .from("analytics_events")
-        .select("platform, properties")
-        .gte("created_at", since)
+        .from("Admin_analytics")
+        .select("visitor_device, visitor_browser, visitor_country")
+        .gte("visitor_created_at", since)
         .limit(1000);
 
       if (sourceRaw) {
         const sourceMap: Record<string, number> = {};
         for (const ev of sourceRaw as any[]) {
-          const source = ev.properties?.source || ev.platform || "Direct";
+          // Fallback hierarchy for interesting grouping: device (Desktop/Mobile) or specific browser
+          const source = ev.visitor_device || ev.visitor_browser || "Direct";
           sourceMap[source] = (sourceMap[source] || 0) + 1;
         }
         const total = Object.values(sourceMap).reduce((a, b) => a + b, 0);

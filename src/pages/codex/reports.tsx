@@ -92,7 +92,7 @@ export default function CodexReports() {
       if (error) throw error;
 
       if (!data || data.length === 0) {
-        alert("No logs found for the selected timeframe.");
+        setExporting(false);
         return;
       }
 
@@ -108,7 +108,7 @@ export default function CodexReports() {
       URL.revokeObjectURL(url);
       setModalOpen(false);
     } catch (err: any) {
-      alert(`Export failed: ${err.message}`);
+      // Export failure silently handled below
     } finally {
       setExporting(false);
     }

@@ -5,11 +5,6 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 
-import capsulesMain from "@assets/generated_images/product_capsules.jpg";
-import powderMain from "@assets/generated_images/product_powder.jpg";
-import tabletsMain from "@assets/generated_images/product_tablets.jpg";
-import amlaMain from "@assets/generated_images/hero_leaves.jpg";
-
 interface ProductImage {
   url: string;
   alt: string;
@@ -39,6 +34,7 @@ export default function AdminProducts() {
   const [products, setProducts] = useState<AdminProduct[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [editId, setEditId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const [form, setForm] = useState({
@@ -120,7 +116,6 @@ export default function AdminProducts() {
       return () => {
         supabase.removeChannel(channel);
       };
-    return undefined;
   }, []);
 
   const handleDeleteProduct = async (id: string) => {
@@ -186,8 +181,31 @@ export default function AdminProducts() {
   };
 
   const openForm = () => {
+    setEditId(null);
     setForm({ name: "", mrp: "", price: "", tag: "", badge: "", stockText: "In Stock", stock: "", description: "", highlights: [""], rating: "4.5", category: "moringa" });
     setImages([]);
+    setSelectedFiles([]);
+    setShowForm(true);
+  };
+
+  const openEditForm = (p: AdminProduct) => {
+    setEditId(p.id);
+    setForm({
+      name: p.name,
+      mrp: String(p.mrp),
+      price: String(p.price),
+      tag: p.tag || "",
+      badge: p.badge || "",
+      stockText: p.stockText || "In Stock",
+      stock: String(p.stock),
+      description: p.description || "",
+      highlights: p.highlights?.length ? p.highlights : [""],
+      rating: String(p.rating || 4.5),
+      category: "moringa",
+    });
+    // Load existing product images as preview urls
+    const existingImgUrls = (p.images || []).map((img: any) => img.url || img);
+    setImages(existingImgUrls);
     setSelectedFiles([]);
     setShowForm(true);
   };
@@ -282,6 +300,42 @@ export default function AdminProducts() {
     };
 
     try {
+      if (editId) {
+        // ── UPDATE existing product ──────────────────────────────────────────
+        const { error: updErr } = await (supabase
+          .from("products") as any)
+          .update({
+            name: form.name,
+            mrp,
+            price,
+            tag: form.tag,
+            badge: form.badge,
+            description: form.description,
+            highlights: form.highlights.filter((h) => h.trim()),
+            rating: parseFloat(form.rating) || 4.5,
+            category: form.category || "moringa",
+            ...(finalImages.length > 0 ? { images: finalImages as any } : {}),
+          })
+          .eq("id", editId);
+
+        if (updErr) throw updErr;
+
+        // Update stock in inventory
+        await (supabase
+          .from("inventory") as any)
+          .update({ total_stock: parseInt(form.stock) || 0 })
+          .eq("product_id", editId);
+
+        toast({ title: "Product updated", description: `${form.name} has been updated.` });
+        setImages([]);
+        setSelectedFiles([]);
+        setUploading(false);
+        setShowForm(false);
+        setEditId(null);
+        fetchProducts();
+        return;
+      }
+
       const { data: newProd, error: prodErr } = await (supabase.from("products") as any)
         .insert({
           slug: id,
@@ -361,7 +415,7 @@ export default function AdminProducts() {
             </div>
           ) : products.length === 0 ? (
             <div className="text-center py-20 bg-white border border-border/40 rounded-2xl text-foreground/40 font-medium">
-              No products yet — add your first product.
+              No products yet. Add your first product.
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -417,7 +471,7 @@ export default function AdminProducts() {
                           <button onClick={() => openRestockModal(p)} className="p-2 rounded-lg bg-[#fafaf8] text-foreground/40 hover:text-primary hover:bg-primary/5 transition-colors" title="Restock product">
                             <Plus className="w-4 h-4" strokeWidth={1.5} />
                           </button>
-                          <button className="p-2 rounded-lg bg-[#fafaf8] text-foreground/40 hover:text-foreground hover:bg-muted/10 transition-colors" title="View details"><Eye className="w-4 h-4" strokeWidth={1.5} /></button>
+                          <button onClick={() => openEditForm(p)} className="p-2 rounded-lg bg-[#fafaf8] text-foreground/40 hover:text-primary hover:bg-primary/5 transition-colors" title="Edit product"><Eye className="w-4 h-4" strokeWidth={1.5} /></button>
                           <button onClick={() => handleDeleteProduct(p.id)} className="p-2 rounded-lg bg-[#fafaf8] text-foreground/40 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete product"><Trash2 className="w-4 h-4" strokeWidth={1.5} /></button>
                         </div>
                       </div>
@@ -444,9 +498,9 @@ export default function AdminProducts() {
               <div className="flex items-center justify-between px-6 md:px-8 h-16 border-b border-border/30 shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center"><Leaf className="w-4 h-4 text-primary" strokeWidth={1.5} /></div>
-                  <h2 className="text-sm font-serif font-bold text-foreground">Add New Product</h2>
+                  <h2 className="text-sm font-serif font-bold text-foreground">{editId ? "Edit Product" : "Add New Product"}</h2>
                 </div>
-                <button onClick={() => setShowForm(false)} className="p-2 rounded-full hover:bg-muted transition-colors"><X className="w-5 h-5 text-foreground/60" /></button>
+                <button onClick={() => { setShowForm(false); setEditId(null); }} className="p-2 rounded-full hover:bg-muted transition-colors"><X className="w-5 h-5 text-foreground/60" /></button>
               </div>
 
               <div className="flex-1 overflow-y-auto">
@@ -688,10 +742,10 @@ export default function AdminProducts() {
                       </div>
 
                       <div className="flex items-center justify-end gap-3 pt-5 border-t border-border/20">
-                        <Button variant="outline" onClick={() => setShowForm(false)} className="h-11 px-6">Cancel</Button>
+                        <Button variant="outline" onClick={() => { setShowForm(false); setEditId(null); }} className="h-11 px-6">Cancel</Button>
                         <Button onClick={handleSubmit} className="h-11 px-8 gap-2 shadow-md">
                           <Leaf className="w-4 h-4" strokeWidth={1.5} />
-                          Create Product
+                          {editId ? "Save Changes" : "Create Product"}
                         </Button>
                       </div>
                     </div>
@@ -736,7 +790,7 @@ export default function AdminProducts() {
                   <div className="flex items-center gap-2 p-3 mb-5 rounded-xl bg-primary/8 border border-primary/20">
                     <Users className="w-4 h-4 text-primary shrink-0" />
                     <p className="text-xs text-primary font-medium">
-                      <span className="font-bold">{restockModal.waitingCount}</span> customer{restockModal.waitingCount !== 1 ? "s" : ""} waiting —
+                      <span className="font-bold">{restockModal.waitingCount}</span> customer{restockModal.waitingCount !== 1 ? "s" : ""} waiting, 
                       they'll be automatically SMS-notified when you restock.
                     </p>
                   </div>

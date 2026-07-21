@@ -1,153 +1,202 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
-import { useAuth } from "@/contexts/auth-context";
-import { supabase } from "@/lib/supabase";
-
-export interface CartItem {
-  id: string;
-  name: string;
-  price: number;
-  image: string;
-  quantity: number;
-}
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
+import { useAuth } from '@/contexts/auth-context';
+import { supabase } from '@/lib/supabase';
+import { getDiscountedPrice, fetchActiveDeals } from '@/lib/api';
+import type { CartItem, FestiveDeal } from '@/types';
 
 interface CartContextType {
   items: CartItem[];
-  addToCart: (item: Omit<CartItem, "quantity">) => void;
+  addToCart: (item: Omit<CartItem, 'quantity'>) => void;
   removeFromCart: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
   clearCart: () => void;
   cartCount: number;
 }
 
+const CART_KEY = 'earthora-cart';
+
 const CartContext = createContext<CartContextType | null>(null);
+
+function loadCart(): CartItem[] {
+  try {
+    const saved = localStorage.getItem(CART_KEY);
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const [items, setItems] = useState<CartItem[]>(() => {
-    try {
-      const saved = localStorage.getItem("earthora-cart");
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [items, setItems] = useState<CartItem[]>(loadCart);
+  const [deals, setDeals] = useState<FestiveDeal[]>([]);
 
-  // Sync state to local storage as fallback
   useEffect(() => {
-    localStorage.setItem("earthora-cart", JSON.stringify(items));
+    fetchActiveDeals().then(setDeals).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(CART_KEY, JSON.stringify(items));
   }, [items]);
 
-  // Load cart from DB upon user login
   useEffect(() => {
-    if (!user) return;
+    const email = user?.email;
+    if (!email) return;
 
-    supabase
-      .from("Cart_details")
-      .select("*")
-      .eq("cart_user_id", user.email)
-      .then(async ({ data }) => {
-        if (data && data.length > 0) {
-          const resolvedItems: CartItem[] = [];
-          for (const row of data) {
-            const { data: prod } = await supabase
-              .from("products")
-              .select("*")
-              .eq("slug", row.cart_product_id)
-              .single();
+    const abort = new AbortController();
 
-            resolvedItems.push({
-              id: row.cart_product_id,
-              name: prod?.name || row.cart_product_id,
-              price: Number(row.cart_product_price),
-              image: prod?.images?.[0]?.url || "",
-              quantity: Number(row.cart_product_quantity),
-            });
-          }
-          setItems(resolvedItems);
+    (supabase.from('Cart_details') as any)
+      .select('*')
+      .eq('cart_user_id', email)
+      .then(async ({ data }: { data: Record<string, unknown>[] | null }) => {
+        if (!data || data.length === 0 || abort.signal.aborted) return;
+
+        const resolvedItems: CartItem[] = [];
+        for (const row of data) {
+          const { data: prod } = await (supabase.from('products') as any)
+            .select('*')
+            .eq('slug', row.cart_product_id)
+            .single();
+
+          const basePrice = Number(prod?.price || row.cart_product_price);
+          const images = (prod?.images as Record<string, unknown>[]) || [];
+          const discounted = getDiscountedPrice(
+            (prod?.id as string) || (row.cart_product_id as string),
+            basePrice,
+            deals
+          );
+
+          resolvedItems.push({
+            id: row.cart_product_id as string,
+            name: (prod?.name as string) || (row.cart_product_id as string),
+            price: discounted,
+            image: (images[0]?.url as string) || '',
+            quantity: Number(row.cart_product_quantity),
+          });
         }
-      });
-  }, [user]);
+        if (!abort.signal.aborted) setItems(resolvedItems);
+      })
+      .catch(() => {});
 
-  const addToCart = (product: Omit<CartItem, "quantity">) => {
-    setItems((prev) => {
-      const existing = prev.find((i) => i.id === product.id);
-      if (existing) {
-        return prev.map((i) =>
-          i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i
-        );
-      }
-      return [...prev, { ...product, quantity: 1 }];
-    });
+    return () => abort.abort();
+  }, [user, deals]);
 
-    if (user) {
-      supabase
-        .from("Cart_details")
-        .select("*")
-        .eq("cart_user_id", user.email)
-        .eq("cart_product_id", product.id)
-        .maybeSingle()
-        .then(({ data }) => {
-          if (data) {
-            supabase
-              .from("Cart_details")
-              .update({ cart_product_quantity: String(Number(data.cart_product_quantity) + 1) })
-              .eq("id", data.id)
-              .then();
-          } else {
-            supabase
-              .from("Cart_details")
-              .insert({
-                cart_user_id: user.email,
-                cart_product_id: product.id,
-                cart_product_quantity: "1",
-                cart_product_price: String(product.price),
-              })
-              .then();
-          }
+  useEffect(() => {
+    if (items.length === 0 || deals.length === 0) return;
+
+    (supabase.from('products') as any)
+      .select('id, slug, price')
+      .then(({ data }: { data: Record<string, unknown>[] }) => {
+        if (!data) return;
+        setItems((prev) => {
+          let changed = false;
+          const next = prev.map((item) => {
+            const dbProd = data.find(
+              (p: Record<string, unknown>) => p.id === item.id || p.slug === item.id
+            );
+            if (!dbProd) return item;
+            const originalPrice = Number(dbProd.price);
+            const discounted = Math.min(
+              getDiscountedPrice(dbProd.id as string, originalPrice, deals),
+              getDiscountedPrice(dbProd.slug as string, originalPrice, deals)
+            );
+            if (item.price !== discounted) {
+              changed = true;
+              return { ...item, price: discounted };
+            }
+            return item;
+          });
+          return changed ? next : prev;
         });
-    }
-  };
+      })
+      .catch(() => {});
+  }, [deals]);
 
-  const removeFromCart = (id: string) => {
-    setItems((prev) => prev.filter((i) => i.id !== id));
+  const addToCart = useCallback(
+    (product: Omit<CartItem, 'quantity'>) => {
+      setItems((prev) => {
+        const existing = prev.find((i) => i.id === product.id);
+        if (existing) {
+          return prev.map((i) =>
+            i.id === product.id ? { ...i, quantity: i.quantity + 1 } : i
+          );
+        }
+        return [...prev, { ...product, quantity: 1 }];
+      });
 
-    if (user) {
-      supabase
-        .from("Cart_details")
-        .delete()
-        .eq("cart_user_id", user.email)
-        .eq("cart_product_id", id)
-        .then();
-    }
-  };
+      const email = user?.email;
+      if (email) {
+        (supabase.from('Cart_details') as any)
+          .select('*')
+          .eq('cart_user_id', email)
+          .eq('cart_product_id', product.id)
+          .maybeSingle()
+          .then(({ data }: { data: Record<string, unknown> | null }) => {
+            if (data) {
+              (supabase.from('Cart_details') as any)
+                .update({ cart_product_quantity: String(Number(data.cart_product_quantity) + 1) })
+                .eq('id', data.id)
+                .catch(() => {});
+            } else {
+              (supabase.from('Cart_details') as any)
+                .insert({
+                  cart_user_id: email,
+                  cart_product_id: product.id,
+                  cart_product_quantity: '1',
+                  cart_product_price: String(product.price),
+                })
+                .catch(() => {});
+            }
+          })
+          .catch(() => {});
+      }
+    },
+    [user?.email]
+  );
 
-  const updateQuantity = (id: string, quantity: number) => {
-    if (quantity < 1) return removeFromCart(id);
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, quantity } : i)));
+  const removeFromCart = useCallback(
+    (id: string) => {
+      setItems((prev) => prev.filter((i) => i.id !== id));
+      const email = user?.email;
+      if (email) {
+        (supabase.from('Cart_details') as any)
+          .delete()
+          .eq('cart_user_id', email)
+          .eq('cart_product_id', id)
+          .catch(() => {});
+      }
+    },
+    [user?.email]
+  );
 
-    if (user) {
-      supabase
-        .from("Cart_details")
-        .update({ cart_product_quantity: String(quantity) })
-        .eq("cart_user_id", user.email)
-        .eq("cart_product_id", id)
-        .then();
-    }
-  };
+  const updateQuantity = useCallback(
+    (id: string, quantity: number) => {
+      if (quantity < 1) return removeFromCart(id);
+      setItems((prev) => prev.map((i) => (i.id === id ? { ...i, quantity } : i)));
+      const email = user?.email;
+      if (email) {
+        (supabase.from('Cart_details') as any)
+          .update({ cart_product_quantity: String(quantity) })
+          .eq('cart_user_id', email)
+          .eq('cart_product_id', id)
+          .catch(() => {});
+      }
+    },
+    [user?.email, removeFromCart]
+  );
 
-  const clearCart = () => {
+  const clearCart = useCallback(() => {
     setItems([]);
-
-    if (user) {
-      supabase
-        .from("Cart_details")
+    const email = user?.email;
+    if (email) {
+      (supabase.from('Cart_details') as any)
         .delete()
-        .eq("cart_user_id", user.email)
-        .then();
+        .eq('cart_user_id', email)
+        .catch(() => {});
     }
-  };
+  }, [user?.email]);
 
-  const cartCount = items.reduce((sum, i) => sum + i.quantity, 0);
+  const cartCount = useMemo(() => items.reduce((sum, i) => sum + i.quantity, 0), [items]);
 
   return (
     <CartContext.Provider value={{ items, addToCart, removeFromCart, updateQuantity, clearCart, cartCount }}>
@@ -156,8 +205,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useCart() {
+export function useCart(): CartContextType {
   const ctx = useContext(CartContext);
-  if (!ctx) throw new Error("useCart must be used within a CartProvider");
+  if (!ctx) throw new Error('useCart must be used within a CartProvider');
   return ctx;
 }

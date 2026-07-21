@@ -121,8 +121,7 @@ export default function AdminCoupons() {
         .insert({
           coupon_code: form.code.toUpperCase(),
           coupon_discount_type: form.type,
-          coupon_discount_amount: val, // mapping value
-          coupon_discount_value: val,  // mapping value
+          coupon_discount_amount: val,
           coupon_min_order: parseFloat(form.minOrder) || 0,
           coupon_max_uses: form.maxUses ? parseInt(form.maxUses) : null,
           coupon_expiry_date: form.expiryDate || null,

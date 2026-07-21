@@ -54,11 +54,9 @@ export default function Auth() {
         });
         if (error) throw error;
 
-        const { error: dbError } = await supabase
-          .from("User_details")
+        const { error: dbError } = await (supabase.from("User_details") as any)
           .insert({
             user_email: email.trim(),
-            user_password: password,
             user_name: fullName.trim()
           });
 

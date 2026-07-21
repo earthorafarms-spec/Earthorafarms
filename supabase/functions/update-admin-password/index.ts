@@ -72,7 +72,19 @@ Deno.serve(async (req: Request): Promise<Response> => {
         .single();
 
       if (data) {
-        currentOk = data.value === currentPassword;
+        const encoder = new TextEncoder();
+        const a = encoder.encode(currentPassword);
+        const b = encoder.encode(data.value);
+        let mismatch = a.length !== b.length ? 1 : 0;
+        const len = Math.max(a.length, b.length);
+        const aPadded = new Uint8Array(len);
+        const bPadded = new Uint8Array(len);
+        aPadded.set(a);
+        bPadded.set(b);
+        for (let i = 0; i < len; i++) {
+          mismatch |= aPadded[i] ^ bPadded[i];
+        }
+        currentOk = mismatch === 0;
       }
     }
 

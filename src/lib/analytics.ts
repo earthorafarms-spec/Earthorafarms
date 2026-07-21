@@ -1,72 +1,58 @@
-import { supabase } from "./supabase";
+import { supabase } from './supabase';
+
+let lastPage = '';
+let geoCache: { ip: string; country: string; city: string } | null = null;
+
+function parseUA(ua: string) {
+  const device = /Tablet|iPad/i.test(ua) ? 'Tablet' : /Mobi|Android|iPhone|iPod/i.test(ua) ? 'Mobile' : 'Desktop';
+  const os = ua.includes('Win') ? 'Windows' : ua.includes('Mac') ? 'MacOS' : /Android/i.test(ua) ? 'Android' : /iPhone|iPad|iPod/i.test(ua) ? 'iOS' : ua.includes('Linux') ? 'Linux' : ua.includes('X11') ? 'UNIX' : 'Unknown OS';
+  const browser = ua.includes('Edg') ? 'Edge' : ua.includes('Chrome') ? 'Chrome' : ua.includes('Firefox') ? 'Firefox' : ua.includes('Safari') ? 'Safari' : ua.includes('MSIE') || ua.includes('Trident') ? 'IE' : 'Unknown Browser';
+  return { device, os, browser };
+}
+
+async function getGeo() {
+  if (geoCache) return geoCache;
+  if (!import.meta.env.PROD) return { ip: '127.0.0.1', country: 'Localhost', city: 'Localhost' };
+
+  try {
+    const cached = sessionStorage.getItem('earthora_visitor_geo');
+    if (cached) {
+      geoCache = JSON.parse(cached);
+      return geoCache!;
+    }
+    const res = await fetch('https://ipwho.is/');
+    if (!res.ok) return { ip: '127.0.0.1', country: 'Unknown', city: 'Unknown' };
+    const data = await res.json();
+    if (data?.success !== false) {
+      geoCache = { ip: data.ip, country: data.country, city: data.city };
+      sessionStorage.setItem('earthora_visitor_geo', JSON.stringify(geoCache));
+      return geoCache;
+    }
+  } catch {
+    /* silent */
+  }
+  return { ip: '127.0.0.1', country: 'Unknown', city: 'Unknown' };
+}
 
 export async function trackPageView(pageName: string) {
+  if (pageName === lastPage) return;
+  lastPage = pageName;
+
   try {
-    let visitor_ip = "127.0.0.1";
-    let visitor_country = "Localhost";
-    let visitor_city = "Localhost";
-
-    // Only fetch geo-ip in production to avoid rate-limit (429) errors during development.
-    // React StrictMode fires effects twice, exhausting free API quotas instantly.
-    if (import.meta.env.PROD) {
-      try {
-        const cached = sessionStorage.getItem("earthora_visitor_geo");
-        if (cached) {
-          const geoData = JSON.parse(cached);
-          visitor_ip = geoData?.ip || visitor_ip;
-          visitor_country = geoData?.country || visitor_country;
-          visitor_city = geoData?.city || visitor_city;
-        } else {
-          const geoResponse = await fetch("https://ipwho.is/");
-          if (geoResponse.ok) {
-            const geoData = await geoResponse.json();
-            if (geoData && geoData.success !== false) {
-              sessionStorage.setItem("earthora_visitor_geo", JSON.stringify(geoData));
-              visitor_ip = geoData?.ip || visitor_ip;
-              visitor_country = geoData?.country || visitor_country;
-              visitor_city = geoData?.city || visitor_city;
-            }
-          }
-        }
-      } catch (_) {
-        // Silent fallback — geo-ip is non-critical
-      }
-    }
-
+    const geo = await getGeo();
     const ua = navigator.userAgent;
+    const { device, os, browser } = parseUA(ua);
 
-    let visitor_device = "Desktop";
-    if (/Mobi|Android|iPhone|iPad|iPod/i.test(ua)) {
-      visitor_device = /Tablet|iPad/i.test(ua) ? "Tablet" : "Mobile";
-    }
-
-    let visitor_os = "Unknown OS";
-    if (ua.indexOf("Win") !== -1) visitor_os = "Windows";
-    else if (ua.indexOf("Mac") !== -1) visitor_os = "MacOS";
-    else if (/Android/i.test(ua)) visitor_os = "Android";
-    else if (/iPhone|iPad|iPod/i.test(ua)) visitor_os = "iOS";
-    else if (ua.indexOf("Linux") !== -1) visitor_os = "Linux";
-    else if (ua.indexOf("X11") !== -1) visitor_os = "UNIX";
-
-    let visitor_browser = "Unknown Browser";
-    if (ua.indexOf("Edg") !== -1) visitor_browser = "Edge";
-    else if (ua.indexOf("Chrome") !== -1) visitor_browser = "Chrome";
-    else if (ua.indexOf("Firefox") !== -1) visitor_browser = "Firefox";
-    else if (ua.indexOf("Safari") !== -1) visitor_browser = "Safari";
-    else if (ua.indexOf("MSIE") !== -1 || ua.indexOf("Trident") !== -1) visitor_browser = "IE";
-
-    await supabase
-      .from("Admin_analytics")
-      .insert({
-        page_name: pageName,
-        visitor_ip,
-        visitor_device,
-        visitor_os,
-        visitor_browser,
-        visitor_country,
-        visitor_city,
-      });
-  } catch (_) {
-    // Silent error handler — analytics failures must never break the UI
+    await (supabase.from('Admin_analytics') as any).insert({
+      page_name: pageName,
+      visitor_ip: geo.ip,
+      visitor_device: device,
+      visitor_os: os,
+      visitor_browser: browser,
+      visitor_country: geo.country,
+      visitor_city: geo.city,
+    });
+  } catch {
+    // analytics failures must never break the UI
   }
 }
