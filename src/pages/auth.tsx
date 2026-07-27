@@ -1,15 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Leaf, Eye, EyeOff, Mail, Lock, User, Check, ArrowRight } from "lucide-react";
+import { Leaf, Eye, EyeOff, Mail, Lock, User, ArrowUpRight } from "lucide-react";
 import { Link, useLocation } from "wouter";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { supabase } from "@/lib/supabase";
 import leavesImg from "@assets/generated_images/hero_leaves_2.jpg";
-import { useEffect } from "react";
 
 export default function Auth() {
   const [isLogin, setIsLogin] = useState(true);
@@ -60,137 +56,113 @@ export default function Auth() {
             user_name: fullName.trim()
           });
 
-        if (dbError) console.error("Error saving user details to DB:", dbError);
-        toast({ title: "Account created", description: "Please check your email to confirm your account." });
+        if (dbError) {
+          console.warn("User profile details note:", dbError.message);
+        }
+
+        toast({
+          title: "Account created",
+          description: "Check your email if confirmation is enabled, or log in.",
+        });
       }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Authentication failed. Please try again.";
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Authentication failed.";
       setFormError(message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleForgotPassword = async () => {
-    if (!email.trim()) {
-      setFormError("Enter your email address first.");
-      return;
-    }
-
-    setLoading(true);
-    setFormError("");
-
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: `${window.location.origin}/auth`,
-    });
-
-    setLoading(false);
-
-    if (error) {
-      setFormError(error.message);
-      return;
-    }
-
-    toast({ title: "Reset email sent", description: "Check your inbox for password reset instructions." });
-  };
-
-  const switchMode = (nextIsLogin: boolean) => {
-    setIsLogin(nextIsLogin);
+  const switchMode = (loginState: boolean) => {
+    setIsLogin(loginState);
     setFormError("");
   };
 
   return (
-    <div className="min-h-[100dvh] flex bg-background text-foreground selection:bg-primary/20 overflow-hidden">
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-primary items-center justify-center p-12">
+    <div className="min-h-[100dvh] w-full flex bg-[#0E0E0E] text-white selection:bg-white selection:text-black relative overflow-hidden">
+      {/* ── Left Ambient Artwork Column (Desktop) ── */}
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden flex-col justify-between p-12 lg:p-16 border-r border-white/10">
         <div className="absolute inset-0 z-0">
           <img
             src={leavesImg}
             alt="Moringa Leaves"
-            className="w-full h-full object-cover opacity-30 scale-105 filter blur-[2px]"
+            className="w-full h-full object-cover opacity-40 scale-105"
           />
-          <div className="absolute inset-0 bg-gradient-to-tr from-primary via-primary/95 to-transparent mix-blend-multiply" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.08)_0,transparent_60%)]" />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#0E0E0E] via-[#0E0E0E]/60 to-transparent" />
         </div>
 
-        <div className="relative z-10 max-w-lg w-full space-y-12">
+        <div className="relative z-10">
           <Link href="/">
-            <div className="inline-flex items-center gap-3 cursor-pointer group">
-              <div className="w-12 h-12 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 transition-transform duration-500 group-hover:rotate-12">
-                <Leaf className="w-6 h-6 text-secondary" strokeWidth={1.5} />
+            <div className="inline-flex items-center gap-2 cursor-pointer">
+              <div className="w-9 h-9 rounded-full bg-emerald-700 flex items-center justify-center">
+                <Leaf className="w-5 h-5 text-white" />
               </div>
-              <span className="font-serif text-2xl text-white tracking-wide">Earthora Farms</span>
+              <span className="font-dm font-medium text-2xl tracking-[-0.05em] text-white">
+                Earthora
+              </span>
             </div>
           </Link>
+        </div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
+        <div className="relative z-10 max-w-lg">
+          <motion.h2
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-            className="bg-white/10 backdrop-blur-md rounded-2xl p-8 border border-white/10 shadow-2xl relative overflow-hidden group"
+            transition={{ duration: 0.8 }}
+            className="font-dm font-normal text-4xl lg:text-5xl text-white tracking-[-0.04em] leading-tight mb-4"
           >
-            <div className="absolute top-0 right-0 w-24 h-24 bg-white/5 rounded-full blur-xl pointer-events-none" />
-            <h2 className="text-3xl font-serif text-white leading-snug mb-6">
-              Empowering wellness, <br />
-              <span className="text-secondary italic">directly from our roots.</span>
-            </h2>
-            <div className="space-y-4 text-white/80 font-light text-sm">
-              {[
-                "100% Pure, Organic Moringa Wellness",
-                "Directly sourced from solar-powered farms",
-                "Eco-friendly, sustainable processing methods",
-              ].map((item) => (
-                <div key={item} className="flex items-center gap-3">
-                  <div className="w-5 h-5 rounded-full bg-secondary/20 flex items-center justify-center text-secondary">
-                    <Check className="w-3 h-3" />
-                  </div>
-                  <span>{item}</span>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-
-          <p className="text-white/40 text-xs font-light tracking-wider uppercase">
-            (c) 2026 Earthora Farms PVT LTD. All rights reserved.
+            The ancient tree of life. <br />
+            <span className="text-white/40">Reimagined for you.</span>
+          </motion.h2>
+          <p className="font-inter font-normal text-base text-white/60 leading-relaxed">
+            Create an account to track your botanical orders, save favorite wellness products, and receive exclusive harvest updates.
           </p>
+        </div>
+
+        <div className="relative z-10 font-inter text-xs text-white/30">
+          © {new Date().getFullYear()} Earthora Farms Pvt. Ltd. All rights reserved.
         </div>
       </div>
 
-      <div className="w-full lg:w-1/2 flex flex-col justify-between py-12 px-6 sm:px-12 md:px-20 lg:px-16 xl:px-24 bg-card/40 backdrop-blur-sm border-l border-border/10 relative">
-        <div className="flex items-center justify-between lg:justify-end w-full">
+      {/* ── Right Form Column ── */}
+      <div className="w-full lg:w-1/2 flex flex-col justify-between p-6 sm:p-12 lg:p-16 bg-[#FAF9F5] text-black">
+        <div className="flex items-center justify-between w-full">
           <Link href="/">
             <div className="inline-flex items-center gap-2 cursor-pointer lg:hidden">
-              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                <Leaf className="w-4.5 h-4.5 text-primary" strokeWidth={1.5} />
+              <div className="w-8 h-8 rounded-full bg-emerald-700 flex items-center justify-center">
+                <Leaf className="w-4 h-4 text-white" />
               </div>
-              <span className="font-serif text-lg text-foreground tracking-wide">Earthora</span>
+              <span className="font-dm font-medium text-xl text-black">Earthora</span>
             </div>
           </Link>
-          <Link href="/">
-            <span className="inline-flex items-center gap-1.5 text-sm text-foreground/50 hover:text-primary transition-colors cursor-pointer font-medium">
-              Go to Home Page
-              <ArrowRight className="w-3.5 h-3.5" />
+
+          <Link href="/" className="ml-auto">
+            <span className="inline-flex items-center gap-1 font-inter text-sm font-medium text-black/60 hover:text-black transition-colors cursor-pointer">
+              <span>Return Home</span>
+              <ArrowUpRight className="w-4 h-4" />
             </span>
           </Link>
         </div>
 
-        <div className="my-auto max-w-md w-full mx-auto py-12">
+        <div className="my-auto max-w-md w-full mx-auto py-8">
           <div className="mb-8">
-            <h1 className="text-4xl font-serif text-foreground mb-3 tracking-tight">
+            <h1 className="font-dm font-normal text-4xl text-black tracking-[-0.04em] mb-2">
               {isLogin ? "Welcome back" : "Create account"}
             </h1>
-            <p className="text-foreground/50 font-light text-sm">
+            <p className="font-inter text-sm text-black/60">
               {isLogin
                 ? "Sign in to manage orders and explore your wellness journey."
                 : "Join the community and harvest the pure energy of Moringa."}
             </p>
           </div>
 
-          <div className="bg-muted/70 rounded-xl p-1 mb-8 flex border border-border/20">
+          {/* Toggle pill */}
+          <div className="bg-[#ECEDEC] rounded-xl p-1 mb-8 flex border border-black/5">
             <button
               type="button"
               onClick={() => switchMode(true)}
-              className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
-                isLogin ? "bg-card text-foreground shadow-sm" : "text-foreground/50 hover:text-foreground"
+              className={`flex-1 py-2.5 font-inter text-sm font-medium rounded-lg transition-all ${
+                isLogin ? "bg-[#FEFDF9] text-black shadow-sm" : "text-black/50 hover:text-black"
               }`}
             >
               Log In
@@ -198,124 +170,106 @@ export default function Auth() {
             <button
               type="button"
               onClick={() => switchMode(false)}
-              className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 ${
-                !isLogin ? "bg-card text-foreground shadow-sm" : "text-foreground/50 hover:text-foreground"
+              className={`flex-1 py-2.5 font-inter text-sm font-medium rounded-lg transition-all ${
+                !isLogin ? "bg-[#FEFDF9] text-black shadow-sm" : "text-black/50 hover:text-black"
               }`}
             >
               Sign Up
             </button>
           </div>
 
+          {formError && (
+            <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 font-inter text-sm">
+              {formError}
+            </div>
+          )}
+
           <AnimatePresence mode="wait">
             <motion.form
               key={isLogin ? "login" : "signup"}
-              initial={{ opacity: 0, x: isLogin ? -10 : 10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: isLogin ? 10 : -10 }}
-              transition={{ duration: 0.25, ease: "easeInOut" }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
               onSubmit={handleSubmit}
               className="space-y-5"
             >
               {!isLogin && (
-                <div className="space-y-2">
-                  <Label htmlFor="fullName">Full Name</Label>
+                <div>
+                  <label className="font-inter text-xs uppercase tracking-wider text-black/60 font-medium block mb-2">
+                    Full Name
+                  </label>
                   <div className="relative">
-                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/30" strokeWidth={1.5} />
-                    <Input
-                      id="fullName"
+                    <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-black/30" />
+                    <input
+                      type="text"
+                      required
                       placeholder="Jane Doe"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
-                      autoComplete="name"
-                      className="h-12 pl-11 bg-background/50 border-border/50 focus-visible:ring-primary/20"
+                      className="w-full bg-[#F4F3EE] border border-black/10 rounded-xl pl-11 pr-4 py-3 font-inter text-sm text-black placeholder:text-black/30 focus:outline-none focus:border-black/30 transition-colors"
                     />
                   </div>
                 </div>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="authEmail">Email Address</Label>
+              <div>
+                <label className="font-inter text-xs uppercase tracking-wider text-black/60 font-medium block mb-2">
+                  Email Address
+                </label>
                 <div className="relative">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/30" strokeWidth={1.5} />
-                  <Input
-                    id="authEmail"
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-black/30" />
+                  <input
                     type="email"
+                    required
                     placeholder="jane@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    autoComplete="email"
-                    className="h-12 pl-11 bg-background/50 border-border/50 focus-visible:ring-primary/20"
+                    className="w-full bg-[#F4F3EE] border border-black/10 rounded-xl pl-11 pr-4 py-3 font-inter text-sm text-black placeholder:text-black/30 focus:outline-none focus:border-black/30 transition-colors"
                   />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <Label htmlFor="authPassword">Password</Label>
-                  {isLogin && (
-                    <button
-                      type="button"
-                      onClick={handleForgotPassword}
-                      className="text-xs text-primary hover:text-accent font-medium transition-colors"
-                    >
-                      Forgot password?
-                    </button>
-                  )}
-                </div>
+              <div>
+                <label className="font-inter text-xs uppercase tracking-wider text-black/60 font-medium block mb-2">
+                  Password
+                </label>
                 <div className="relative">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-foreground/30" strokeWidth={1.5} />
-                  <Input
-                    id="authPassword"
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-black/30" />
+                  <input
                     type={showPassword ? "text" : "password"}
-                    placeholder="********"
+                    required
+                    minLength={6}
+                    placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    autoComplete={isLogin ? "current-password" : "new-password"}
-                    className="h-12 pl-11 pr-11 bg-background/50 border-border/50 focus-visible:ring-primary/20"
+                    className="w-full bg-[#F4F3EE] border border-black/10 rounded-xl pl-11 pr-12 py-3 font-inter text-sm text-black placeholder:text-black/30 focus:outline-none focus:border-black/30 transition-colors"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-foreground/30 hover:text-foreground/60 transition-colors"
-                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-black/30 hover:text-black"
                   >
-                    {showPassword ? <EyeOff className="w-4.5 h-4.5" /> : <Eye className="w-4.5 h-4.5" />}
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
 
-              {formError && (
-                <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-medium text-red-700">
-                  {formError}
-                </p>
-              )}
-
-              <Button
+              <button
                 type="submit"
-                disabled={loading || !email.trim() || !password || (!isLogin && !fullName.trim())}
-                className="w-full h-12 text-base shadow-sm hover:shadow transition-all duration-300 mt-2"
+                disabled={loading}
+                className="w-full bg-black text-white py-4 rounded-xl font-inter font-medium text-base hover:bg-black/85 transition-colors shadow-lg flex items-center justify-center gap-2 group disabled:opacity-50 mt-4"
               >
-                {loading ? "Please wait..." : isLogin ? "Sign In" : "Register"}
-              </Button>
+                <span>{loading ? "Processing..." : isLogin ? "Log In" : "Create Account"}</span>
+                <ArrowUpRight className="w-4 h-4 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+              </button>
             </motion.form>
           </AnimatePresence>
-
-          <div className="mt-8 pt-6 border-t border-border/40">
-            <p className="text-xs text-center text-foreground/40 font-light leading-relaxed">
-              By continuing, you agree to our{" "}
-              <a href="#" className="text-primary/80 hover:text-accent font-medium transition-colors">Terms of Service</a>{" "}
-              and{" "}
-              <a href="#" className="text-primary/80 hover:text-accent font-medium transition-colors">Privacy Policy</a>.
-            </p>
-          </div>
         </div>
 
-        <div className="text-center lg:hidden">
-          <p className="text-[10px] text-foreground/30 font-light">
-            (c) 2026 Earthora Farms PVT LTD.
-          </p>
+        <div className="text-center font-inter text-xs text-black/40">
+          By signing in, you agree to our Terms of Use and Privacy Policy.
         </div>
-        <div className="hidden lg:block" />
       </div>
     </div>
   );

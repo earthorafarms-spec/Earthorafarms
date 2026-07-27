@@ -1,6 +1,5 @@
 import { supabase } from './supabase';
 
-let lastPage = '';
 let geoCache: { ip: string; country: string; city: string } | null = null;
 
 function parseUA(ua: string) {
@@ -35,8 +34,8 @@ async function getGeo() {
 }
 
 export async function trackPageView(pageName: string) {
-  if (pageName === lastPage) return;
-  lastPage = pageName;
+  if (sessionStorage.getItem('earthora_session_tracked')) return;
+  sessionStorage.setItem('earthora_session_tracked', '1');
 
   try {
     const geo = await getGeo();

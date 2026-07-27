@@ -5,6 +5,18 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 
+import powderImg from "@assets/generated_images/product_powder.jpg";
+import tabletsImg from "@assets/generated_images/product_tablets.jpg";
+import capsulesImg from "@assets/generated_images/product_capsules.jpg";
+import heroLeavesImg from "@assets/generated_images/hero_leaves.jpg";
+
+const staticFallbackMap: Record<string, string> = {
+  powder: powderImg,
+  tablets: tabletsImg,
+  capsules: capsulesImg,
+  amla: heroLeavesImg,
+};
+
 interface ProductImage {
   url: string;
   alt: string;
@@ -428,17 +440,30 @@ export default function AdminProducts() {
                   className="bg-white rounded-2xl border border-border/40 overflow-hidden shadow-sm hover:shadow-[0_8px_30px_rgb(0,0,0,0.03)] hover:border-primary/20 transition-all duration-300 flex flex-col group/prod"
                 >
                   <div className="relative aspect-square bg-[#fafaf8] flex items-center justify-center border-b border-border/20 group-hover/prod:bg-primary/[0.02] transition-colors duration-300 overflow-hidden">
-                    {p.images && p.images.length > 0 ? (
-                      <img 
-                        src={p.images.find((img) => img.is_primary)?.url || p.images[0].url} 
-                        alt={p.images.find((img) => img.is_primary)?.alt || p.name} 
-                        className="object-cover w-full h-full transition-transform duration-500 group-hover/prod:scale-105" 
-                      />
-                    ) : (
-                      <div className="w-16 h-16 rounded-2xl bg-white flex items-center justify-center shadow-sm border border-border/10">
-                        <Package className="w-8 h-8 text-primary" strokeWidth={1.5} />
-                      </div>
-                    )}
+                    {(() => {
+                      const rawUrl = p.images?.find((img) => img.is_primary)?.url || p.images?.[0]?.url;
+                      const hasValidUrl = rawUrl && !rawUrl.includes("undefined") && rawUrl.startsWith("http");
+                      
+                      let displaySrc = hasValidUrl ? rawUrl : null;
+                      if (!displaySrc) {
+                        const slug = p.name.toLowerCase();
+                        if (slug.includes("amla")) displaySrc = staticFallbackMap.amla;
+                        else if (slug.includes("tablets")) displaySrc = staticFallbackMap.tablets;
+                        else if (slug.includes("capsules")) displaySrc = staticFallbackMap.capsules;
+                        else displaySrc = staticFallbackMap.powder;
+                      }
+
+                      return (
+                        <img 
+                          src={displaySrc} 
+                          alt={p.name} 
+                          className="object-cover w-full h-full transition-transform duration-500 group-hover/prod:scale-105" 
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = staticFallbackMap.powder;
+                          }}
+                        />
+                      );
+                    })()}
                     <span className="absolute top-4 right-4 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-green-50/90 text-green-700 border border-green-200 backdrop-blur-sm">Active</span>
                   </div>
                   <div className="p-5 flex flex-col flex-1">

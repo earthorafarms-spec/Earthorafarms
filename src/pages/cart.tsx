@@ -1,9 +1,8 @@
 import { motion } from "framer-motion";
 import { Link } from "wouter";
-import { Trash2, Minus, Plus, ShoppingBag, ArrowLeft } from "lucide-react";
+import { Trash2, Minus, Plus, ShoppingBag, ArrowUpRight } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-import { Button } from "@/components/ui/button";
 import { useCart } from "@/contexts/cart-context";
 
 export default function Cart() {
@@ -13,36 +12,31 @@ export default function Cart() {
 
   if (items.length === 0) {
     return (
-      <div className="min-h-[100dvh] flex flex-col bg-background text-foreground">
+      <div className="min-h-[100dvh] flex flex-col bg-[#FAF9F5] text-black selection:bg-black/10">
         <Navbar />
         
         {/* Header Hero */}
-        <section className="relative pt-40 pb-16 overflow-hidden bg-primary">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.05)_0,transparent_70%)]" />
-          <div className="container mx-auto px-6 max-w-7xl relative z-10">
-            <div className="max-w-3xl">
-              <motion.h1
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
-                className="text-4xl md:text-6xl font-serif text-primary-foreground leading-[1.1] tracking-tight"
-              >
-                Your cart is empty.
-              </motion.h1>
+        <section className="relative pt-36 pb-20 lg:pt-44 lg:pb-24 overflow-hidden bg-[#0E0E0E] text-white">
+          <div className="container mx-auto px-6 sm:px-10 max-w-[1400px] relative z-10 text-center">
+            <div className="w-16 h-16 rounded-full bg-white/10 text-amber-300 flex items-center justify-center mx-auto mb-6">
+              <ShoppingBag className="w-8 h-8" />
             </div>
-          </div>
-        </section>
-
-        {/* Content Body */}
-        <section className="flex-1 flex items-center justify-center py-20 bg-background">
-          <div className="text-center max-w-md px-6 mx-auto">
-            <ShoppingBag className="w-16 h-16 text-border mx-auto mb-6" strokeWidth={1} />
-            <h2 className="text-3xl font-serif text-foreground mb-3">Time to find your ritual</h2>
-            <p className="text-foreground/75 font-light mb-8 leading-relaxed">
-              Looks like you haven't added anything yet. Browse our premium moringa collection to get started.
+            <motion.h1
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="font-dm font-normal tracking-[-0.05em] text-[40px] leading-[44px] sm:text-[60px] sm:leading-[56px] text-white mb-4"
+            >
+              Your cart is empty.
+            </motion.h1>
+            <p className="font-inter text-base text-white/60 mb-8 max-w-md mx-auto">
+              Looks like you haven't added anything yet. Explore our botanical collection to find your daily ritual.
             </p>
-            <Link href="/our-product">
-              <Button size="lg" className="h-14 px-8 text-base">Shop Our Collection</Button>
+            <Link
+              href="/products"
+              className="inline-flex items-center gap-2 bg-white text-black px-8 py-4 rounded-xl font-inter font-medium text-base hover:bg-white/90 transition-colors shadow-xl"
+            >
+              <span>Shop Collection</span>
+              <ArrowUpRight className="w-5 h-5" />
             </Link>
           </div>
         </section>
@@ -53,107 +47,140 @@ export default function Cart() {
   }
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-background text-foreground selection:bg-primary/20">
+    <div className="min-h-[100dvh] flex flex-col bg-[#FAF9F5] text-black selection:bg-black/10">
       <Navbar />
 
-      <section className="relative pt-40 pb-16 overflow-hidden bg-primary">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.05)_0,transparent_70%)]" />
-        <div className="container mx-auto px-6 max-w-7xl relative z-10">
-          <div className="max-w-3xl">
-            <motion.h1
+      {/* ── Hero / Header ── */}
+      <section className="relative pt-36 pb-16 lg:pt-44 lg:pb-20 overflow-hidden bg-[#0E0E0E] text-white">
+        <div className="container mx-auto px-6 sm:px-10 max-w-[1400px] relative z-10">
+          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
+            <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
-              className="text-4xl md:text-6xl font-serif text-primary-foreground leading-[1.1] tracking-tight mb-4"
+              transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
             >
-              Your cart.
-              <br />
-              <span className="text-secondary/90 italic">{cartCount} item{cartCount !== 1 ? "s" : ""}</span>
-            </motion.h1>
+              <div className="mb-4 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/15 font-dm font-medium text-xs sm:text-sm text-white/80 tracking-[0.05em] uppercase">
+                <ShoppingBag className="w-3.5 h-3.5 text-amber-300" />
+                <span>Your Cart</span>
+              </div>
+              <h1 className="font-dm font-normal tracking-[-0.05em] text-[44px] leading-[46px] sm:text-[68px] sm:leading-[64px] text-white">
+                Review Your Order.
+              </h1>
+            </motion.div>
+
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.2 }}
+              className="font-inter font-normal text-base text-white/55 max-w-[340px]"
+            >
+              {cartCount} {cartCount === 1 ? 'item' : 'items'} in your cart. Free shipping applies at checkout.
+            </motion.p>
           </div>
         </div>
       </section>
 
-      <section className="py-16 bg-background">
-        <div className="container mx-auto px-6 max-w-5xl">
-          <div className="flex flex-col lg:flex-row gap-10">
-            <div className="flex-1 space-y-4">
-              {items.map((item) => (
-                <motion.div
-                  key={item.id}
-                  layout
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex gap-5 bg-card rounded-xl p-5 border border-border/50"
+      {/* ── Main Cart Section ── */}
+      <section className="flex-1 py-16 lg:py-24">
+        <div className="container mx-auto px-6 sm:px-10 max-w-[1400px]">
+          <div className="grid lg:grid-cols-12 gap-12 lg:gap-16 items-start">
+            {/* Cart Items List */}
+            <div className="lg:col-span-8 space-y-4">
+              <div className="flex items-center justify-between pb-4 border-b border-black/10 font-inter text-xs text-black/40 uppercase tracking-wider font-medium">
+                <span>Product</span>
+                <button
+                  onClick={clearCart}
+                  className="hover:text-black transition-colors"
                 >
-                  <div className="w-24 h-24 rounded-xl bg-white border border-border/30 flex items-center justify-center p-3 shrink-0">
-                    {item.image ? (
+                  Clear Cart
+                </button>
+              </div>
+
+              {items.map((item) => (
+                <div
+                  key={item.id}
+                  className="bg-[#FEFDF9] rounded-2xl p-4 sm:p-6 border border-black/5 flex flex-col sm:flex-row sm:items-center justify-between gap-6 shadow-sm"
+                >
+                  <div className="flex items-center gap-5">
+                    <div className="w-20 h-20 rounded-xl bg-[#ECEDEC] overflow-hidden shrink-0 flex items-center justify-center p-2">
                       <img src={item.image} alt={item.name} className="w-full h-full object-contain" />
-                    ) : (
-                      <span className="text-2xl">🌿</span>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-sm font-medium text-foreground truncate">{item.name}</h3>
-                    <p className="text-lg font-bold text-foreground mt-1">₹{(item.price * item.quantity).toFixed(2)}</p>
-                    <div className="flex items-center gap-3 mt-3">
-                      <div className="flex items-center border border-border/60 rounded-lg">
-                        <button
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                          className="p-1.5 hover:bg-muted transition-colors rounded-l-lg"
-                        >
-                          <Minus className="w-3.5 h-3.5 text-foreground/60" />
-                        </button>
-                        <span className="w-8 text-center text-sm font-medium text-foreground">{item.quantity}</span>
-                        <button
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                          className="p-1.5 hover:bg-muted transition-colors rounded-r-lg"
-                        >
-                          <Plus className="w-3.5 h-3.5 text-foreground/60" />
-                        </button>
-                      </div>
-                      <button
-                        onClick={() => removeFromCart(item.id)}
-                        className="p-1.5 text-foreground/30 hover:text-red-500 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" strokeWidth={1.5} />
-                      </button>
+                    </div>
+                    <div>
+                      <h3 className="font-dm font-normal text-xl text-black tracking-[-0.02em] mb-1">
+                        {item.name}
+                      </h3>
+                      <span className="font-dm text-lg text-black font-normal">
+                        ₹{item.price.toFixed(0)}
+                      </span>
                     </div>
                   </div>
-                </motion.div>
+
+                  <div className="flex items-center justify-between sm:justify-end gap-6 pt-4 sm:pt-0 border-t sm:border-t-0 border-black/5">
+                    <div className="flex items-center border border-black/15 rounded-xl bg-[#FAF9F5] p-1">
+                      <button
+                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-black/60 hover:text-black hover:bg-black/5 transition-colors"
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="w-10 text-center font-inter text-sm font-medium">
+                        {item.quantity}
+                      </span>
+                      <button
+                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-black/60 hover:text-black hover:bg-black/5 transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <span className="font-dm text-xl text-black font-normal min-w-[80px] text-right">
+                      ₹{(item.price * item.quantity).toFixed(0)}
+                    </span>
+
+                    <button
+                      onClick={() => removeFromCart(item.id)}
+                      className="p-2 text-black/30 hover:text-rose-600 transition-colors"
+                      title="Remove item"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
               ))}
-              <button onClick={clearCart} className="text-xs text-foreground/30 hover:text-foreground/60 transition-colors">
-                Clear cart
-              </button>
             </div>
 
-            <div className="lg:w-80">
-              <div className="bg-card rounded-xl p-6 border border-border/50 sticky top-28">
-                <h3 className="text-sm font-semibold text-foreground mb-4">Order Summary</h3>
-                <div className="space-y-2 text-sm mb-4">
-                  <div className="flex justify-between text-foreground/60">
+            {/* Order Summary Sidebar */}
+            <div className="lg:col-span-4">
+              <div className="bg-[#FEFDF9] rounded-3xl p-8 border border-black/5 shadow-xl sticky top-28">
+                <h3 className="font-dm font-normal text-2xl text-black tracking-[-0.03em] mb-6">
+                  Order Summary
+                </h3>
+
+                <div className="space-y-4 font-inter text-sm mb-6 pb-6 border-b border-black/8">
+                  <div className="flex justify-between text-black/60">
                     <span>Subtotal</span>
-                    <span>₹{subtotal.toFixed(2)}</span>
+                    <span className="text-black font-medium">₹{subtotal.toFixed(0)}</span>
                   </div>
-                  <div className="flex justify-between text-foreground/60">
+                  <div className="flex justify-between text-black/60">
                     <span>Shipping</span>
-                    <span className="text-green-700">FREE</span>
+                    <span className="text-emerald-700 font-medium">Free</span>
                   </div>
                 </div>
-                <div className="border-t border-border/40 pt-4 mb-6">
-                  <div className="flex justify-between text-base font-semibold text-foreground">
-                    <span>Total</span>
-                    <span>₹{subtotal.toFixed(2)}</span>
-                  </div>
-                </div>
-                <Link href="/checkout">
-                  <Button className="w-full h-12 text-sm mb-3">Proceed to Checkout</Button>
-                </Link>
-                <Link href="/our-product">
-                  <span className="flex items-center justify-center gap-1.5 text-xs text-foreground/40 hover:text-foreground/70 transition-colors cursor-pointer">
-                    <ArrowLeft className="w-3.5 h-3.5" />
-                    Continue Shopping
+
+                <div className="flex justify-between items-baseline mb-8">
+                  <span className="font-dm text-xl text-black font-medium">Total</span>
+                  <span className="font-dm text-3xl text-black font-normal tracking-[-0.03em]">
+                    ₹{subtotal.toFixed(0)}
                   </span>
+                </div>
+
+                <Link
+                  href="/checkout"
+                  className="w-full bg-black text-white py-4 rounded-xl font-inter font-medium text-base hover:bg-black/85 transition-colors shadow-lg flex items-center justify-center gap-2 group"
+                >
+                  <span>Proceed to Checkout</span>
+                  <ArrowUpRight className="w-5 h-5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
                 </Link>
               </div>
             </div>

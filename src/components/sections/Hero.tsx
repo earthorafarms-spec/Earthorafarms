@@ -1,55 +1,107 @@
-import { motion, useScroll, useTransform } from "framer-motion";
-import { useRef } from "react";
-import heroBg from "@assets/generated_images/hero_leaves.jpg";
+import { ArrowUpRight } from "lucide-react";
+import terraHeroBg from "@assets/generated_images/terra_hero_bg.webp";
+import terraCapsule from "@assets/generated_images/terra_capsule.png";
+import terraBottle from "@assets/generated_images/terra_bottle.png";
+
+const BG_IMAGE_URL = terraHeroBg;
+const INLINE_CAPSULE_URL = terraCapsule;
+const PRODUCT_BOTTLE_URL = terraBottle;
 
 export function Hero() {
-  const ref = useRef(null);
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start start", "end start"]
-  });
-
-  const y = useTransform(scrollYProgress, [0, 1], ["0%", "40%"]);
-  const opacity = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
-
   return (
-    <section ref={ref} className="relative h-[100dvh] flex items-center justify-center overflow-hidden bg-primary">
-      <motion.div style={{ y, opacity }} className="absolute inset-0 z-0 scale-105">
-        <div className="absolute inset-0 bg-black/40 z-10 mix-blend-multiply" />
-        <img src={heroBg} alt="Vibrant sunlit moringa leaves" className="w-full h-full object-cover" />
-      </motion.div>
+    <div
+      className="min-h-screen flex flex-col relative overflow-hidden bg-cover bg-center bg-no-repeat selection:bg-white selection:text-black pt-24 sm:pt-28 lg:pt-32"
+      style={{ backgroundImage: `url("${BG_IMAGE_URL}")` }}
+    >
+      {/* ── Hero Content Section ── */}
+      <section className="flex-1 flex flex-col justify-center px-5 sm:px-8 lg:px-10 pt-4 sm:pt-8 pb-8 sm:pb-12 z-10">
+        <div className="max-w-[1400px]">
+          {/* Animated Headline */}
+          <h1 className="font-dm font-normal tracking-[-0.05em] text-[36px] leading-[40px] xs:text-[42px] xs:leading-[44px] sm:text-[70px] sm:leading-[68px] md:text-[95px] md:leading-[88px] lg:text-[120px] lg:leading-[105px] xl:text-[145px] xl:leading-[120px]">
+            {/* Line 1 */}
+            <div className="flex flex-wrap items-baseline gap-x-[0.2em]">
+              <span className="overflow-hidden inline-block animate-word-reveal delay-300">
+                <span className="inline-block text-white">The</span>
+              </span>
+              <span className="overflow-hidden inline-block animate-word-reveal delay-400">
+                <span className="inline-block text-white">Power</span>
+              </span>
+              <span className="overflow-hidden inline-block animate-word-reveal delay-500">
+                <span className="inline-block text-white/50">of</span>
+              </span>
+            </div>
 
-      <div className="relative z-10 text-center px-6 max-w-5xl mx-auto flex flex-col items-center mt-16">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
-          className="mb-6 inline-flex items-center rounded-full border border-primary-foreground/30 bg-primary-foreground/10 px-4 py-1.5 text-sm text-primary-foreground backdrop-blur-md"
-        >
-          Pure. Potent. Alive.
-        </motion.div>
+            {/* Line 2 */}
+            <div className="flex flex-wrap items-baseline gap-x-[0.2em]">
+              <span className="overflow-hidden inline-block animate-word-reveal delay-600">
+                <span className="inline-block text-white/50">Nature</span>
+              </span>
+              <span className="overflow-hidden inline-block animate-word-reveal delay-700">
+                <span className="inline-block text-white/50">in</span>
+              </span>
+              <span className="overflow-hidden inline-block animate-word-reveal delay-800">
+                <span className="inline-block text-white">Every</span>
+              </span>
+            </div>
 
-        <motion.h1
-          initial={{ opacity: 0, y: 40 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1], delay: 0.4 }}
-          className="text-5xl md:text-7xl lg:text-8xl font-serif font-medium text-primary-foreground leading-[1.1] tracking-tight mb-6"
-        >
-          The Ancient Tree of Life.
-          <br />
-          <span className="text-secondary/90 italic">Reimagined for Today.</span>
-        </motion.h1>
+            {/* Line 3 with inline capsule image */}
+            <div className="flex items-center gap-x-[0.2em] flex-wrap">
+              <span className="overflow-hidden inline-block animate-word-reveal delay-900">
+                <span className="inline-block text-white">Capsule</span>
+              </span>
+              <img
+                src={INLINE_CAPSULE_URL}
+                alt="TerraElix Capsule"
+                className="inline-block align-middle ml-2 lg:ml-4 object-contain animate-scale-in delay-1000"
+                style={{
+                  height: "clamp(36px, 7vw, 140px)",
+                  width: "auto",
+                }}
+              />
+            </div>
+          </h1>
 
-        <motion.p
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1, ease: [0.16, 1, 0.3, 1], delay: 0.6 }}
-          className="text-lg md:text-xl text-primary-foreground/80 max-w-2xl mb-10 font-light"
-        >
-          Experience the unmatched vitality of nature's most nutrient-dense botanical. Grown in the sun, crafted for your daily ritual.
-        </motion.p>
+          {/* CTA Section */}
+          <div className="mt-6 sm:mt-10 lg:mt-[60px] flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-8 lg:gap-[50px] animate-fade-up delay-600">
+            <button
+              type="button"
+              className="bg-black text-white rounded-md w-full sm:w-[240px] md:w-[280px] lg:w-[310px] h-12 sm:h-16 lg:h-[72px] font-inter font-medium text-sm sm:text-lg lg:text-2xl tracking-[-0.03em] flex items-center justify-center gap-2 hover:bg-black/90 transition-all duration-300 shadow-xl group shrink-0"
+            >
+              <span>Explore Now</span>
+              <ArrowUpRight
+                size={20}
+                className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"
+              />
+            </button>
+            <p className="text-white/90 max-w-[310px] font-inter font-normal text-xs sm:text-base lg:text-lg leading-[1.45] tracking-[-0.02em]">
+              Discover our new plant-based supplements for daily balance and
+              clean energy.
+            </p>
+          </div>
+        </div>
+      </section>
 
+      {/* ── Mobile/Tablet Oversized Bleeding Product Image (visible below lg) ── */}
+      <div className="block lg:hidden relative z-0 animate-scale-in delay-800 mt-4 sm:mt-8 px-4 flex justify-end">
+        <img
+          src={PRODUCT_BOTTLE_URL}
+          alt="TerraElix Supplement Bottle"
+          className="w-[85%] max-w-[340px] sm:max-w-[480px] object-contain drop-shadow-2xl translate-x-4"
+        />
       </div>
-    </section>
+
+      {/* ── Desktop Floating Product Image (lg+ absolute) ── */}
+      <img
+        src={PRODUCT_BOTTLE_URL}
+        alt="TerraElix Supplement Bottle Floating"
+        className="hidden lg:block absolute z-0 animate-scale-in delay-700 pointer-events-none drop-shadow-2xl"
+        style={{
+          width: "clamp(500px, 60vw, 1100px)",
+          height: "auto",
+          bottom: "-22%",
+          right: "clamp(-200px, -10vw, 0px)",
+        }}
+      />
+    </div>
   );
 }

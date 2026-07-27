@@ -5,12 +5,13 @@ import {
   LayoutDashboard, Activity, FileText, Settings, LogOut, Terminal, Code2, Menu, X
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Tooltip } from "@/components/ui/tooltip";
 
 const navItems = [
-  { id: "dashboard", label: "Dashboard",   icon: LayoutDashboard, path: "/codex/dashboard" },
-  { id: "analytics", label: "Analytics",   icon: Activity,        path: "/codex/analytics" },
-  { id: "reports",   label: "Reports",     icon: FileText,        path: "/codex/reports" },
-  { id: "settings",  label: "Settings",    icon: Settings,        path: "/codex/settings" },
+  { id: "dashboard", label: "Dashboard",   icon: LayoutDashboard, path: "/codex/dashboard", hint: "System health & overview" },
+  { id: "analytics", label: "Analytics",   icon: Activity,        path: "/codex/analytics", hint: "Performance logs & API traces" },
+  { id: "reports",   label: "Reports",     icon: FileText,        path: "/codex/reports", hint: "Automated test & coverage reports" },
+  { id: "settings",  label: "Settings",    icon: Settings,        path: "/codex/settings", hint: "Codex environment configuration" },
 ];
 
 export default function CodexLayout({ children }: { children: React.ReactNode }) {
@@ -38,28 +39,29 @@ export default function CodexLayout({ children }: { children: React.ReactNode })
         {navItems.map((item) => {
           const isActive = activeTab === item.id;
           return (
-            <button
-              key={item.id}
-              onClick={() => {
-                setLocation(item.path);
-                setMobileMenuOpen(false);
-              }}
-              className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 relative group font-mono ${
-                isActive
-                  ? "text-primary bg-[#fafaf8] shadow-md"
-                  : "text-white/70 hover:text-white hover:bg-white/5"
-              }`}
-            >
-              {isActive && (
-                <motion.span
-                  layoutId="activeBarCodex"
-                  className="absolute left-0 top-1/4 bottom-1/4 w-1 rounded-r-full bg-primary"
-                  transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                />
-              )}
-              <item.icon className={`w-[18px] h-[18px] transition-transform duration-300 group-hover:scale-110 ${isActive ? "text-primary" : "text-white/60"}`} strokeWidth={1.75} />
-              <span>{item.label}</span>
-            </button>
+            <Tooltip key={item.id} content={item.hint} side="right">
+              <button
+                onClick={() => {
+                  setLocation(item.path);
+                  setMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 relative group font-mono ${
+                  isActive
+                    ? "text-primary bg-[#fafaf8] shadow-md"
+                    : "text-white/70 hover:text-white hover:bg-white/5"
+                }`}
+              >
+                {isActive && (
+                  <motion.span
+                    layoutId="activeBarCodex"
+                    className="absolute left-0 top-1/4 bottom-1/4 w-1 rounded-r-full bg-primary"
+                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                  />
+                )}
+                <item.icon className={`w-[18px] h-[18px] transition-transform duration-300 group-hover:scale-110 ${isActive ? "text-primary" : "text-white/60"}`} strokeWidth={1.75} />
+                <span>{item.label}</span>
+              </button>
+            </Tooltip>
           );
         })}
       </nav>
@@ -74,18 +76,20 @@ export default function CodexLayout({ children }: { children: React.ReactNode })
             <p className="text-[10px] font-mono text-white/40 truncate">developer@earthora.com</p>
           </div>
         </div>
-        <button
-          onClick={() => {
-            sessionStorage.removeItem("codex_authenticated");
-            sessionStorage.removeItem("codex_password");
-            toast({ title: "Session terminated", description: "Logged out from Codex console." });
-            setLocation("/");
-          }}
-          className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-mono font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all"
-        >
-          <LogOut className="w-[17px] h-[17px] text-white/40" strokeWidth={1.75} />
-          <span>Exit Codex</span>
-        </button>
+        <Tooltip content="Exit Codex Environment" side="top">
+          <button
+            onClick={() => {
+              sessionStorage.removeItem("codex_authenticated");
+              sessionStorage.removeItem("codex_password");
+              toast({ title: "Signed Out", description: "You have been logged out of Codex Developer Core." });
+              setLocation("/");
+            }}
+            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all font-mono"
+          >
+            <LogOut className="w-[17px] h-[17px] text-white/40" strokeWidth={1.75} />
+            <span>Exit Codex</span>
+          </button>
+        </Tooltip>
       </div>
     </div>
   );

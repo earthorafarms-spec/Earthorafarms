@@ -1,28 +1,75 @@
 import { motion, type Variants } from "framer-motion";
 import { Link } from "wouter";
-import { Sun, Shield, Brain, Leaf, Sparkles, Activity, Heart, BarChart3, Nut, Droplets, Wind, Apple } from "lucide-react";
+import {
+  Sun,
+  Shield,
+  Brain,
+  Leaf,
+  Sparkles,
+  Activity,
+  ArrowUpRight,
+  CheckCircle2,
+  Zap,
+} from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-import { Button } from "@/components/ui/button";
 import leavesImg from "@assets/generated_images/hero_leaves.jpg";
-import smoothieImg from "@assets/generated_images/lifestyle_smoothie.jpg";
+import leavesImg2 from "@assets/generated_images/hero_leaves_2.jpg";
 
 const keyBenefits = [
-  { icon: Sun, title: "Sustained Energy", desc: "No spikes. No crashes. Moringa provides a steady release of natural energy through its rich iron, magnesium, and B-vitamin profile, supporting cellular energy production without stimulants." },
-  { icon: Shield, title: "Immune Defense", desc: "Packed with vitamin C (7x more than oranges), zinc, and a dense array of antioxidants that fortify your immune system against oxidative stress and seasonal challenges." },
-  { icon: Brain, title: "Cognitive Clarity", desc: "The iron, zinc, and vitamin E in moringa support neurotransmitter function and cerebral blood flow, promoting sharper focus, memory retention, and mental endurance." },
-  { icon: Sparkles, title: "Cellular Radiance", desc: "Rich in vitamin E and A (4x more than carrots), moringa nourishes skin from within — supporting collagen production, reducing inflammation, and promoting a natural glow." },
-  { icon: Activity, title: "Metabolic Balance", desc: "Natural chlorogenic acid and fiber help regulate blood sugar response, support healthy digestion, and maintain a balanced metabolism throughout the day." },
-  { icon: Leaf, title: "Deep Alkalinity", desc: "Moringa's mineral-rich composition helps neutralize dietary acidity, supporting optimal pH balance and reducing the inflammatory burden on your body." },
+  {
+    num: "01",
+    icon: Sun,
+    title: "Sustained Energy & Vitality",
+    tagline: "Natural ATP Synthesis",
+    desc: "Unlike caffeine or sugar stimulants that cause adrenal fatigue and abrupt crashes, Moringa provides steady cellular energy by delivering bioavailable iron, magnesium, and essential B-complex vitamins directly to your mitochondria.",
+    stat: "8 Hours",
+    statLabel: "Sustained Focus",
+    highlights: ["Supports cellular respiration", "No jitters or adrenal spikes", "Rich in natural Iron & Magnesium"],
+    accentBg: "bg-[#ECEDEC]",
+  },
+  {
+    num: "02",
+    icon: Shield,
+    title: "Immune System Fortification",
+    tagline: "7x More Vitamin C than Oranges",
+    desc: "Moringa leaves are loaded with quercetin, chlorogenic acid, and high concentrations of Vitamin C and Zinc. This potent antioxidant shield neutralizes free radicals, reduces oxidative stress, and strengthens daily immunity.",
+    stat: "46+",
+    statLabel: "Active Antioxidants",
+    highlights: ["Neutralizes free radicals", "High quercetin concentration", "Natural daily defense shield"],
+    accentBg: "bg-[#FEFDF9]",
+  },
+  {
+    num: "03",
+    icon: Brain,
+    title: "Cognitive Endurance & Clarity",
+    tagline: "Neuro-Protective Compounds",
+    desc: "The unique combination of Vitamin E, Vitamin C, Zinc, and iron in moringa supports healthy neurotransmitter activity and cerebral blood flow, promoting sharp mental clarity, memory retention, and stress resilience.",
+    stat: "18",
+    statLabel: "Amino Acids Included",
+    highlights: ["Supports focus & memory", "Nourishes neural pathways", "Reduces brain fog naturally"],
+    accentBg: "bg-[#FEFDF9]",
+  },
+  {
+    num: "04",
+    icon: Sparkles,
+    title: "Cellular Glow & Skin Health",
+    tagline: "4x More Vitamin A than Carrots",
+    desc: "Nourishes your skin from within. High levels of Vitamin A and E promote natural collagen synthesis, fight premature cellular aging, and give skin a healthy, vibrant radiance.",
+    stat: "100% Raw",
+    statLabel: "Cold-Processed",
+    highlights: ["Promotes collagen synthesis", "Combats cellular aging", "Nourishes skin from within"],
+    accentBg: "bg-[#ECEDEC]",
+  },
 ];
 
-const nutritionalHighlights = [
-  { icon: Nut, label: "Protein", value: "2g per tsp", detail: "All 9 essential amino acids" },
-  { icon: Heart, label: "Calcium", value: "4x milk", detail: "Bone & muscle support" },
-  { icon: BarChart3, label: "Iron", value: "3x spinach", detail: "Oxygen transport & energy" },
-  { icon: Droplets, label: "Potassium", value: "3x banana", detail: "Heart & nerve function" },
-  { icon: Wind, label: "Vitamin C", value: "7x oranges", detail: "Immune & collagen" },
-  { icon: Apple, label: "Vitamin A", value: "4x carrots", detail: "Vision & skin health" },
+const comparisonData = [
+  { metric: "Vitamin C", moringa: "7x", benchmark: "vs. Fresh Oranges", icon: Zap },
+  { metric: "Vitamin A", moringa: "4x", benchmark: "vs. Organic Carrots", icon: Leaf },
+  { metric: "Calcium", moringa: "4x", benchmark: "vs. Whole Milk", icon: Activity },
+  { metric: "Iron", moringa: "3x", benchmark: "vs. Raw Spinach", icon: Sun },
+  { metric: "Potassium", moringa: "3x", benchmark: "vs. Ripe Bananas", icon: Shield },
+  { metric: "Protein", moringa: "2g / tsp", benchmark: "All 9 Essential Aminos", icon: Brain },
 ];
 
 const containerVars: Variants = {
@@ -37,162 +84,194 @@ const itemVars: Variants = {
 
 export default function HealthBenefits() {
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-background text-foreground selection:bg-primary/20">
+    <div className="min-h-[100dvh] flex flex-col bg-[#FAF9F5] text-black selection:bg-black/10">
       <Navbar />
 
-      <section className="relative pt-40 pb-24 md:pt-48 md:pb-32 overflow-hidden bg-primary">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.05)_0,transparent_70%)]" />
-        <div className="container mx-auto px-6 max-w-7xl relative z-10">
-          <div className="max-w-3xl">
+      {/* ── Hero / Page Header ── */}
+      <section className="relative pt-36 pb-20 lg:pt-44 lg:pb-28 overflow-hidden bg-[#0E0E0E] text-white">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.06)_0,transparent_70%)] pointer-events-none" />
+        <div className="container mx-auto px-6 sm:px-10 max-w-[1400px] relative z-10">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+            className="mb-6 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/15 font-dm font-medium text-xs sm:text-sm text-white/80 tracking-[0.05em] uppercase backdrop-blur-md"
+          >
+            <Activity className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Botanical Science</span>
+          </motion.div>
 
-
-            <motion.h1
+          <div className="grid lg:grid-cols-12 gap-8 items-end">
+            <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
-              className="text-5xl md:text-7xl font-serif text-primary-foreground leading-[1.1] tracking-tight mb-6"
+              transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
+              className="lg:col-span-8"
             >
-              What makes moringa
-              <br />
-              <span className="text-secondary/90 italic">extraordinary.</span>
-            </motion.h1>
+              <h1 className="font-dm font-normal tracking-[-0.05em] text-[44px] leading-[46px] sm:text-[68px] sm:leading-[64px] lg:text-[88px] lg:leading-[82px] text-white">
+                Nature's most complete <br />
+                <span className="text-white/35">nutritional matrix.</span>
+              </h1>
+            </motion.div>
 
             <motion.p
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.3 }}
-              className="text-lg md:text-xl text-primary-foreground/80 font-light max-w-2xl"
+              className="lg:col-span-4 font-inter font-normal text-base sm:text-lg text-white/55 leading-relaxed tracking-[-0.02em]"
             >
-              For centuries, the moringa tree has been revered as a nutritional powerhouse. Modern science is only beginning to confirm what ancient healers have always known.
+              Backed by ancient tradition and modern botanical science. 90+ bioavailable nutrients working in complete cellular synergy.
             </motion.p>
           </div>
         </div>
       </section>
 
-      <section className="py-24 md:py-32 bg-background">
-        <div className="container mx-auto px-6 max-w-7xl">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8 }}
-            className="text-center max-w-3xl mx-auto mb-20"
-          >
-            <h2 className="text-sm font-medium uppercase tracking-widest text-primary mb-4">The Science of Vitality</h2>
-            <h3 className="text-4xl md:text-5xl font-serif text-foreground mb-6">Nature's Most Complete Nutrient Profile.</h3>
-            <p className="text-foreground/70 font-light text-lg">
-              Every gram of Earthora moringa delivers a remarkable concentration of vitamins, minerals, and antioxidants that work synergistically to support whole-body wellness.
+      {/* ── Key Benefits Architectural Layout (Editorial Style) ── */}
+      <section className="py-20 lg:py-32">
+        <div className="container mx-auto px-6 sm:px-10 max-w-[1400px]">
+          <div className="mb-16 lg:mb-24 flex flex-col md:flex-row md:items-end justify-between gap-6 pb-8 border-b border-black/10">
+            <div>
+              <span className="font-inter text-xs uppercase tracking-wider text-black/40 font-medium block mb-2">
+                Scientific Breakdown
+              </span>
+              <h2 className="font-dm font-normal text-3xl sm:text-5xl text-black tracking-[-0.04em]">
+                Targeted Cellular Health
+              </h2>
+            </div>
+            <p className="font-inter text-sm text-black/60 max-w-sm">
+              Discover how cold-processed moringa delivers raw nutrients directly to your body's systems.
             </p>
-          </motion.div>
+          </div>
 
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-8 mb-32">
-            {nutritionalHighlights.map((item, i) => (
+          {/* Alternating Feature Cards */}
+          <div className="space-y-12 lg:space-y-16">
+            {keyBenefits.map((benefit, i) => (
               <motion.div
-                key={item.label}
-                initial={{ opacity: 0, y: 20 }}
+                key={benefit.num}
+                initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-50px" }}
-                transition={{ duration: 0.6, delay: i * 0.1 }}
-                className="relative bg-card rounded-2xl p-8 border border-border/50"
+                viewport={{ once: true }}
+                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                className={`rounded-3xl border border-black/8 p-8 sm:p-12 lg:p-14 ${benefit.accentBg} shadow-sm hover:shadow-xl transition-all duration-500`}
               >
-                <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary mb-5">
-                  <item.icon strokeWidth={1.5} className="w-6 h-6" />
+                <div className="grid lg:grid-cols-12 gap-8 items-start">
+                  {/* Left: Number & Header */}
+                  <div className="lg:col-span-5 flex flex-col justify-between h-full">
+                    <div>
+                      <div className="flex items-center gap-4 mb-6">
+                        <span className="font-dm text-4xl lg:text-5xl font-normal text-black/20 tracking-[-0.05em]">
+                          {benefit.num}
+                        </span>
+                        <span className="px-3.5 py-1 rounded-full bg-black/5 text-black font-inter text-xs font-medium tracking-wide uppercase">
+                          {benefit.tagline}
+                        </span>
+                      </div>
+
+                      <h3 className="font-dm font-normal text-3xl sm:text-4xl lg:text-5xl text-black tracking-[-0.04em] leading-tight mb-4">
+                        {benefit.title}
+                      </h3>
+                    </div>
+
+                    <div className="pt-6 border-t border-black/10 mt-6 lg:mt-12">
+                      <span className="font-dm text-3xl sm:text-4xl text-black tracking-[-0.04em] block">
+                        {benefit.stat}
+                      </span>
+                      <span className="font-inter text-xs uppercase tracking-wider text-black/50 font-medium">
+                        {benefit.statLabel}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Right: Detailed Narrative & Checklist */}
+                  <div className="lg:col-span-7 lg:pl-8 lg:border-l lg:border-black/10">
+                    <p className="font-inter text-base sm:text-lg text-black/75 leading-relaxed tracking-[-0.02em] mb-8">
+                      {benefit.desc}
+                    </p>
+
+                    <div className="space-y-3 font-inter text-sm text-black/80">
+                      {benefit.highlights.map((h, idx) => (
+                        <div key={idx} className="flex items-center gap-3">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+                          <span>{h}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-                <p className="text-xs font-medium uppercase tracking-wider text-foreground/40 mb-1">{item.label}</p>
-                <p className="text-3xl font-serif text-foreground mb-1">{item.value}</p>
-                <p className="text-sm text-foreground/60 font-light">{item.detail}</p>
               </motion.div>
             ))}
           </div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 40 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-100px" }}
-            transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-            className="relative rounded-3xl overflow-hidden bg-primary"
-          >
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(255,255,255,0.05)_0,transparent_60%)]" />
-            <div className="relative z-10 grid lg:grid-cols-2 gap-12 p-12 md:p-20 items-center">
-              <div>
-                <h3 className="text-3xl md:text-4xl font-serif text-primary-foreground mb-6 leading-tight">
-                  More than the sum of its parts.
-                </h3>
-                <p className="text-primary-foreground/80 font-light text-lg leading-relaxed mb-6">
-                  Unlike isolated supplements, moringa delivers a complete phytochemical matrix — nature's intended design where nutrients work together for optimal absorption and effect.
-                </p>
-                <ul className="space-y-3">
-                  {["46 antioxidants in a single leaf", "9 essential amino acids", "Bioavailable plant-based iron", "Natural chlorogenic acid for glucose balance"].map((item) => (
-                    <li key={item} className="flex items-center gap-3 text-primary-foreground/80">
-                      <span className="w-1.5 h-1.5 rounded-full bg-secondary/80 flex-shrink-0" />
-                      <span className="font-light">{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="relative aspect-[4/3] rounded-2xl overflow-hidden">
-                <img src={smoothieImg} alt="Moringa benefits" className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-black/10" />
-              </div>
-            </div>
-          </motion.div>
         </div>
       </section>
 
-      <section className="py-24 md:py-32 bg-secondary/30">
-        <div className="container mx-auto px-6 max-w-7xl">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8 }}
-            className="text-center max-w-2xl mx-auto mb-20"
-          >
-            <h2 className="text-sm font-medium uppercase tracking-widest text-primary mb-4">Total Body Vitality</h2>
-            <h3 className="text-4xl md:text-5xl font-serif text-foreground mb-6">How it works.</h3>
-            <p className="text-foreground/70 font-light text-lg">
-              Each of these benefits is rooted in the unique nutritional density of the moringa leaf — a single botanical that nourishes every system in the body.
+      {/* ── Nutritional Comparison Grid ── */}
+      <section className="py-20 lg:py-32 bg-[#0E0E0E] text-white relative overflow-hidden">
+        <div className="container mx-auto px-6 sm:px-10 max-w-[1400px] relative z-10">
+          <div className="max-w-3xl mb-16 lg:mb-20">
+            <span className="font-inter text-xs uppercase tracking-wider text-white/40 font-medium block mb-2">
+              Density Comparison
+            </span>
+            <h2 className="font-dm font-normal text-4xl sm:text-6xl text-white tracking-[-0.05em] leading-tight mb-4">
+              Gram for gram, <br />
+              <span className="text-white/40">unmatched on earth.</span>
+            </h2>
+            <p className="font-inter text-base text-white/60">
+              Comparing raw moringa leaf powder with traditional whole food nutritional benchmarks.
             </p>
-          </motion.div>
+          </div>
 
-          <motion.div
-            variants={containerVars}
-            initial="hidden"
-            whileInView="show"
-            viewport={{ once: true, margin: "-100px" }}
-            className="grid sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-16"
-          >
-            {keyBenefits.map((benefit, i) => (
-              <motion.div key={i} variants={itemVars} className="flex flex-col items-center text-center">
-                <div className="w-16 h-16 rounded-full bg-card flex items-center justify-center text-primary mb-6 shadow-sm">
-                  <benefit.icon strokeWidth={1.5} className="w-8 h-8" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {comparisonData.map((item, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.6, delay: i * 0.08 }}
+                className="bg-[#181818] border border-white/10 rounded-2xl p-8 flex flex-col justify-between hover:border-white/25 transition-all"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-6">
+                    <span className="font-inter text-xs font-medium uppercase tracking-wider text-white/50">
+                      {item.metric}
+                    </span>
+                    <item.icon className="w-5 h-5 text-amber-300" />
+                  </div>
+                  <span className="font-dm font-normal text-5xl text-white tracking-[-0.05em] block mb-2">
+                    {item.moringa}
+                  </span>
                 </div>
-                <h4 className="text-xl font-serif text-foreground mb-3">{benefit.title}</h4>
-                <p className="text-foreground/70 font-light leading-relaxed">{benefit.desc}</p>
+                <div className="pt-4 border-t border-white/10 text-xs font-inter text-white/50">
+                  {item.benchmark}
+                </div>
               </motion.div>
             ))}
-          </motion.div>
+          </div>
         </div>
       </section>
 
-      <section className="py-24 md:py-32 bg-background">
-        <div className="container mx-auto px-6 max-w-4xl text-center">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-          >
-            <h2 className="text-4xl md:text-5xl font-serif text-foreground mb-6">Ready to experience the difference?</h2>
-            <p className="text-foreground/70 font-light text-lg mb-10 max-w-2xl mx-auto">
-              From the first serving, you'll notice a difference in how you feel — clearer mind, steadier energy, and a deep sense of well-being.
-            </p>
-            <Link href="/our-product">
-              <Button size="lg" className="h-14 px-10 text-lg">
-                Shop the Collection
-              </Button>
-            </Link>
-          </motion.div>
+      {/* ── Feature Story & Bottom CTA ── */}
+      <section className="py-24 lg:py-36 bg-[#FAF9F5] text-black">
+        <div className="container mx-auto px-6 sm:px-10 max-w-[1400px]">
+          <div className="bg-[#ECEDEC] rounded-3xl p-8 sm:p-14 border border-black/8 grid lg:grid-cols-12 gap-8 items-center shadow-lg">
+            <div className="lg:col-span-8">
+              <h2 className="font-dm font-normal text-3xl sm:text-5xl text-black tracking-[-0.04em] leading-tight mb-4">
+                Ready to experience pure vitality?
+              </h2>
+              <p className="font-inter text-base text-black/70 max-w-xl leading-relaxed">
+                Start your daily moringa ritual today with our 100% organic, shade-dried powders and capsules sourced directly from our farm.
+              </p>
+            </div>
+            <div className="lg:col-span-4 flex lg:justify-end">
+              <Link
+                href="/products"
+                className="bg-black text-white px-8 py-4 rounded-xl font-inter font-medium text-base hover:bg-black/85 transition-all shadow-xl inline-flex items-center gap-2 group"
+              >
+                <span>Shop The Collection</span>
+                <ArrowUpRight className="w-5 h-5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+              </Link>
+            </div>
+          </div>
         </div>
       </section>
 

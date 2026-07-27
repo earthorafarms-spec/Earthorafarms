@@ -2,10 +2,9 @@ import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Link } from 'wouter';
-import { Heart, ShoppingBag, Trash2 } from 'lucide-react';
+import { Heart, ShoppingBag, Trash2, ArrowUpRight } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
-import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/auth-context';
 import { useCart } from '@/contexts/cart-context';
 import { supabase } from '@/lib/supabase';
@@ -43,68 +42,29 @@ export default function Favorites() {
 
   if (!user) {
     return (
-      <div className="min-h-[100dvh] flex flex-col bg-background text-foreground">
+      <div className="min-h-[100dvh] flex flex-col bg-[#FAF9F5] text-black selection:bg-black/10">
         <Navbar />
-        <section className="relative pt-40 pb-16 overflow-hidden bg-primary">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.05)_0,transparent_70%)]" />
-          <div className="container mx-auto px-6 max-w-7xl relative z-10">
-            <div className="max-w-3xl">
-              <motion.h1
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
-                className="text-4xl md:text-6xl font-serif text-primary-foreground leading-[1.1] tracking-tight"
-              >
-                Sign in to see your favorites.
-              </motion.h1>
+        <section className="relative pt-36 pb-20 lg:pt-44 lg:pb-24 overflow-hidden bg-[#0E0E0E] text-white">
+          <div className="container mx-auto px-6 sm:px-10 max-w-[1400px] relative z-10 text-center">
+            <div className="w-16 h-16 rounded-full bg-white/10 text-rose-400 flex items-center justify-center mx-auto mb-6">
+              <Heart className="w-8 h-8 fill-current" />
             </div>
-          </div>
-        </section>
-        <section className="flex-1 flex items-center justify-center py-20 bg-background">
-          <div className="text-center max-w-md px-6 mx-auto">
-            <Heart className="w-16 h-16 text-border mx-auto mb-6" strokeWidth={1} />
-            <h2 className="text-3xl font-serif text-foreground mb-3">Your wishlist awaits</h2>
-            <p className="text-foreground/75 font-light mb-8 leading-relaxed">
-              Log in to save your favorite products and find them here later.
+            <motion.h1
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="font-dm font-normal tracking-[-0.05em] text-[40px] leading-[44px] sm:text-[60px] sm:leading-[56px] text-white mb-4"
+            >
+              Sign in to view your wishlist.
+            </motion.h1>
+            <p className="font-inter text-base text-white/60 mb-8 max-w-md mx-auto">
+              Save your favorite botanical supplements and access them anytime across all your devices.
             </p>
-            <Link href="/auth">
-              <Button size="lg" className="h-14 px-8 text-base">Log In</Button>
-            </Link>
-          </div>
-        </section>
-        <Footer />
-      </div>
-    );
-  }
-
-  if (favorites.length === 0 && !isLoading) {
-    return (
-      <div className="min-h-[100dvh] flex flex-col bg-background text-foreground">
-        <Navbar />
-        <section className="relative pt-40 pb-16 overflow-hidden bg-primary">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.05)_0,transparent_70%)]" />
-          <div className="container mx-auto px-6 max-w-7xl relative z-10">
-            <div className="max-w-3xl">
-              <motion.h1
-                initial={{ opacity: 0, y: 30 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
-                className="text-4xl md:text-6xl font-serif text-primary-foreground leading-[1.1] tracking-tight"
-              >
-                No favorites yet.
-              </motion.h1>
-            </div>
-          </div>
-        </section>
-        <section className="flex-1 flex items-center justify-center py-20 bg-background">
-          <div className="text-center max-w-md px-6 mx-auto">
-            <Heart className="w-16 h-16 text-border mx-auto mb-6" strokeWidth={1} />
-            <h2 className="text-3xl font-serif text-foreground mb-3">Heart the things you love</h2>
-            <p className="text-foreground/75 font-light mb-8 leading-relaxed">
-              Tap the heart icon on any product to save it here for quick access.
-            </p>
-            <Link href="/our-product">
-              <Button size="lg" className="h-14 px-8 text-base">Browse Products</Button>
+            <Link
+              href="/auth"
+              className="inline-flex items-center gap-2 bg-white text-black px-8 py-4 rounded-xl font-inter font-medium text-base hover:bg-white/90 transition-colors shadow-xl"
+            >
+              <span>Sign In Now</span>
+              <ArrowUpRight className="w-5 h-5" />
             </Link>
           </div>
         </section>
@@ -114,68 +74,117 @@ export default function Favorites() {
   }
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-background text-foreground selection:bg-primary/20">
+    <div className="min-h-[100dvh] flex flex-col bg-[#FAF9F5] text-black selection:bg-black/10">
       <Navbar />
 
-      <section className="relative pt-40 pb-16 overflow-hidden bg-primary">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.05)_0,transparent_70%)]" />
-        <div className="container mx-auto px-6 max-w-7xl relative z-10">
-          <div className="max-w-3xl">
-            <motion.h1
+      {/* ── Hero / Header ── */}
+      <section className="relative pt-36 pb-16 lg:pt-44 lg:pb-20 overflow-hidden bg-[#0E0E0E] text-white">
+        <div className="container mx-auto px-6 sm:px-10 max-w-[1400px] relative z-10">
+          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-8">
+            <motion.div
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
-              className="text-4xl md:text-6xl font-serif text-primary-foreground leading-[1.1] tracking-tight mb-4"
+              transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
             >
-              Your favorites.
-              <br />
-              <span className="text-secondary/90 italic">{favorites.length} product{favorites.length !== 1 ? 's' : ''}</span>
-            </motion.h1>
+              <div className="mb-4 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/15 font-dm font-medium text-xs sm:text-sm text-white/80 tracking-[0.05em] uppercase">
+                <Heart className="w-3.5 h-3.5 text-rose-400 fill-current" />
+                <span>Saved Products</span>
+              </div>
+              <h1 className="font-dm font-normal tracking-[-0.05em] text-[44px] leading-[46px] sm:text-[68px] sm:leading-[64px] text-white">
+                Your Favorites.
+              </h1>
+            </motion.div>
+
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.2 }}
+              className="font-inter font-normal text-base text-white/55 max-w-[340px]"
+            >
+              {favorites.length} {favorites.length === 1 ? 'item' : 'items'} saved in your personal collection.
+            </motion.p>
           </div>
         </div>
       </section>
 
-      <section className="py-16 bg-background">
-        <div className="container mx-auto px-6 max-w-5xl">
-          <div className="space-y-4">
-            {favorites.map((p) => (
-              <motion.div
-                key={p.id}
-                layout
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex gap-5 bg-card rounded-xl p-5 border border-border/50"
+      {/* ── Main Favorites Grid ── */}
+      <section className="flex-1 py-16 lg:py-24">
+        <div className="container mx-auto px-6 sm:px-10 max-w-[1400px]">
+          {isLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="h-80 bg-[#FEFDF9] rounded-2xl animate-pulse border border-black/5" />
+              ))}
+            </div>
+          ) : favorites.length === 0 ? (
+            <div className="text-center py-24">
+              <div className="w-16 h-16 rounded-full bg-black/5 text-black/30 flex items-center justify-center mx-auto mb-4">
+                <Heart className="w-8 h-8" />
+              </div>
+              <h3 className="font-dm font-normal text-3xl text-black tracking-[-0.03em] mb-2">
+                No favorites saved yet.
+              </h3>
+              <p className="font-inter text-sm text-black/50 mb-8">
+                Explore our collection and click the heart icon to save products.
+              </p>
+              <Link
+                href="/products"
+                className="inline-flex items-center gap-2 bg-black text-white px-8 py-4 rounded-xl font-inter font-medium text-base hover:bg-black/85 transition-colors shadow-lg"
               >
-                <div className="w-24 h-24 rounded-xl bg-white border border-border/30 flex items-center justify-center p-3 shrink-0">
-                  {p.imageMain ? (
-                    <img src={p.imageMain} alt={p.name} className="w-full h-full object-contain" />
-                  ) : (
-                    <span className="text-2xl">🌿</span>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-medium text-foreground truncate">{p.name}</h3>
-                  <p className="text-xs text-foreground/40 mt-0.5">{p.tag}</p>
-                  <p className="text-lg font-bold text-foreground mt-2">₹{p.price.toFixed(2)}</p>
-                  <div className="flex items-center gap-3 mt-3">
-                    <Button
-                      size="sm"
-                      className="h-9 text-xs gap-1.5"
-                      onClick={() => addToCart({ id: p.id, name: p.name, price: p.price, image: p.imageMain })}
-                    >
-                      <ShoppingBag className="w-3.5 h-3.5" strokeWidth={1.5} /> Add to Cart
-                    </Button>
+                <span>Explore Products</span>
+                <ArrowUpRight className="w-5 h-5" />
+              </Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 lg:gap-8">
+              {favorites.map((p) => (
+                <div
+                  key={p.id}
+                  className="bg-[#FEFDF9] rounded-2xl border border-black/5 overflow-hidden flex flex-col shadow-sm hover:shadow-xl transition-all duration-500 group"
+                >
+                  <div className="relative aspect-square bg-[#ECEDEC] flex items-center justify-center p-6">
                     <button
                       onClick={() => handleRemove(p.id)}
-                      className="p-1.5 text-foreground/30 hover:text-red-500 transition-colors"
+                      className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-white/90 backdrop-blur-sm border border-black/10 flex items-center justify-center text-rose-500 hover:bg-rose-500 hover:text-white transition-all shadow-sm"
+                      title="Remove from favorites"
                     >
-                      <Trash2 className="w-4 h-4" strokeWidth={1.5} />
+                      <Trash2 className="w-4 h-4" />
                     </button>
+
+                    <img
+                      src={p.imageMain}
+                      alt={p.name}
+                      className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-700 ease-out"
+                    />
+                  </div>
+
+                  <div className="p-6 flex flex-col flex-1 justify-between">
+                    <div>
+                      <h3 className="font-dm font-normal text-xl text-black tracking-[-0.03em] mb-1">
+                        {p.name}
+                      </h3>
+                      <p className="font-inter text-xs text-black/40 uppercase tracking-wider mb-4">
+                        {p.tag}
+                      </p>
+                    </div>
+
+                    <div className="pt-4 border-t border-black/8 flex items-center justify-between">
+                      <span className="font-dm font-normal text-2xl text-black tracking-[-0.03em]">
+                        ₹{p.price.toFixed(0)}
+                      </span>
+                      <button
+                        onClick={() => addToCart({ id: p.id, name: p.name, price: p.price, image: p.imageMain })}
+                        className="bg-black text-white px-4 py-2.5 rounded-xl font-inter font-medium text-xs flex items-center gap-2 hover:bg-black/85 transition-colors shadow-md"
+                      >
+                        <ShoppingBag className="w-4 h-4" />
+                        <span>Add to Cart</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </motion.div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

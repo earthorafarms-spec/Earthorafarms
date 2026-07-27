@@ -5,7 +5,7 @@ import { Origin } from "@/components/sections/Origin";
 import { Products } from "@/components/sections/Products";
 import { Benefits } from "@/components/sections/Benefits";
 import { Ritual } from "@/components/sections/Ritual";
-import { CTA } from "@/components/sections/CTA";
+
 
 export default function Home() {
   return (
@@ -17,7 +17,7 @@ export default function Home() {
         <Products />
         <Benefits />
         <Ritual />
-        <CTA />
+
       </main>
       <Footer />
     </div>

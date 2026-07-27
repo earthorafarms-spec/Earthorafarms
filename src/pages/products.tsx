@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Sparkles, Filter } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { ProductCard } from '@/components/products/ProductCard';
@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
 import { fetchPublicProducts, fetchReviews } from '@/lib/api';
 import type { Product, Review } from '@/types';
+import powderImg from "@assets/generated_images/product_powder.jpg";
 
 const containerVars = {
   hidden: { opacity: 0 },
@@ -159,61 +160,112 @@ export default function Products() {
   }, []);
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-background text-foreground selection:bg-primary/20">
+    <div className="min-h-[100dvh] flex flex-col bg-[#FAF9F5] text-black selection:bg-black/10">
       <Navbar />
 
-      <section className="relative pt-40 pb-16 overflow-hidden bg-primary">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.05)_0,transparent_70%)]" />
-        <div className="container mx-auto px-6 max-w-7xl relative z-10">
-          <div className="max-w-3xl">
-            <motion.h1
-              initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
-              className="text-4xl md:text-6xl font-serif text-primary-foreground leading-[1.1] tracking-tight mb-4"
-            >
-              The Earthora<br /><span className="text-secondary/90 italic">collection.</span>
-            </motion.h1>
-            <motion.p
-              initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.3 }}
-              className="text-lg text-primary-foreground/70 font-light max-w-2xl"
-            >
-              Pure moringa, direct from our family farm to your doorstep.
-            </motion.p>
+      {/* ── UNIQUE HERO: Split Showcase Hero (Light warm background + Floating Product Spotlight) ── */}
+      <section className="relative pt-32 lg:pt-36 pb-16 lg:pb-20 overflow-hidden bg-[#F4F3EE] border-b border-black/8">
+        <div className="container mx-auto px-6 sm:px-10 max-w-[1400px] relative z-10">
+          <div className="grid lg:grid-cols-12 gap-10 items-center">
+            {/* Left Content */}
+            <div className="lg:col-span-7">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-4 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/5 border border-black/10 font-dm font-medium text-xs text-black/70 uppercase tracking-wider"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                <span>Harvest Catalog</span>
+              </motion.div>
+
+              <motion.h1
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
+                className="font-dm font-normal tracking-[-0.05em] text-[44px] leading-[46px] sm:text-[64px] sm:leading-[60px] lg:text-[80px] lg:leading-[74px] text-black mb-6"
+              >
+                Pure Moringa. <br />
+                <span className="text-black/40">Crafted for your daily ritual.</span>
+              </motion.h1>
+
+              <motion.p
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, delay: 0.2 }}
+                className="font-inter font-normal text-base sm:text-lg text-black/65 max-w-xl leading-relaxed mb-8"
+              >
+                100% organic, shade-dried, nutrient-dense Moringa oleifera direct from our volcanic-soil farm. Zero fillers or binders.
+              </motion.p>
+            </div>
+
+            {/* Right Product Spotlight Feature Box */}
+            <div className="lg:col-span-5 hidden lg:block">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
+                className="bg-[#FEFDF9] rounded-3xl border border-black/10 p-8 shadow-xl relative overflow-hidden flex items-center gap-6"
+              >
+                <div className="w-40 h-40 rounded-2xl bg-[#ECEDEC] overflow-hidden shrink-0 flex items-center justify-center p-4">
+                  <img src={powderImg} alt="Spotlight Product" className="w-full h-full object-contain" />
+                </div>
+                <div>
+                  <span className="px-3 py-1 rounded-full bg-emerald-800 text-white font-inter text-xs font-medium uppercase tracking-wider block w-fit mb-2">
+                    Farm Favorite
+                  </span>
+                  <h3 className="font-dm text-2xl text-black font-normal tracking-[-0.03em] mb-1">
+                    Pure Leaf Powder
+                  </h3>
+                  <p className="font-inter text-xs text-black/50 mb-3">
+                    90+ bioavailable nutrients in every scoop.
+                  </p>
+                  <span className="font-dm text-xl font-normal text-black block">
+                    ₹599
+                  </span>
+                </div>
+              </motion.div>
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="py-10 bg-background">
-        <div className="container mx-auto px-6 max-w-7xl">
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-8 pb-6 border-b border-border/50">
-            <p className="text-sm text-foreground/50">
-              <span className="text-foreground font-medium">{isLoading ? '\u2026' : sortedProducts.length}</span> products
+      {/* ── Sort Toolbar ── */}
+      <section className="bg-[#FAF9F5] border-b border-black/8 sticky top-0 z-10 backdrop-blur-sm">
+        <div className="container mx-auto px-6 sm:px-10 max-w-[1400px]">
+          <div className="flex items-center justify-between gap-4 py-4">
+            <p className="font-inter text-sm text-black/50 flex items-center gap-2">
+              <Filter className="w-4 h-4 text-black/40" />
+              <span>Showing <strong className="text-black font-medium">{isLoading ? '…' : sortedProducts.length}</strong> Products</span>
             </p>
+
             <div className="flex items-center gap-3 relative">
-              <span className="text-xs text-foreground/40 uppercase tracking-wider">Sort by:</span>
+              <span className="hidden sm:block font-inter text-xs text-black/40 uppercase tracking-wider font-medium">Sort By:</span>
               <button
                 onClick={() => setSortOpen(!sortOpen)}
-                className="flex items-center gap-2 text-sm bg-background border border-border/60 rounded-lg px-3 py-1.5 text-foreground hover:border-primary/40 transition-colors min-w-[140px]"
+                className="flex items-center gap-2 font-inter text-sm bg-[#FEFDF9] border border-black/10 rounded-xl px-4 py-2 text-black hover:border-black/25 transition-colors min-w-[160px]"
               >
                 <span className="flex-1 text-left">{sortBy}</span>
-                <ChevronDown className={`w-3.5 h-3.5 text-foreground/40 transition-transform duration-300 ${sortOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`w-3.5 h-3.5 text-black/30 transition-transform duration-300 ${sortOpen ? 'rotate-180' : ''}`} />
               </button>
               <AnimatePresence>
                 {sortOpen && (
                   <>
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-10" onClick={() => setSortOpen(false)} />
                     <motion.div
-                      initial={{ opacity: 0, y: -4, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -4, scale: 0.96 }}
-                      transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-                      className="absolute top-full right-0 mt-1.5 w-48 z-20 bg-card border border-border/50 rounded-xl shadow-lg overflow-hidden"
+                      initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                      className="absolute top-full right-0 mt-2 w-52 z-20 bg-[#FEFDF9] border border-black/8 rounded-2xl shadow-2xl overflow-hidden"
                     >
                       {sortOptions.map((opt) => (
-                        <button key={opt} onClick={() => { setSortBy(opt); setSortOpen(false); }}
-                          className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm text-left transition-colors hover:bg-muted ${sortBy === opt ? 'text-foreground font-medium' : 'text-foreground/60'}`}
+                        <button
+                          key={opt}
+                          onClick={() => { setSortBy(opt); setSortOpen(false); }}
+                          className={`w-full flex items-center gap-3 px-5 py-3 font-inter text-sm text-left transition-colors hover:bg-[#ECEDEC] ${sortBy === opt ? 'text-black font-medium' : 'text-black/55'}`}
                         >
-                          <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${sortBy === opt ? 'border-primary' : 'border-border'}`}>
-                            {sortBy === opt && <span className="w-2 h-2 rounded-full bg-primary" />}
+                          <span className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${sortBy === opt ? 'border-black bg-black' : 'border-black/20'}`}>
+                            {sortBy === opt && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
                           </span>
                           {opt}
                         </button>
@@ -224,10 +276,17 @@ export default function Products() {
               </AnimatePresence>
             </div>
           </div>
+        </div>
+      </section>
 
+      {/* ── Product Grid ── */}
+      <section className="flex-1 py-12 lg:py-16">
+        <div className="container mx-auto px-6 sm:px-10 max-w-[1400px]">
           <motion.div
-            variants={containerVars} initial="hidden" animate={isLoading ? 'hidden' : 'show'}
-            className="grid md:grid-cols-2 lg:grid-cols-4 gap-6"
+            variants={containerVars}
+            initial="hidden"
+            animate={isLoading ? 'hidden' : 'show'}
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 lg:gap-8"
           >
             {isLoading
               ? Array.from({ length: 4 }).map((_, i) => <ProductCardSkeleton key={i} />)
@@ -248,8 +307,9 @@ export default function Products() {
           </motion.div>
 
           {!isLoading && sortedProducts.length === 0 && (
-            <div className="text-center py-20 text-foreground/40">
-              <p className="text-sm">No products available yet. Check back soon.</p>
+            <div className="text-center py-32">
+              <p className="font-dm text-4xl text-black/15 tracking-[-0.03em] mb-3">No products yet.</p>
+              <p className="font-inter text-sm text-black/35">Check back soon — something pure is on its way.</p>
             </div>
           )}
         </div>

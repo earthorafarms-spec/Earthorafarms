@@ -1,12 +1,11 @@
 import { memo } from 'react';
 import { motion, type Variants } from 'framer-motion';
-import { Star, ShoppingCart, Zap, Heart } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Star, ShoppingBag, ArrowUpRight, Heart } from 'lucide-react';
 import type { Product } from '@/types';
 
 const itemVars: Variants = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] } },
+  hidden: { opacity: 0, y: 30 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] } },
 };
 
 interface ProductCardProps {
@@ -36,83 +35,106 @@ export const ProductCard = memo(function ProductCard({
       onClick={onClick}
       onMouseEnter={() => onHover(p.id)}
       onMouseLeave={() => onHover(null)}
-      className="bg-card rounded-xl border border-border/60 overflow-hidden flex flex-col transition-shadow duration-300 hover:shadow-md cursor-pointer"
+      className="group bg-[#FEFDF9] rounded-2xl border border-black/5 overflow-hidden flex flex-col shadow-sm hover:shadow-2xl hover:-translate-y-1.5 transition-all duration-500 cursor-pointer"
     >
-      <div className="relative aspect-square bg-white flex items-center justify-center p-6 border-b border-border/30">
-        {p.imageMain ? (
-          <img
-            src={hoveredId === p.id && p.imageHover ? p.imageHover : p.imageMain}
-            alt={p.name}
-            className="w-full h-full object-contain transition-all duration-500"
-            loading="lazy"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-muted/40 rounded-lg">
-            <span className="text-4xl">🌿</span>
-          </div>
-        )}
+      {/* Image */}
+      <div className="relative aspect-square bg-[#ECEDEC] flex items-center justify-center p-8 overflow-hidden">
         {p.badge && (
-          <span className="absolute top-3 left-3 px-2.5 py-1 text-[11px] font-bold bg-primary text-primary-foreground rounded">
+          <span className="absolute top-4 left-4 z-10 px-3.5 py-1.5 rounded-full font-inter font-medium text-xs tracking-[-0.01em] shadow-sm bg-black text-white">
             {p.badge}
           </span>
         )}
         <button
           onClick={onToggleWishlist}
-          className="absolute top-3 right-3 p-2 bg-white rounded-full shadow-sm border border-border/40 hover:shadow-md transition-shadow"
+          className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-white/90 backdrop-blur-sm border border-black/10 flex items-center justify-center shadow-sm hover:shadow-md transition-all"
           aria-label={wishlist.has(p.id) ? 'Remove from wishlist' : 'Add to wishlist'}
         >
           <Heart
-            className={`w-4 h-4 transition-colors ${wishlist.has(p.id) ? 'fill-red-500 text-red-500' : 'text-foreground/40'}`}
+            className={`w-4 h-4 transition-colors ${wishlist.has(p.id) ? 'fill-red-500 text-red-500' : 'text-black/40'}`}
             strokeWidth={1.5}
           />
         </button>
+
+        {p.imageMain ? (
+          <img
+            src={hoveredId === p.id && p.imageHover ? p.imageHover : p.imageMain}
+            alt={p.name}
+            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-700 ease-out drop-shadow-md"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <span className="text-5xl">🌿</span>
+          </div>
+        )}
       </div>
 
-      <div className="p-5 flex flex-col flex-1">
-        <div className="mb-2">
-          <h3 className="text-sm font-medium text-foreground leading-snug mb-1 line-clamp-2">{p.name}</h3>
-          <p className="text-xs text-foreground/40">{p.tag}</p>
-        </div>
-        <div className="flex items-center gap-2 mb-2">
+      {/* Content */}
+      <div className="p-6 flex flex-col flex-1">
+        {/* Rating row */}
+        <div className="flex items-center gap-2 mb-3">
           <div className="flex items-center gap-1">
-            <span className="text-xs font-semibold text-foreground bg-accent/20 px-1.5 py-0.5 rounded">{p.rating}</span>
-            <div className="flex">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Star
-                  key={i}
-                  className={`w-3 h-3 ${i < Math.round(p.rating) ? 'fill-accent text-accent' : 'text-border'}`}
-                  strokeWidth={1.5}
-                />
-              ))}
-            </div>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Star
+                key={i}
+                className={`w-3.5 h-3.5 ${i < Math.round(p.rating) ? 'fill-amber-400 text-amber-400' : 'text-black/15'}`}
+                strokeWidth={1}
+              />
+            ))}
           </div>
-          {p.reviewCount > 0 && <span className="text-xs text-foreground/40">({p.reviewCount})</span>}
+          <span className="font-inter text-xs text-black/40">
+            {p.rating} {p.reviewCount > 0 && `(${p.reviewCount})`}
+          </span>
         </div>
-        <div className="flex items-baseline gap-2 mb-3">
-          <span className="text-xl font-bold text-foreground">₹{p.price.toFixed(2)}</span>
-          {p.mrp > p.price && <span className="text-sm text-foreground/30 line-through">₹{p.mrp.toFixed(2)}</span>}
-          {p.discount > 0 && <span className="text-xs font-semibold text-accent">{p.discount}% off</span>}
-        </div>
-        <p className="text-[11px] text-green-700 font-semibold mb-3 flex items-center gap-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-green-600 inline-block" />
+
+        {/* Title */}
+        <h3 className="font-dm font-normal text-xl text-black tracking-[-0.03em] leading-tight mb-1 line-clamp-2">
+          {p.name}
+        </h3>
+        <p className="font-inter text-xs uppercase tracking-wider text-black/35 font-medium mb-4">
+          {p.tag}
+        </p>
+
+        {/* Stock */}
+        <p className="font-inter text-xs text-emerald-700 font-medium flex items-center gap-1.5 mb-4">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 inline-block" />
           {p.stock}
         </p>
-        <div className="flex gap-2 mt-auto">
-          <Button
-            size="sm"
-            className="flex-1 h-10 text-xs gap-1.5 bg-primary hover:bg-primary/90"
-            onClick={(e) => { e.stopPropagation(); onAddToCart(); }}
-          >
-            <ShoppingCart className="w-3.5 h-3.5" strokeWidth={1.5} /> Add to Cart
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-10 text-xs gap-1 border-primary/40 text-primary hover:bg-primary/5"
-            onClick={(e) => { e.stopPropagation(); onBuyNow(); }}
-          >
-            <Zap className="w-3.5 h-3.5" strokeWidth={1.5} /> Buy Now
-          </Button>
+
+        {/* Price & Buttons */}
+        <div className="mt-auto pt-4 border-t border-black/8 flex items-center justify-between gap-3">
+          <div>
+            <span className="font-dm font-normal text-2xl text-black tracking-[-0.03em]">
+              ₹{p.price.toFixed(0)}
+            </span>
+            {p.mrp > p.price && (
+              <span className="font-inter text-xs text-black/35 line-through ml-2">
+                ₹{p.mrp.toFixed(0)}
+              </span>
+            )}
+            {p.discount > 0 && (
+              <span className="ml-2 text-xs font-inter font-medium text-emerald-700">
+                {p.discount}% off
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={(e) => { e.stopPropagation(); onAddToCart(); }}
+              className="bg-black text-white w-10 h-10 rounded-xl flex items-center justify-center hover:bg-black/80 transition-colors shadow-md shrink-0 group/btn"
+              aria-label="Add to cart"
+            >
+              <ShoppingBag className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onBuyNow(); }}
+              className="border border-black/15 text-black/80 hover:text-black hover:border-black/30 w-10 h-10 rounded-xl flex items-center justify-center transition-all shrink-0 group/btn2"
+              aria-label="Buy now"
+            >
+              <ArrowUpRight className="w-4 h-4 group-hover/btn2:translate-x-0.5 group-hover/btn2:-translate-y-0.5 transition-transform" />
+            </button>
+          </div>
         </div>
       </div>
     </motion.div>

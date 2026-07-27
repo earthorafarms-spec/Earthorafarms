@@ -136,7 +136,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
               (supabase.from('Cart_details') as any)
                 .update({ cart_product_quantity: String(Number(data.cart_product_quantity) + 1) })
                 .eq('id', data.id)
-                .catch(() => {});
+                .then(() => {});
             } else {
               (supabase.from('Cart_details') as any)
                 .insert({
@@ -145,10 +145,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
                   cart_product_quantity: '1',
                   cart_product_price: String(product.price),
                 })
-                .catch(() => {});
+                .then(() => {});
             }
-          })
-          .catch(() => {});
+          });
       }
     },
     [user?.email]
@@ -163,7 +162,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           .delete()
           .eq('cart_user_id', email)
           .eq('cart_product_id', id)
-          .catch(() => {});
+          .then(() => {});
       }
     },
     [user?.email]
@@ -179,7 +178,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
           .update({ cart_product_quantity: String(quantity) })
           .eq('cart_user_id', email)
           .eq('cart_product_id', id)
-          .catch(() => {});
+          .then(() => {});
       }
     },
     [user?.email, removeFromCart]
@@ -192,7 +191,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       (supabase.from('Cart_details') as any)
         .delete()
         .eq('cart_user_id', email)
-        .catch(() => {});
+        .then(() => {});
     }
   }, [user?.email]);
 
