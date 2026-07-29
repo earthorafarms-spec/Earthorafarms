@@ -1,10 +1,8 @@
 import { ArrowUpRight } from "lucide-react";
 import terraHeroBg from "@assets/generated_images/terra_hero_bg.webp";
-import terraCapsule from "@assets/generated_images/terra_capsule.png";
-import terraBottle from "@assets/generated_images/terra_bottle.png";
+import terraBottle from "@assets/generated_images/hero_bottle_new.png";
 
 const BG_IMAGE_URL = terraHeroBg;
-const INLINE_CAPSULE_URL = terraCapsule;
 const PRODUCT_BOTTLE_URL = terraBottle;
 
 export function Hero() {
@@ -19,45 +17,36 @@ export function Hero() {
           {/* Animated Headline */}
           <h1 className="font-dm font-normal tracking-[-0.05em] text-[36px] leading-[40px] xs:text-[42px] xs:leading-[44px] sm:text-[70px] sm:leading-[68px] md:text-[95px] md:leading-[88px] lg:text-[120px] lg:leading-[105px] xl:text-[145px] xl:leading-[120px]">
             {/* Line 1 */}
-            <div className="flex flex-wrap items-baseline gap-x-[0.2em]">
-              <span className="overflow-hidden inline-block animate-word-reveal delay-300">
-                <span className="inline-block text-white">The</span>
+            <div className="flex flex-wrap items-baseline gap-x-[0.2em] py-1">
+              <span className="overflow-hidden inline-block animate-word-reveal delay-300 py-1">
+                <span className="inline-block text-white pr-1">The</span>
               </span>
-              <span className="overflow-hidden inline-block animate-word-reveal delay-400">
-                <span className="inline-block text-white">Power</span>
+              <span className="overflow-hidden inline-block animate-word-reveal delay-400 py-1">
+                <span className="inline-block text-white pr-1">Power</span>
               </span>
-              <span className="overflow-hidden inline-block animate-word-reveal delay-500">
-                <span className="inline-block text-white/50">of</span>
+              <span className="overflow-hidden inline-block animate-word-reveal delay-500 py-1">
+                <span className="inline-block text-white/50 pr-1">of</span>
               </span>
             </div>
 
             {/* Line 2 */}
-            <div className="flex flex-wrap items-baseline gap-x-[0.2em]">
-              <span className="overflow-hidden inline-block animate-word-reveal delay-600">
-                <span className="inline-block text-white/50">Nature</span>
+            <div className="flex flex-wrap items-baseline gap-x-[0.2em] py-1">
+              <span className="overflow-hidden inline-block animate-word-reveal delay-600 py-1">
+                <span className="inline-block text-white/50 pr-1">Nature</span>
               </span>
-              <span className="overflow-hidden inline-block animate-word-reveal delay-700">
-                <span className="inline-block text-white/50">in</span>
+              <span className="overflow-hidden inline-block animate-word-reveal delay-700 py-1">
+                <span className="inline-block text-white/50 pr-1">in</span>
               </span>
-              <span className="overflow-hidden inline-block animate-word-reveal delay-800">
-                <span className="inline-block text-white">Every</span>
+              <span className="overflow-hidden inline-block animate-word-reveal delay-800 py-1">
+                <span className="inline-block text-white pr-1">Every</span>
               </span>
             </div>
 
-            {/* Line 3 with inline capsule image */}
-            <div className="flex items-center gap-x-[0.2em] flex-wrap">
-              <span className="overflow-hidden inline-block animate-word-reveal delay-900">
-                <span className="inline-block text-white">Capsule</span>
+            {/* Line 3 */}
+            <div className="flex items-center gap-x-[0.2em] flex-wrap py-1">
+              <span className="overflow-hidden inline-block animate-word-reveal delay-900 py-1">
+                <span className="inline-block text-white pr-1">Leaf</span>
               </span>
-              <img
-                src={INLINE_CAPSULE_URL}
-                alt="TerraElix Capsule"
-                className="inline-block align-middle ml-2 lg:ml-4 object-contain animate-scale-in delay-1000"
-                style={{
-                  height: "clamp(36px, 7vw, 140px)",
-                  width: "auto",
-                }}
-              />
             </div>
           </h1>
 

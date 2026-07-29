@@ -33,8 +33,12 @@ const itemVars: Variants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] } },
 };
 
+import { useEscapeKey } from "@/hooks/useEscapeKey";
+
 export default function Gallery() {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  useEscapeKey(() => setLightboxIndex(null), lightboxIndex !== null);
 
   const prev = () =>
     setLightboxIndex((i) => (i !== null ? (i - 1 + galleryItems.length) % galleryItems.length : 0));

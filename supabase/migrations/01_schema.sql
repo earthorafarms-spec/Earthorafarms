@@ -27,7 +27,7 @@ BEGIN
    ELSIF TG_TABLE_NAME = 'coupon_details' THEN
       NEW.coupon_updated_at = NOW();
    ELSIF TG_TABLE_NAME = 'festival_details' THEN
-      NEW.festival_end_date = NOW();
+      NEW.updated_at = NOW();
    ELSIF TG_TABLE_NAME = 'review_details' THEN
       NEW.review_updated_at = NOW();
    END IF;
@@ -215,6 +215,25 @@ CREATE TABLE IF NOT EXISTS order_items (
   total_price NUMERIC(10,2) NOT NULL,
   created_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- RLS & Grants for orders, Orders, and order_items
+ALTER TABLE "Orders" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow all access to Orders" ON "Orders";
+CREATE POLICY "Allow all access to Orders" ON "Orders" FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all access to orders" ON orders;
+CREATE POLICY "Allow all access to orders" ON orders FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Allow all access to order_items" ON order_items;
+CREATE POLICY "Allow all access to order_items" ON order_items FOR ALL USING (true) WITH CHECK (true);
+
+GRANT ALL ON "Orders" TO anon, authenticated, service_role;
+GRANT ALL ON orders TO anon, authenticated, service_role;
+GRANT ALL ON order_items TO anon, authenticated, service_role;
+
 
 -- Trigger function to sync "Orders" inserts to orders & order_items tables
 CREATE OR REPLACE FUNCTION sync_orders_trigger()
@@ -410,8 +429,10 @@ CREATE TABLE IF NOT EXISTS festival_details (
   discount_value NUMERIC(10,2) NOT NULL,
   festival_start_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   festival_end_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  festival_status VARCHAR(50) NOT NULL DEFAULT 'active' CHECK (festival_status IN ('active', 'inactive'))
+  festival_status VARCHAR(50) NOT NULL DEFAULT 'active' CHECK (festival_status IN ('active', 'inactive')),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE festival_details ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
 
 DROP TRIGGER IF EXISTS update_festival_details_modtime ON festival_details;
 CREATE TRIGGER update_festival_details_modtime
@@ -595,7 +616,6 @@ CREATE INDEX IF NOT EXISTS idx_rate_limit_lookup
 
 -- ── 21. SEED PRODUCT CATALOG ──────────────────────────────────────────────────
 INSERT INTO products (slug, name, description, mrp, price, tag, badge, rating, highlights, images, created_at, updated_at) VALUES 
-('capsules', 'Earthora Organic Moringa Capsules', 'Our premium moringa capsules deliver the full nutritional profile of fresh moringa leaves in a convenient daily format. Sourced from our family farm.', 999.00, 699.00, '500mg · 90 Capsules', 'Best Seller', 4.60, ARRAY['500 mg organic moringa leaf per capsule', '90 vegetable capsules — 3 month supply', 'No fillers, binders, or flow agents', 'Third-party tested for purity & potency'], '[{"url": "/assets/generated_images/product_capsules.jpg"}]'::jsonb, now(), now()),
 ('powder', 'Earthora Pure Moringa Leaf Powder', 'Harvested by hand and stone-ground to preserve nutrients. Perfect for smoothies, teas, and cooking. No additives, ever.', 849.00, 599.00, '8 oz · Resealable Pouch', 'Most Popular', 4.70, ARRAY['100% pure shade-dried moringa leaf powder', 'Stone-ground at low temperature', 'Smooth texture — blends instantly', '8 oz resealable stand-up pouch'], '[{"url": "/assets/generated_images/product_powder.jpg"}]'::jsonb, now(), now()),
 ('tablets', 'Earthora Pressed Moringa Tablets', 'Our pressed moringa tablets contain nothing but the leaf — no magnesium stearate, no silica. High-pressure pressed for natural binding.', 1099.00, 799.00, '500mg · 120 Tablets', 'Value Pack', 4.80, ARRAY['500 mg pressed moringa per tablet', '120 tablets — 4 month supply', 'Zero binders, fillers, or coatings', 'Biodegradable, plastic-free packaging'], '[{"url": "/assets/generated_images/product_tablets.jpg"}]'::jsonb, now(), now()),
 ('amla', 'Earthora Organic Amla Powder', 'Pure organic amla (Indian gooseberry) fruit powder. Sourced from organic orchards, stone-ground to capture the high Vitamin C content.', 649.00, 449.00, '8 oz · Resealable Pouch', 'New Release', 4.50, ARRAY['100% organic amla fruit powder', 'Exceptionally high Vitamin C source', 'Natural antioxidant support', 'No added sugar or preservatives'], '[{"url": "/assets/generated_images/hero_leaves.jpg"}]'::jsonb, now(), now())

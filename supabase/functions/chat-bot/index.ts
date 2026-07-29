@@ -1,4 +1,5 @@
-/// <reference lib="deno.window" />
+// @ts-ignore - Deno global for Supabase Edge Functions runtime environment
+declare const Deno: any;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -15,7 +16,6 @@ Earthora Farms is a family-run organic moringa farm growing 100% pure, sun-grown
 PRODUCTS:
 1. Moringa Powder — pure sun-dried moringa leaf powder, available in 100g, 200g, 500g
 2. Moringa Tablets — compressed moringa leaf tablets, 500mg per tablet, no fillers
-3. Moringa Capsules — vegetarian capsules with pure moringa powder, easy to swallow
 
 HEALTH BENEFITS OF MORINGA:
 - 92 nutrients, 46 antioxidants, all 9 essential amino acids
@@ -78,7 +78,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const data = await ollamaRes.json();
+    const data = (await ollamaRes.json()) as { message?: { content?: string } };
     const reply = data?.message?.content ?? "I'm not sure how to answer that. Please contact us at query@earthorafarms.com 🌿";
 
     return new Response(

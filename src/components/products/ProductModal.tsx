@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Star, ShoppingCart, Zap, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { Product } from '@/types';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
 
 interface ProductModalProps {
   product: Product | null;
@@ -25,6 +26,8 @@ export const ProductModal = memo(function ProductModal({
   similarProducts,
   onSelectSimilar,
 }: ProductModalProps) {
+  useEscapeKey(onClose, !!product);
+
   if (!product) return null;
 
   return (

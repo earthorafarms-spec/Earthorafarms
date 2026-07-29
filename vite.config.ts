@@ -26,7 +26,7 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: false,
     cssCodeSplit: false,
-    modulePreload: { polyfill: false },
+    modulePreload: false,
     rollupOptions: {
       output: {
         manualChunks: {

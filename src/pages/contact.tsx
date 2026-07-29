@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 
 const contactInfo = [
-  { icon: Mail, label: "Email", value: "hello@earthorafarms.com", href: "mailto:hello@earthorafarms.com" },
+  { icon: Mail, label: "Email", value: "contactus@earthorafarms.com", href: "mailto:contactus@earthorafarms.com" },
   { icon: Phone, label: "Phone", value: "+1 (555) 123-4567", href: "tel:+15551234567" },
   { icon: MapPin, label: "Farm Location", value: "123 Green Valley Rd, Aptos, CA 95003" },
   { icon: Clock, label: "Operating Hours", value: "Mon – Fri, 9 AM – 6 PM PST" },
@@ -41,6 +41,28 @@ export default function Contact() {
         });
 
       if (dbErr) throw dbErr;
+
+      // Call the edge function to send email notification
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+
+        await fetch(`${supabaseUrl}/functions/v1/send-contact-email`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({
+            name: form.name,
+            email: form.email,
+            phone: form.phone,
+            topic: form.topic,
+            message: form.message,
+          }),
+        });
+      } catch (emailErr) {
+        console.warn("[Contact] Email notification warning:", emailErr);
+      }
 
       setForm({ name: "", email: "", phone: "", topic: "", message: "" });
       toast({ title: "Message sent", description: "Thanks for reaching out. We will reply as soon as possible." });

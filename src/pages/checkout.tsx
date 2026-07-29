@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, CreditCard, Shield, Sparkles, CheckCircle2, Ticket, Wallet } from "lucide-react";
+import { ArrowLeft, CreditCard, Shield, Sparkles, CheckCircle2, Ticket, Wallet, Loader2, Check, X, XCircle, ChevronDown, Globe, Search } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,99 @@ import { openRazorpayModal } from "@/lib/razorpay";
 import type { RazorpaySuccessResponse } from "@/lib/razorpay";
 
 const RAZORPAY_KEY_ID = import.meta.env.VITE_RAZORPAY_KEY_ID as string;
+
+const COUNTRIES = [
+  {
+    name: "India",
+    code: "IN",
+    flag: "🇮🇳",
+    phoneRegex: /^[6-9]\d{9}$/,
+    phoneHint: "10 digits starting with 6–9",
+    postalRegex: /^\d{6}$/,
+    postalHint: "6-digit PIN code",
+  },
+  {
+    name: "United States",
+    code: "US",
+    flag: "🇺🇸",
+    phoneRegex: /^[2-9]\d{9}$/,
+    phoneHint: "10-digit US number",
+    postalRegex: /^\d{5}(-\d{4})?$/,
+    postalHint: "5-digit ZIP (or ZIP+4)",
+  },
+  {
+    name: "United Kingdom",
+    code: "GB",
+    flag: "🇬🇧",
+    phoneRegex: /^(\+44|0)7\d{9}$/,
+    phoneHint: "UK mobile starting with 07 or +447",
+    postalRegex: /^[A-Z]{1,2}\d[A-Z\d]? ?\d[A-Z]{2}$/i,
+    postalHint: "UK postcode e.g. SW1A 1AA",
+  },
+  {
+    name: "Canada",
+    code: "CA",
+    flag: "🇨🇦",
+    phoneRegex: /^[2-9]\d{9}$/,
+    phoneHint: "10-digit Canadian number",
+    postalRegex: /^[A-Z]\d[A-Z] ?\d[A-Z]\d$/i,
+    postalHint: "Postal code e.g. K1A 0B1",
+  },
+  {
+    name: "Australia",
+    code: "AU",
+    flag: "🇦🇺",
+    phoneRegex: /^(04\d{8}|(\+61)?4\d{8})$/,
+    phoneHint: "Australian mobile e.g. 0412345678",
+    postalRegex: /^\d{4}$/,
+    postalHint: "4-digit postcode",
+  },
+  {
+    name: "Germany",
+    code: "DE",
+    flag: "🇩🇪",
+    phoneRegex: /^(\+49|0)\d{10,11}$/,
+    phoneHint: "German number e.g. +491234567890",
+    postalRegex: /^\d{5}$/,
+    postalHint: "5-digit PLZ",
+  },
+  {
+    name: "France",
+    code: "FR",
+    flag: "🇫🇷",
+    phoneRegex: /^(\+33|0)[67]\d{8}$/,
+    phoneHint: "French mobile e.g. +33612345678",
+    postalRegex: /^\d{5}$/,
+    postalHint: "5-digit code postal",
+  },
+  {
+    name: "UAE",
+    code: "AE",
+    flag: "🇦🇪",
+    phoneRegex: /^(\+971|0)?5\d{8}$/,
+    phoneHint: "UAE mobile e.g. +971501234567",
+    postalRegex: /^\d{5,6}$/,
+    postalHint: "5–6 digit postal code",
+  },
+  {
+    name: "Singapore",
+    code: "SG",
+    flag: "🇸🇬",
+    phoneRegex: /^[89]\d{7}$/,
+    phoneHint: "8-digit SG number starting with 8 or 9",
+    postalRegex: /^\d{6}$/,
+    postalHint: "6-digit postal code",
+  },
+  {
+    name: "Other",
+    code: "XX",
+    flag: "🌐",
+    phoneRegex: /.+/,
+    phoneHint: "",
+    postalRegex: /.+/,
+    postalHint: "",
+  },
+] as const;
 
 export default function Checkout() {
   const [, setLocation] = useLocation();
@@ -27,7 +120,12 @@ export default function Checkout() {
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [postalCode, setPostalCode] = useState("");
-  const [country, setCountry] = useState("");
+  const [country, setCountry] = useState("India");
+  const [countryDropdownOpen, setCountryDropdownOpen] = useState(false);
+
+  const selectedCountry = useMemo(() => {
+    return COUNTRIES.find((c) => c.name === country) || COUNTRIES[0];
+  }, [country]);
 
   // Coupon
   const [couponCode, setCouponCode] = useState("");
@@ -152,22 +250,22 @@ export default function Checkout() {
     // 1. Update user shipping details
     await (supabase.from("User_details") as any)
       .update({
-        user_name:    name,
-        user_phone:   phone,
+        user_name: name,
+        user_phone: phone,
         user_address: address,
-        user_city:    city,
-        user_state:   state,
-        user_zip:     postalCode,
+        user_city: city,
+        user_state: state,
+        user_zip: postalCode,
         user_country: country,
       })
       .eq("user_email", user?.email);
 
     // 2. Insert order rows
     const orderRows = items.map((item) => ({
-      order_user_id:            user?.email || "",
-      order_product_id:         item.id,
-      order_product_quantity:   String(item.quantity),
-      order_product_price:      String(item.price),
+      order_user_id: user?.email || "",
+      order_product_id: item.id,
+      order_product_quantity: String(item.quantity),
+      order_product_price: String(item.price),
     }));
 
     const { data: insertedOrders, error: orderInsertErr } = await (supabase.from("Orders") as any)
@@ -180,16 +278,16 @@ export default function Checkout() {
 
     // 3. Insert payment record
     await (supabase.from("Payments") as any).insert({
-      payment_order_id:         orderReferenceId,
-      payment_amount:           String(totalAmount),
-      payment_status:           status,
-      payment_method:           paymentMethod === "cod" ? "COD" : "RAZORPAY",
-      payment_transaction_id:   txnId,
+      payment_order_id: orderReferenceId,
+      payment_amount: String(totalAmount),
+      payment_status: status,
+      payment_method: paymentMethod === "cod" ? "COD" : "RAZORPAY",
+      payment_transaction_id: txnId,
     });
 
     // 4. Insert order history
     await (supabase.from("Order_history") as any).insert({
-      order_id:     orderReferenceId,
+      order_id: orderReferenceId,
       order_status: status === "completed" ? "pending" : "cancelled",
     });
 
@@ -214,47 +312,59 @@ export default function Checkout() {
     }
 
     // Step 1: Create Razorpay order via serverless function
-    const createRes = await fetch("/.netlify/functions/create-razorpay-order", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({
-        amount:  amountPaise,
-        currency: "INR",
-        receipt: `rcpt_${Date.now()}`,
-      }),
-    });
+    let order_id = "";
+    let key_id = RAZORPAY_KEY_ID;
+    try {
+      const createRes = await fetch("/.netlify/functions/create-razorpay-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: amountPaise,
+          currency: "INR",
+          receipt: `rcpt_${Date.now()}`,
+        }),
+      });
 
-    if (!createRes.ok) {
-      const err = await createRes.json().catch(() => ({ error: "Failed to initiate payment." }));
-      throw new Error(err.error || "Failed to create Razorpay order.");
+      if (createRes.ok) {
+        const orderData = await createRes.json();
+        order_id = orderData.order_id || orderData.id;
+        key_id = orderData.key_id || key_id;
+      } else {
+        const errJson = await createRes.json().catch(() => ({}));
+        throw new Error(errJson.error || "Could not create payment order.");
+      }
+    } catch (err: any) {
+      if (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") {
+        order_id = `order_demo_${Date.now()}`;
+      } else {
+        throw err;
+      }
     }
-
-    const { order_id, amount, currency, key_id } = await createRes.json();
 
     // Step 2: Open Razorpay modal
     return new Promise<void>((resolve, reject) => {
       openRazorpayModal({
-        orderId:  order_id,
-        amount,
-        currency,
-        keyId:    key_id || RAZORPAY_KEY_ID,
-        prefill:  { name, email, contact: phone },
+        orderId: order_id,
+        amount: amountPaise,
+        currency: "INR",
+        keyId: key_id,
+        prefill: { name, email, contact: phone },
         onDismiss: () => {
-          reject(new Error("Payment cancelled."));
+          reject(new Error("Payment cancelled by user."));
         },
         onFailure: (reason) => {
-          reject(new Error(reason));
+          reject(new Error(reason || "Payment failed."));
         },
         onSuccess: async (response: RazorpaySuccessResponse) => {
           try {
             // Step 3: Verify signature server-side
             const verifyRes = await fetch("/.netlify/functions/verify-razorpay-payment", {
-              method:  "POST",
+              method: "POST",
               headers: { "Content-Type": "application/json" },
-              body:    JSON.stringify({
-                razorpay_order_id:   response.razorpay_order_id,
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature:  response.razorpay_signature,
+                razorpay_signature: response.razorpay_signature,
               }),
             });
 
@@ -282,10 +392,72 @@ export default function Checkout() {
     });
   };
 
+  const handlePhoneBlur = () => {
+    if (!phone) return;
+    if (selectedCountry && selectedCountry.code !== "XX") {
+      const strippedPhone = phone.replace(/[\s-]/g, "");
+      if (!selectedCountry.phoneRegex.test(strippedPhone)) {
+        toast({
+          title: "Invalid phone number",
+          description: `Phone number doesn't match ${selectedCountry.name} format. Expected: ${selectedCountry.phoneHint}`,
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  const handlePostalBlur = () => {
+    if (!postalCode) return;
+    if (selectedCountry && selectedCountry.code !== "XX") {
+      if (!selectedCountry.postalRegex.test(postalCode.trim())) {
+        toast({
+          title: "Invalid postal code",
+          description: `Postal code doesn't match ${selectedCountry.name} format. Expected: ${selectedCountry.postalHint}`,
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  const handleCountryChange = (newCountry: string) => {
+    setCountry(newCountry);
+    setPhone("");
+    setPostalCode("");
+    toast({
+      title: "Country changed",
+      description: "Please re-enter your phone number and postal code for the new country.",
+    });
+  };
+
   // ── Main submit handler ───────────────────────────────────────────────────────
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (items.length === 0) return;
+
+    // Re-validate phone
+    if (selectedCountry && selectedCountry.code !== "XX") {
+      const cleanPhone = phone.replace(/[\s-]/g, "");
+      if (!selectedCountry.phoneRegex.test(cleanPhone)) {
+        toast({
+          title: "Invalid phone number",
+          description: `Expected format for ${selectedCountry.name}: ${selectedCountry.phoneHint}`,
+          variant: "destructive",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Re-validate postal code
+      if (!selectedCountry.postalRegex.test(postalCode.trim())) {
+        toast({
+          title: "Invalid postal code",
+          description: `Expected format for ${selectedCountry.name}: ${selectedCountry.postalHint}`,
+          variant: "destructive",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+    }
 
     if (!name || !email || !phone || !address || !city || !state || !postalCode || !country) {
       toast({ title: "Missing fields", description: "Please fill in all shipping details.", variant: "destructive" });
@@ -301,7 +473,7 @@ export default function Checkout() {
       }
     } catch (err: any) {
       const msg = err?.message || "An unexpected error occurred.";
-      if (msg !== "Payment cancelled.") {
+      if (!msg.includes("cancelled")) {
         toast({ title: "Payment error", description: msg, variant: "destructive" });
       }
     } finally {
@@ -444,9 +616,13 @@ export default function Checkout() {
                       required
                       value={phone}
                       onChange={e => setPhone(e.target.value)}
+                      onBlur={handlePhoneBlur}
                       placeholder="e.g. 9876543210"
                       className="w-full px-3.5 py-2.5 text-sm bg-background border border-border/60 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/40"
                     />
+                    {selectedCountry && selectedCountry.phoneHint && (
+                      <p className="text-[10px] text-foreground/45 mt-1">{selectedCountry.phoneHint}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-foreground/60 mb-1.5">Town / City</label>
@@ -494,20 +670,67 @@ export default function Checkout() {
                       required
                       value={postalCode}
                       onChange={e => setPostalCode(e.target.value)}
+                      onBlur={handlePostalBlur}
                       placeholder="400001"
                       className="w-full px-3.5 py-2.5 text-sm bg-background border border-border/60 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/40"
                     />
+                    {selectedCountry && selectedCountry.postalHint && (
+                      <p className="text-[10px] text-foreground/45 mt-1">{selectedCountry.postalHint}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-foreground/60 mb-1.5">Country</label>
-                    <input
-                      type="text"
-                      required
-                      value={country}
-                      onChange={e => setCountry(e.target.value)}
-                      placeholder="e.g. India"
-                      className="w-full px-3.5 py-2.5 text-sm bg-background border border-border/60 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/40"
-                    />
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setCountryDropdownOpen(!countryDropdownOpen)}
+                        className="w-full px-3.5 py-2.5 text-sm bg-background border border-border/60 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/40 text-foreground flex items-center justify-between text-left transition-all"
+                      >
+                        <span className="flex items-center gap-2 font-medium">
+                          <span className="text-base leading-none">{selectedCountry.flag}</span>
+                          <span>{selectedCountry.name}</span>
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-foreground/50 transition-transform duration-200 ${countryDropdownOpen ? "rotate-180" : ""}`} />
+                      </button>
+
+                      {countryDropdownOpen && (
+                        <>
+                          {/* Backdrop click to close */}
+                          <div
+                            className="fixed inset-0 z-20"
+                            onClick={() => setCountryDropdownOpen(false)}
+                          />
+
+                          {/* Custom Dropdown Menu */}
+                          <div className="absolute left-0 right-0 top-full mt-1.5 bg-background border border-border/80 rounded-xl shadow-xl z-30 py-1.5 max-h-60 overflow-y-auto divide-y divide-border/20 backdrop-blur-md">
+                            {COUNTRIES.map((c) => {
+                              const isSelected = c.name === country;
+                              return (
+                                <button
+                                  key={c.code}
+                                  type="button"
+                                  onClick={() => {
+                                    handleCountryChange(c.name);
+                                    setCountryDropdownOpen(false);
+                                  }}
+                                  className={`w-full px-3.5 py-2 text-xs flex items-center justify-between text-left transition-colors ${
+                                    isSelected
+                                      ? "bg-primary/10 text-primary font-semibold"
+                                      : "text-foreground/80 hover:bg-muted/60"
+                                  }`}
+                                >
+                                  <span className="flex items-center gap-2">
+                                    <span className="text-sm">{c.flag}</span>
+                                    <span>{c.name}</span>
+                                  </span>
+                                  {isSelected && <Check className="w-3.5 h-3.5 text-primary" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -522,11 +745,10 @@ export default function Checkout() {
                   {/* Cash on Delivery */}
                   <div
                     onClick={() => setPaymentMethod("cod")}
-                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex flex-col gap-2 ${
-                      paymentMethod === "cod"
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex flex-col gap-2 ${paymentMethod === "cod"
                         ? "border-primary bg-primary/5"
                         : "border-border/60 bg-muted/20 hover:border-border"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center justify-between">
                       <Wallet className="w-5 h-5 text-primary" />
@@ -543,11 +765,10 @@ export default function Checkout() {
                   {/* Pay Online via Razorpay */}
                   <div
                     onClick={() => setPaymentMethod("razorpay")}
-                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex flex-col gap-2 ${
-                      paymentMethod === "razorpay"
+                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex flex-col gap-2 ${paymentMethod === "razorpay"
                         ? "border-primary bg-primary/5"
                         : "border-border/60 bg-muted/20 hover:border-border"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center justify-between">
                       <CreditCard className="w-5 h-5 text-primary" />
@@ -657,8 +878,8 @@ export default function Checkout() {
                   {isSubmitting
                     ? "Processing..."
                     : paymentMethod === "razorpay"
-                    ? `Pay ₹${totalAmount.toFixed(2)} Online`
-                    : `Place Order (COD)`}
+                      ? `Pay ₹${totalAmount.toFixed(2)} Online`
+                      : `Place Order (COD)`}
                 </Button>
 
                 <div className="mt-4 flex items-center justify-center gap-1 text-[11px] text-foreground/40 hover:text-foreground/70 transition-colors cursor-pointer" onClick={() => setLocation("/cart")}>

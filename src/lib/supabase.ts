@@ -12,7 +12,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
   supabaseInstance = createClient('https://placeholder.supabase.co', 'placeholder-key');
 } else {
   supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: { persistSession: true },
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
   });
 }
 

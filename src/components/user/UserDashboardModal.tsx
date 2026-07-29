@@ -4,6 +4,7 @@ import { X, User, MapPin, ShoppingBag, Lock, Plus, Trash2, Edit2, Shield, Mail, 
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
 
 interface Address {
   id: string;
@@ -23,6 +24,7 @@ interface UserDashboardModalProps {
 export function UserDashboardModal({ isOpen, onClose }: UserDashboardModalProps) {
   const { user } = useAuth();
   const { toast } = useToast();
+  useEscapeKey(onClose, isOpen);
   const [activeTab, setActiveTab] = useState<'profile' | 'addresses' | 'orders' | 'security'>('profile');
 
   const [profile, setProfile] = useState({
@@ -100,14 +102,72 @@ export function UserDashboardModal({ isOpen, onClose }: UserDashboardModalProps)
     if (!isOpen || !userEmail || activeTab !== 'orders') return;
     setOrdersLoading(true);
 
+    // Orders are stored in "Orders" table with order_user_id = user email
     (supabase.from('Orders') as any)
       .select('*')
-      .or(`order_user_id.eq.${userEmail},order_user_id.eq.${user?.id}`)
-      .then(({ data, error }: { data: any[] | null; error: unknown }) => {
-        if (!error && data) setOrders(data);
+      .eq('order_user_id', userEmail)
+      .order('order_created_at', { ascending: false })
+      .then(async ({ data: legacyData, error }: { data: any[] | null; error: any }) => {
+        if (error) {
+          console.error('Orders fetch error:', error.message);
+          setOrders([]);
+          setOrdersLoading(false);
+          return;
+        }
+
+        if (!legacyData || legacyData.length === 0) {
+          setOrders([]);
+          setOrdersLoading(false);
+          return;
+        }
+
+        // Fetch product details for each row (by slug or id)
+        const mapped = await Promise.all(
+          legacyData.map(async (item: any) => {
+            // Try to get product by slug first, then by id
+            let prod: any = null;
+            const { data: bySlug } = await (supabase.from('products') as any)
+              .select('id, name, slug, images')
+              .eq('slug', item.order_product_id)
+              .maybeSingle();
+            if (bySlug) {
+              prod = bySlug;
+            } else {
+              const { data: byId } = await (supabase.from('products') as any)
+                .select('id, name, slug, images')
+                .eq('id', item.order_product_id)
+                .maybeSingle();
+              prod = byId;
+            }
+
+            const qty = Number(item.order_product_quantity) || 1;
+            const price = Number(item.order_product_price) || 0;
+
+            return {
+              id: item.id,
+              order_number: String(item.id),
+              status: 'processing',
+              total_amount: price * qty,
+              created_at: item.order_created_at || item.created_at,
+              shipping_address: null,
+              order_items: [
+                {
+                  id: item.id,
+                  quantity: qty,
+                  unit_price: price,
+                  total_price: price * qty,
+                  products: prod || { name: item.order_product_id, slug: item.order_product_id },
+                },
+              ],
+            };
+          })
+        );
+
+        setOrders(mapped);
         setOrdersLoading(false);
       });
-  }, [isOpen, userEmail, activeTab, user?.id]);
+  }, [isOpen, userEmail, activeTab]);
+
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -622,35 +682,71 @@ export function UserDashboardModal({ isOpen, onClose }: UserDashboardModalProps)
                       </div>
                     ) : (
                       <div className="space-y-4">
-                        {processedOrders.map((order) => (
-                          <div key={order.id} className="bg-[#FEFDF9] p-6 rounded-2xl border border-black/5 shadow-sm space-y-4">
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-black/8 font-inter text-xs text-black/60">
-                              <div className="flex items-center gap-3">
-                                <span className="font-dm font-normal text-base text-black">
-                                  Order #{String(order.id || '').slice(0, 8)}
-                                </span>
-                                <span className={`px-3 py-1 rounded-full text-[11px] font-medium uppercase tracking-wider ${
-                                  order.status === 'completed' || order.status === 'delivered'
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : 'bg-amber-100 text-amber-800'
-                                }`}>
-                                  {order.status || 'Processing'}
-                                </span>
+                        {processedOrders.map((order) => {
+                          const rawDate = order.created_at || order.order_created_at;
+                          const formattedDate = rawDate && !isNaN(new Date(rawDate).getTime())
+                            ? new Date(rawDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                            : 'Recently';
+
+                          const itemsList = order.order_items || [];
+
+                          return (
+                            <div key={order.id} className="bg-[#FEFDF9] p-6 rounded-2xl border border-black/5 shadow-sm space-y-4">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-black/8 font-inter text-xs text-black/60">
+                                <div className="flex items-center gap-3">
+                                  <span className="font-dm font-normal text-base text-black">
+                                    Order #{String(order.order_number || order.id || '').slice(0, 8)}
+                                  </span>
+                                  <span className={`px-3 py-1 rounded-full text-[11px] font-medium uppercase tracking-wider ${
+                                    order.status === 'completed' || order.status === 'delivered'
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'bg-amber-100 text-amber-800'
+                                  }`}>
+                                    {order.status || 'Processing'}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center gap-4 text-black/60">
+                                  <span>{formattedDate}</span>
+                                  <span className="font-dm font-normal text-lg text-black font-semibold">
+                                    ₹{Number(order.total_amount || 0).toLocaleString('en-IN')}
+                                  </span>
+                                </div>
                               </div>
 
-                              <div className="flex items-center gap-4 text-black/40">
-                                <span>{new Date(order.created_at).toLocaleDateString()}</span>
-                                <span className="font-dm font-normal text-lg text-black">
-                                  ₹{Number(order.total_amount || 0).toFixed(0)}
-                                </span>
-                              </div>
+                              {/* Purchased Items List */}
+                              {itemsList.length > 0 && (
+                                <div className="space-y-2 pt-1">
+                                  {itemsList.map((item: any, idx: number) => {
+                                    const prodName = item.products?.name || item.product_id || 'Moringa Product';
+                                    const qty = item.quantity || 1;
+                                    const unitPrice = item.unit_price || item.total_price || 0;
+
+                                    return (
+                                      <div key={item.id || idx} className="flex items-center justify-between text-xs font-inter bg-[#F4F3EE]/50 p-2.5 rounded-xl border border-black/5">
+                                        <div className="flex items-center gap-2.5 min-w-0">
+                                          <div className="w-7 h-7 rounded-lg bg-emerald-800/10 flex items-center justify-center text-emerald-900 font-bold text-[10px] shrink-0">
+                                            {qty}x
+                                          </div>
+                                          <span className="font-medium text-black truncate">{prodName}</span>
+                                        </div>
+                                        <span className="font-semibold text-black/80 shrink-0 ml-2">
+                                          ₹{Number(unitPrice * qty).toLocaleString('en-IN')}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+
+                              <p className="font-inter text-xs text-black/50 pt-1">
+                                Deliver to: {typeof order.shipping_address === 'object' && order.shipping_address?.address
+                                  ? `${order.shipping_address.address}, ${order.shipping_address.city || ''}`
+                                  : 'Primary Shipping Address'}
+                              </p>
                             </div>
-
-                            <p className="font-inter text-xs text-black/60">
-                              Deliver to: {order.shipping_address?.address || order.shipping_address?.city || 'Primary Address'}
-                            </p>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </motion.div>

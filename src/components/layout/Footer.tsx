@@ -3,7 +3,6 @@ import { Instagram, Youtube, Twitter, ArrowUpRight, Leaf } from "lucide-react";
 const shopLinks = [
   { label: "Moringa Powder", href: "/products" },
   { label: "Moringa Tablets", href: "/products" },
-  { label: "Moringa Capsules", href: "/products" },
   { label: "Wellness Bundles", href: "/products" },
 ];
 

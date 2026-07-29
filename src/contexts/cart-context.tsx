@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { supabase } from '@/lib/supabase';
 import { getDiscountedPrice, fetchActiveDeals } from '@/lib/api';
 import type { CartItem, FestiveDeal } from '@/types';
+import powderImg from '@assets/generated_images/product_powder.jpg';
 
 interface CartContextType {
   items: CartItem[];
@@ -55,8 +56,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
         for (const row of data) {
           const { data: prod } = await (supabase.from('products') as any)
             .select('*')
-            .eq('slug', row.cart_product_id)
-            .single();
+            .or(`id.eq.${row.cart_product_id},slug.eq.${row.cart_product_id}`)
+            .maybeSingle();
 
           const basePrice = Number(prod?.price || row.cart_product_price);
           const images = (prod?.images as Record<string, unknown>[]) || [];
@@ -66,11 +67,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
             deals
           );
 
+          const imgUrl = (images[0]?.url as string) || '';
+          const fallbackImg = powderImg;
+
           resolvedItems.push({
             id: row.cart_product_id as string,
             name: (prod?.name as string) || (row.cart_product_id as string),
             price: discounted,
-            image: (images[0]?.url as string) || '',
+            image: imgUrl && !imgUrl.includes('undefined') ? imgUrl : fallbackImg,
             quantity: Number(row.cart_product_quantity),
           });
         }

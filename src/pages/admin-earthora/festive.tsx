@@ -54,6 +54,8 @@ function daysBetween(a: string, b: string) {
   return Math.ceil((new Date(b).getTime() - new Date(a).getTime()) / 86400000);
 }
 
+import { useEscapeKey } from "@/hooks/useEscapeKey";
+
 export default function AdminFestive() {
   const [deals, setDeals] = useState<FestiveDeal[]>(initialDeals);
   const [products, setProducts] = useState<ProductOption[]>([]);
@@ -61,6 +63,8 @@ export default function AdminFestive() {
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
+
+  useEscapeKey(() => setShowForm(false), showForm);
   const [search, setSearch] = useState("");
   const [productSearch, setProductSearch] = useState("");
   const [productDropOpen, setProductDropOpen] = useState(false);

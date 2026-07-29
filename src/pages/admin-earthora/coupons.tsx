@@ -20,12 +20,16 @@ interface Coupon {
 
 
 
+import { useEscapeKey } from "@/hooks/useEscapeKey";
+
 export default function AdminCoupons() {
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const { toast } = useToast();
+
+  useEscapeKey(() => setShowForm(false), showForm);
 
   const [form, setForm] = useState({
     code: "", type: "percentage" as "percentage" | "fixed", value: "", minOrder: "", maxUses: "", expiryDate: "", description: "",
@@ -116,25 +120,46 @@ export default function AdminCoupons() {
 
     try {
       const val = parseFloat(form.value) || 0;
-      const { error } = await supabase
-        .from("coupon_details")
-        .insert({
-          coupon_code: form.code.toUpperCase(),
-          coupon_discount_type: form.type,
-          coupon_discount_amount: val,
-          coupon_min_order: parseFloat(form.minOrder) || 0,
-          coupon_max_uses: form.maxUses ? parseInt(form.maxUses) : null,
-          coupon_expiry_date: form.expiryDate || null,
-          coupon_status: "active",
-          coupon_description: form.description,
-        } as any);
+      const codeUpper = form.code.trim().toUpperCase();
+      const formattedDate = form.expiryDate.trim() || null;
 
-      if (error) throw error;
-      toast({ title: "Coupon created", description: `Coupon "${form.code.toUpperCase()}" is now active.` });
+      // Primary insert into coupon_details table
+      const payload: Record<string, any> = {
+        coupon_code: codeUpper,
+        coupon_discount_type: form.type,
+        coupon_discount_amount: val,
+        coupon_discount_value: val,
+        coupon_min_order: parseFloat(form.minOrder) || 0,
+        coupon_status: "active",
+        coupon_description: form.description || "-",
+      };
+      if (form.maxUses) payload.coupon_max_uses = parseInt(form.maxUses);
+      if (formattedDate) payload.coupon_expiry_date = formattedDate;
+
+      const { error: errDetails } = await (supabase.from("coupon_details") as any)
+        .insert(payload);
+
+      if (errDetails) {
+        console.warn("coupon_details insert failed, trying simpler payload:", errDetails.message);
+        // Fallback with minimal required fields
+        const { error: errFallback } = await (supabase.from("coupon_details") as any)
+          .insert({
+            coupon_code: codeUpper,
+            coupon_discount_type: form.type,
+            coupon_discount_amount: val,
+            coupon_discount_value: val,
+            coupon_description: form.description || "-",
+          });
+
+        if (errFallback) throw errDetails || errFallback;
+      }
+
+      toast({ title: "Coupon created", description: `Coupon "${codeUpper}" is now active.` });
       fetchCoupons();
       setShowForm(false);
     } catch (err: any) {
-      toast({ title: "Creation failed", description: err.message, variant: "destructive" });
+      console.error("Coupon creation error:", err);
+      toast({ title: "Creation failed", description: err.message || "Invalid coupon parameters.", variant: "destructive" });
     }
   };
 

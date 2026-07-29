@@ -7,7 +7,6 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
-import { Tooltip } from "@/components/ui/tooltip";
 
 const navItems = [
   { id: "dashboard",  label: "Dashboard",     icon: LayoutDashboard, path: "/admin-earthora/dashboard", hint: "Overview & key metrics" },
@@ -79,29 +78,28 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {navItems.map((item) => {
           const isActive = activeTab === item.id;
           return (
-            <Tooltip key={item.id} content={item.hint} side="right">
-              <button
-                onClick={() => {
-                  setLocation(item.path);
-                  setMobileMenuOpen(false);
-                }}
-                className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 relative group ${
-                  isActive
-                    ? "text-primary bg-[#fafaf8] shadow-md"
-                    : "text-white/70 hover:text-white hover:bg-white/5"
-                }`}
-              >
-                {isActive && (
-                  <motion.span
-                    layoutId="activeBar"
-                    className="absolute left-0 top-1/4 bottom-1/4 w-1 rounded-r-full bg-primary"
-                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                  />
-                )}
-                <item.icon className={`w-[18px] h-[18px] transition-transform duration-300 group-hover:scale-110 ${isActive ? "text-primary" : "text-white/60"}`} strokeWidth={1.75} />
-                <span>{item.label}</span>
-              </button>
-            </Tooltip>
+            <button
+              key={item.id}
+              onClick={() => {
+                setLocation(item.path);
+                setMobileMenuOpen(false);
+              }}
+              className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-300 relative group ${
+                isActive
+                  ? "text-primary bg-[#fafaf8] shadow-md"
+                  : "text-white/70 hover:text-white hover:bg-white/5"
+              }`}
+            >
+              {isActive && (
+                <motion.span
+                  layoutId="activeBar"
+                  className="absolute left-0 top-1/4 bottom-1/4 w-1 rounded-r-full bg-primary"
+                  transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                />
+              )}
+              <item.icon className={`w-[18px] h-[18px] transition-transform duration-300 group-hover:scale-110 ${isActive ? "text-primary" : "text-white/60"}`} strokeWidth={1.75} />
+              <span>{item.label}</span>
+            </button>
           );
         })}
       </nav>
@@ -116,21 +114,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <p className="text-[10px] text-white/40 truncate">admin@earthora.com</p>
           </div>
         </div>
-        <Tooltip content="End admin session" side="top">
-          <button
-            onClick={() => {
-              sessionStorage.removeItem("admin_authenticated");
-              sessionStorage.removeItem("admin_password");
-              localStorage.removeItem("admin_session");
-              toast({ title: "Signed Out", description: "You have been logged out of the session." });
-              setLocation("/");
-            }}
-            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all"
-          >
-            <LogOut className="w-[17px] h-[17px] text-white/40" strokeWidth={1.75} />
-            <span>Sign Out</span>
-          </button>
-        </Tooltip>
+        <button
+          onClick={() => {
+            sessionStorage.removeItem("admin_authenticated");
+            sessionStorage.removeItem("admin_password");
+            localStorage.removeItem("admin_session");
+            toast({ title: "Signed Out", description: "You have been logged out of the session." });
+            setLocation("/");
+          }}
+          className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/5 transition-all"
+        >
+          <LogOut className="w-[17px] h-[17px] text-white/40" strokeWidth={1.75} />
+          <span>Sign Out</span>
+        </button>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-﻿import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { syncUserProfile } from '@/lib/api';
@@ -27,15 +27,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
+    supabase.auth.getSession().then(({ data: { session: s }, error }) => {
+      if (error && error.message.includes('refresh_token')) {
+        supabase.auth.signOut().catch(() => {});
+      }
       setSession(s);
       const u = s?.user ?? null;
       setUser(u);
       if (u) syncUser(u);
       setLoading(false);
+    }).catch(() => {
+      setLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === 'SIGNED_OUT') {
+        localStorage.removeItem('sb-' + (import.meta.env.VITE_SUPABASE_URL || '').split('//')[1]?.split('.')[0] + '-auth-token');
+      }
       setSession(s);
       const u = s?.user ?? null;
       setUser(u);

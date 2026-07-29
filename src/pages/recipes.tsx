@@ -162,9 +162,13 @@ const itemVars: Variants = {
   show: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] } },
 };
 
+import { useEscapeKey } from "@/hooks/useEscapeKey";
+
 export default function Recipes() {
   const [activeTag, setActiveTag] = useState<string>("All");
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
+
+  useEscapeKey(() => setSelectedRecipe(null), selectedRecipe !== null);
 
   const tags = ["All", "Smoothie", "Breakfast", "Latte", "Dinner", "Wellness"];
 

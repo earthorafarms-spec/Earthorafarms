@@ -259,7 +259,7 @@ export default function HealthBenefits() {
                 Ready to experience pure vitality?
               </h2>
               <p className="font-inter text-base text-black/70 max-w-xl leading-relaxed">
-                Start your daily moringa ritual today with our 100% organic, shade-dried powders and capsules sourced directly from our farm.
+                Start your daily moringa ritual today with our 100% organic, shade-dried powder sourced directly from our farm.
               </p>
             </div>
             <div className="lg:col-span-4 flex lg:justify-end">

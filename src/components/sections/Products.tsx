@@ -2,21 +2,9 @@ import { motion } from "framer-motion";
 import { ArrowUpRight, Sparkles, Star } from "lucide-react";
 import powderImg from "@assets/generated_images/product_powder.jpg";
 import tabletsImg from "@assets/generated_images/product_tablets.jpg";
-import capsulesImg from "@assets/generated_images/product_capsules.jpg";
+import heroLeavesImg from "@assets/generated_images/hero_leaves.jpg";
 
 const products = [
-  {
-    id: "capsules",
-    name: "Moringa Elixir Capsules",
-    subtitle: "Daily Vitality & Balance",
-    description:
-      "Quick & Essential. 100% pure shade-dried leaf powder encased in plant-based vegan capsules for clean energy on the go.",
-    rating: "4.9",
-    reviews: "1,240",
-    image: capsulesImg,
-    badge: "Best Seller",
-    tagColor: "bg-emerald-800 text-white",
-  },
   {
     id: "powder",
     name: "Pure Moringa Leaf Powder",
@@ -38,8 +26,20 @@ const products = [
     rating: "4.9",
     reviews: "750",
     image: tabletsImg,
-    badge: "New Formula",
+    badge: "Best Seller",
     tagColor: "bg-[#ECEDEC] text-black border border-black/10",
+  },
+  {
+    id: "amla",
+    name: "Organic Amla Powder",
+    subtitle: "Pure Indian Gooseberry",
+    description:
+      "Organic & Vitamin-C Rich. Stone-ground wild amla fruit powder delivering natural antioxidant support and immunity.",
+    rating: "4.7",
+    reviews: "420",
+    image: heroLeavesImg,
+    badge: "New Release",
+    tagColor: "bg-emerald-900 text-white",
   },
 ];
 

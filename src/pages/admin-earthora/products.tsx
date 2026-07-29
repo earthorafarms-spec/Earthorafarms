@@ -1,19 +1,20 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, Filter, Plus, Package, Eye, Trash2, X, Leaf, UploadCloud, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
+import { useEscapeKey } from "@/hooks/useEscapeKey";
 
 import powderImg from "@assets/generated_images/product_powder.jpg";
 import tabletsImg from "@assets/generated_images/product_tablets.jpg";
-import capsulesImg from "@assets/generated_images/product_capsules.jpg";
+
 import heroLeavesImg from "@assets/generated_images/hero_leaves.jpg";
 
 const staticFallbackMap: Record<string, string> = {
   powder: powderImg,
   tablets: tabletsImg,
-  capsules: capsulesImg,
+
   amla: heroLeavesImg,
 };
 
@@ -40,7 +41,6 @@ interface AdminProduct {
   images: ProductImage[];
 }
 
-import { useEffect } from "react";
 
 export default function AdminProducts() {
   const [products, setProducts] = useState<AdminProduct[]>([]);
@@ -70,6 +70,9 @@ export default function AdminProducts() {
     open: false, productId: "", productName: "", qty: "", notes: "",
     waitingCount: 0, submitting: false,
   });
+
+  useEscapeKey(() => setShowForm(false), showForm);
+  useEscapeKey(() => setRestockModal((m) => ({ ...m, open: false })), restockModal.open);
 
   const fetchProducts = async () => {
     try {
@@ -449,7 +452,6 @@ export default function AdminProducts() {
                         const slug = p.name.toLowerCase();
                         if (slug.includes("amla")) displaySrc = staticFallbackMap.amla;
                         else if (slug.includes("tablets")) displaySrc = staticFallbackMap.tablets;
-                        else if (slug.includes("capsules")) displaySrc = staticFallbackMap.capsules;
                         else displaySrc = staticFallbackMap.powder;
                       }
 
@@ -652,7 +654,7 @@ export default function AdminProducts() {
                     <div className="max-w-xl mx-auto space-y-5">
                       <div>
                         <label className="text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5 block">Product Name *</label>
-                        <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Organic Moringa Capsules" className="w-full h-11 px-4 text-sm bg-white border border-border/40 rounded-xl outline-none focus:border-primary/30 focus:ring-2 focus:ring-primary/5 transition-all placeholder:text-foreground/25" />
+                        <input type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Organic Moringa Powder" className="w-full h-11 px-4 text-sm bg-white border border-border/40 rounded-xl outline-none focus:border-primary/30 focus:ring-2 focus:ring-primary/5 transition-all placeholder:text-foreground/25" />
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">

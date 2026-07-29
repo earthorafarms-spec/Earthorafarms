@@ -4,14 +4,13 @@ import powderImg from '@assets/generated_images/product_powder.jpg';
 import powderImg2 from '@assets/generated_images/product_powder_2.jpg';
 import tabletsImg from '@assets/generated_images/product_tablets.jpg';
 import tabletsImg2 from '@assets/generated_images/product_tablets_2.jpg';
-import capsulesImg from '@assets/generated_images/product_capsules.jpg';
-import capsulesImg2 from '@assets/generated_images/product_capsules_2.jpg';
+
 import heroLeavesImg from '@assets/generated_images/hero_leaves.jpg';
 
 const staticImageMap: Record<string, { main: string; hover: string }> = {
   powder: { main: powderImg, hover: powderImg2 },
   tablets: { main: tabletsImg, hover: tabletsImg2 },
-  capsules: { main: capsulesImg, hover: capsulesImg2 },
+
   amla: { main: heroLeavesImg, hover: heroLeavesImg },
 };
 

@@ -7,6 +7,7 @@ import { useCart } from "@/contexts/cart-context";
 import { useAuth } from "@/contexts/auth-context";
 import { supabase } from "@/lib/supabase";
 import { UserDashboardModal } from "@/components/user/UserDashboardModal";
+import { useEscapeKey } from "@/hooks/useEscapeKey";
 
 const navLinks = [
   { label: "Home", href: "/" },
@@ -30,10 +31,24 @@ export function Navbar() {
 
   const isHomePage = location === "/";
 
+  useEscapeKey(() => setIsMobileOpen(false), isMobileOpen);
+
   useEffect(() => {
     setMounted(true);
     return () => setMounted(false);
   }, []);
+
+  // Lock background body scroll when mobile menu is open
+  useEffect(() => {
+    if (isMobileOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isMobileOpen]);
 
   // Fetch initial favorites count
   useEffect(() => {
