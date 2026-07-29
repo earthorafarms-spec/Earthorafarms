@@ -25,6 +25,9 @@ const Products = lazy(() => import('./pages/products'));
 const Cart = lazy(() => import('./pages/cart'));
 const Favorites = lazy(() => import('./pages/favorites'));
 const Checkout = lazy(() => import('./pages/checkout'));
+const ShippingPolicy = lazy(() => import('./pages/shipping-policy'));
+const ReturnsRefunds = lazy(() => import('./pages/returns-refunds'));
+const FAQ = lazy(() => import('./pages/faq'));
 
 const AdminLayout = lazy(() => import('./pages/admin-earthora/layout'));
 const AdminDashboard = lazy(() => import('./pages/admin-earthora/dashboard'));
@@ -88,6 +91,9 @@ export default function App() {
                   <Route path="/cart" component={Cart} />
                   <Route path="/favorites" component={Favorites} />
                   <Route path="/checkout" component={Checkout} />
+                  <Route path="/shipping-policy" component={ShippingPolicy} />
+                  <Route path="/returns-refunds" component={ReturnsRefunds} />
+                  <Route path="/faq" component={FAQ} />
                   <Route path="/auth" component={Auth} />
 
                   <Route path="/admin-earthora">

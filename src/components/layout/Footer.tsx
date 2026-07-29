@@ -15,9 +15,9 @@ const exploreLinks = [
 
 const supportLinks = [
   { label: "Contact Us", href: "/contact" },
-  { label: "Shipping Policy", href: "#" },
-  { label: "Returns & Refunds", href: "#" },
-  { label: "FAQ", href: "#" },
+  { label: "Shipping Policy", href: "/shipping-policy" },
+  { label: "Returns & Refunds", href: "/returns-refunds" },
+  { label: "FAQ", href: "/faq" },
 ];
 
 export function Footer() {
