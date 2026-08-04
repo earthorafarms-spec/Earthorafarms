@@ -1,4 +1,5 @@
 import { ArrowUpRight } from "lucide-react";
+import { Link } from "wouter";
 import terraHeroBg from "@assets/generated_images/terra_hero_bg.webp";
 import terraBottle from "@assets/generated_images/hero_bottle_new.png";
 
@@ -52,8 +53,8 @@ export function Hero() {
 
           {/* CTA Section */}
           <div className="mt-6 sm:mt-10 lg:mt-[60px] flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-8 lg:gap-[50px] animate-fade-up delay-600">
-            <button
-              type="button"
+            <Link
+              href="/our-product"
               className="bg-black text-white rounded-md w-full sm:w-[240px] md:w-[280px] lg:w-[310px] h-12 sm:h-16 lg:h-[72px] font-inter font-medium text-sm sm:text-lg lg:text-2xl tracking-[-0.03em] flex items-center justify-center gap-2 hover:bg-black/90 transition-all duration-300 shadow-xl group shrink-0"
             >
               <span>Explore Now</span>
@@ -61,7 +62,7 @@ export function Hero() {
                 size={20}
                 className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform"
               />
-            </button>
+            </Link>
             <p className="text-white/90 max-w-[310px] font-inter font-normal text-xs sm:text-base lg:text-lg leading-[1.45] tracking-[-0.02em]">
               Discover our new plant-based supplements for daily balance and
               clean energy.

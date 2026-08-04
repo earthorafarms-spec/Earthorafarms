@@ -87,9 +87,9 @@ export default function AdminOrders() {
         .select(`
           id,
           order_number,
+          shipping_address,
           status,
           total_amount,
-          shipping_address,
           created_at,
           order_items (
             id,
@@ -103,25 +103,6 @@ export default function AdminOrders() {
               slug,
               images
             )
-          ),
-          voice_orders (
-            id,
-            payment_link_url,
-            payment_link_id,
-            payment_status,
-            sent_via,
-            customer_phone,
-            expires_at
-          ),
-          call_sessions (
-            id,
-            caller_phone,
-            language,
-            started_at,
-            ended_at,
-            transcript,
-            outcome,
-            ai_provider
           )
         `)
         .order("created_at", { ascending: false });
@@ -145,9 +126,6 @@ export default function AdminOrders() {
           0
         );
 
-        const voiceData = Array.isArray(o.voice_orders) ? o.voice_orders[0] : o.voice_orders;
-        const callData = Array.isArray(o.call_sessions) ? o.call_sessions[0] : o.call_sessions;
-
         return {
           id: o.id,
           orderNumber: o.order_number || o.id,
@@ -163,24 +141,11 @@ export default function AdminOrders() {
           itemsList,
           total: Number(o.total_amount || 0),
           status: o.status || "pending",
-          rawDate: o.created_at,
-          date: new Date(o.created_at).toLocaleDateString("en-IN", {
-            day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit"
+          date: new Date(o.created_at || Date.now()).toLocaleDateString("en-IN", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
           }),
-          isVoiceOrder: !!voiceData,
-          voiceDetails: voiceData ? {
-            paymentStatus: voiceData.payment_status,
-            paymentLinkUrl: voiceData.payment_link_url,
-            sentVia: voiceData.sent_via,
-            customerPhone: voiceData.customer_phone,
-            expiresAt: voiceData.expires_at ? new Date(voiceData.expires_at).toLocaleString("en-IN") : null,
-          } : null,
-          callSession: callData ? {
-            language: callData.language,
-            transcript: Array.isArray(callData.transcript) ? callData.transcript : [],
-            outcome: callData.outcome,
-            aiProvider: callData.ai_provider,
-          } : null,
         };
       });
 
@@ -459,11 +424,6 @@ export default function AdminOrders() {
                       <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded font-medium">
                         #{order.orderNumber}
                       </span>
-                      {order.isVoiceOrder && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80 inline-flex items-center gap-1">
-                          📞 Voice
-                        </span>
-                      )}
                       <span>·</span>
                       <span>{order.date}</span>
                       {order.email && (
@@ -908,79 +868,6 @@ export default function AdminOrders() {
                     </div>
                   </div>
                 </div>
-
-                {/* Voice Order Details Card (If voice order) */}
-                {selectedOrder.voiceDetails && (
-                  <div className="bg-emerald-50/60 p-4.5 rounded-2xl border border-emerald-200/60 space-y-3 font-sans">
-                    <h3 className="text-xs uppercase tracking-wider font-bold text-emerald-800 flex items-center gap-2">
-                      📞 Voice Order Details
-                    </h3>
-                    <div className="grid grid-cols-2 gap-3 text-xs">
-                      <div>
-                        <p className="text-emerald-900/60 font-medium">Payment Link Status</p>
-                        <span className="capitalize font-bold text-emerald-950 mt-0.5 block">
-                          {selectedOrder.voiceDetails.paymentStatus || "pending"}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="text-emerald-900/60 font-medium">Sent Via</p>
-                        <span className="capitalize font-semibold text-emerald-950 mt-0.5 block">
-                          {selectedOrder.voiceDetails.sentVia || "SMS / WhatsApp"}
-                        </span>
-                      </div>
-                      {selectedOrder.voiceDetails.paymentLinkUrl && (
-                        <div className="col-span-2">
-                          <p className="text-emerald-900/60 font-medium">Payment Link URL</p>
-                          <a
-                            href={selectedOrder.voiceDetails.paymentLinkUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-emerald-700 underline font-mono text-[11px] truncate block mt-0.5 hover:text-emerald-900"
-                          >
-                            {selectedOrder.voiceDetails.paymentLinkUrl}
-                          </a>
-                        </div>
-                      )}
-                      {selectedOrder.voiceDetails.expiresAt && (
-                        <div className="col-span-2">
-                          <p className="text-emerald-900/60 font-medium">Expires At</p>
-                          <p className="font-medium text-emerald-950 text-[11px] mt-0.5">
-                            {selectedOrder.voiceDetails.expiresAt}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Collapsible Call Transcript Section (If call session exists) */}
-                {selectedOrder.callSession && selectedOrder.callSession.transcript && selectedOrder.callSession.transcript.length > 0 && (
-                  <details className="bg-muted/30 rounded-2xl border border-border/40 p-4 font-sans group">
-                    <summary className="text-xs font-bold text-foreground/80 cursor-pointer flex items-center justify-between select-none">
-                      <span className="flex items-center gap-2">
-                        🗣️ Call Transcript ({selectedOrder.callSession.language?.toUpperCase() || "EN"})
-                      </span>
-                      <span className="text-[10px] text-foreground/40 font-normal group-open:hidden">Click to expand</span>
-                    </summary>
-                    <div className="mt-3 space-y-2 max-h-60 overflow-y-auto pt-2 border-t border-border/20 text-xs">
-                      {selectedOrder.callSession.transcript.map((t: any, idx: number) => (
-                        <div
-                          key={idx}
-                          className={`p-2.5 rounded-xl border ${
-                            t.role === "user"
-                              ? "bg-white border-border/30 text-foreground"
-                              : "bg-primary/5 border-primary/15 text-foreground"
-                          }`}
-                        >
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-foreground/50 block mb-0.5">
-                            {t.role === "user" ? "👤 Caller" : "🤖 Agent (Mira)"}
-                          </span>
-                          <p className="text-xs leading-relaxed">{t.text}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                )}
 
                 {/* Items Ordered Breakdown */}
                 <div className="space-y-3">

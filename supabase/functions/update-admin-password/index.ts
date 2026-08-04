@@ -13,7 +13,7 @@ const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-admin-password, x-codex-password",
+    "authorization, x-client-info, apikey, content-type, x-admin-password",
 };
 
 Deno.serve(async (req: Request): Promise<Response> => {
@@ -22,8 +22,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   try {
-    const body = await req.json();
-    const { currentPassword, newPassword } = body || {};
+    const body: { currentPassword?: string; newPassword?: string } = (await req.json()) || {};
+    const { currentPassword, newPassword } = body;
 
     if (!currentPassword || !newPassword || typeof newPassword !== "string") {
       return new Response(

@@ -14,7 +14,7 @@ const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-admin-password, x-codex-password",
+    "authorization, x-client-info, apikey, content-type, x-admin-password",
 };
 
 function constantTimeEqual(a: string, b: string): boolean {

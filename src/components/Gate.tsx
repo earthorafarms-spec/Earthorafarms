@@ -10,7 +10,6 @@ interface GateProps {
   passwordPlaceholder: string;
   submitLabel: string;
   loadingLabel: string;
-  mode?: 'admin' | 'codex';
 }
 
 export function Gate({
@@ -22,7 +21,6 @@ export function Gate({
   passwordPlaceholder,
   submitLabel,
   loadingLabel,
-  mode = 'admin',
 }: GateProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(() =>
     sessionStorage.getItem(storageKey) === 'true'
@@ -42,7 +40,7 @@ export function Gate({
     setErrorMsg('');
     try {
       const { data, error: fnError } = await supabase.functions.invoke('send-otp', {
-        body: { password, domain: mode },
+        body: { password, domain: 'admin' },
       });
       if (fnError) throw fnError;
       if (data?.ok) {
@@ -70,7 +68,7 @@ export function Gate({
     setErrorMsg('');
     try {
       const { data, error: fnError } = await supabase.functions.invoke('verify-otp', {
-        body: { otp, domain: mode },
+        body: { otp, domain: 'admin' },
       });
       if (fnError) throw fnError;
       if (data?.ok) {
@@ -97,7 +95,7 @@ export function Gate({
     setResent(true);
     try {
       const pwd = sessionStorage.getItem(passwordKey) || password;
-      await supabase.functions.invoke('send-otp', { body: { password: pwd, domain: mode } });
+      await supabase.functions.invoke('send-otp', { body: { password: pwd, domain: 'admin' } });
     } catch {
       setErrorMsg('Failed to resend OTP');
     } finally {
@@ -107,11 +105,10 @@ export function Gate({
 
   if (isAuthenticated) return <>{children}</>;
 
-  const isMono = mode === 'codex';
-  const inputClass = `w-full h-12 px-4 text-sm bg-[#fafaf8] border border-border/40 rounded-xl outline-none focus:border-primary/20 focus:ring-2 focus:ring-primary/5 transition-all text-center placeholder:text-foreground/30 ${isMono ? 'font-mono font-medium' : 'font-medium tracking-wider'}`;
+  const inputClass = `w-full h-12 px-4 text-sm bg-[#fafaf8] border border-border/40 rounded-xl outline-none focus:border-primary/20 focus:ring-2 focus:ring-primary/5 transition-all text-center placeholder:text-foreground/30 font-medium tracking-wider`;
 
   return (
-    <div className={`flex min-h-screen items-center justify-center bg-[#fafaf8] p-6 ${isMono ? 'font-mono' : ''}`}>
+    <div className="flex min-h-screen items-center justify-center bg-[#fafaf8] p-6">
       <div className="w-full max-w-sm bg-white rounded-3xl border border-border/40 p-8 shadow-[0_8px_30px_rgb(0,0,0,0.02)]">
         <div className="flex flex-col items-center gap-3.5 mb-6">
           <div className="w-11 h-11 rounded-full bg-primary/10 flex items-center justify-center">
@@ -126,7 +123,7 @@ export function Gate({
             )}
           </div>
           <div className="text-center">
-            <h2 className={`text-lg font-bold text-foreground ${!isMono ? 'font-serif' : ''}`}>{title}</h2>
+            <h2 className="text-lg font-bold text-foreground font-serif">{title}</h2>
             <p className="text-xs text-foreground/45 mt-0.5">
               {step === 'password' ? subtitle : 'Enter the OTP sent to your email'}
             </p>
@@ -165,7 +162,7 @@ export function Gate({
                 value={otp}
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                 disabled={loading}
-                className={`${inputClass} text-2xl font-bold tracking-[0.4em] ${isMono ? 'font-mono' : ''}`}
+                className={`${inputClass} text-2xl font-bold tracking-[0.4em]`}
               />
               {error && errorMsg && <p className="text-xs text-red-400 mt-1.5 text-center font-medium">{errorMsg}</p>}
               {resent && !error && <p className="text-xs text-green-600 mt-1.5 text-center font-medium">OTP resent successfully</p>}

@@ -16,7 +16,6 @@ const exploreLinks = [
 const supportLinks = [
   { label: "Contact Us", href: "/contact" },
   { label: "Shipping Policy", href: "/shipping-policy" },
-  { label: "Returns & Refunds", href: "/returns-refunds" },
   { label: "FAQ", href: "/faq" },
 ];
 
@@ -164,9 +163,9 @@ export function Footer() {
             © {new Date().getFullYear()} Earthora Farms Pvt. Ltd. All rights reserved.
           </p>
           <div className="flex items-center gap-6 font-inter text-xs text-white/30">
-            <a href="#" className="hover:text-white/70 transition-colors">Privacy Policy</a>
-            <a href="#" className="hover:text-white/70 transition-colors">Terms of Use</a>
-            <a href="#" className="hover:text-white/70 transition-colors">Cookie Settings</a>
+            <a href="/privacy-policy" className="hover:text-white/70 transition-colors">Privacy Policy</a>
+            <a href="/terms-of-use" className="hover:text-white/70 transition-colors">Terms of Use</a>
+            <a href="/cookie-settings" className="hover:text-white/70 transition-colors">Cookie Settings</a>
           </div>
         </div>
       </div>

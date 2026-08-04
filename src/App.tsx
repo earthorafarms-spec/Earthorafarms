@@ -7,27 +7,25 @@ import { trackPageView } from '@/lib/analytics';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Gate } from '@/components/Gate';
 import ScrollToTop from '@/components/ScrollToTop';
-import { ChatWidget } from '@/components/chat/ChatWidget';
+import { PageSkeleton } from '@/components/ui/PageSkeleton';
 
-const PageLoader = () => (
-  <div className="flex min-h-[100dvh] items-center justify-center bg-background">
-    <div className="w-8 h-8 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
-  </div>
-);
+const PageLoader = () => <PageSkeleton />;
 
-const Home = lazy(() => import('./pages/home'));
-const Recipes = lazy(() => import('./pages/recipes'));
-const Contact = lazy(() => import('./pages/contact'));
-const HealthBenefits = lazy(() => import('./pages/health-benefits'));
-const Gallery = lazy(() => import('./pages/gallery'));
-const Auth = lazy(() => import('./pages/auth'));
-const Products = lazy(() => import('./pages/products'));
-const Cart = lazy(() => import('./pages/cart'));
-const Favorites = lazy(() => import('./pages/favorites'));
-const Checkout = lazy(() => import('./pages/checkout'));
-const ShippingPolicy = lazy(() => import('./pages/shipping-policy'));
-const ReturnsRefunds = lazy(() => import('./pages/returns-refunds'));
-const FAQ = lazy(() => import('./pages/faq'));
+import Home from './pages/home';
+import Recipes from './pages/recipes';
+import Contact from './pages/contact';
+import HealthBenefits from './pages/health-benefits';
+import Gallery from './pages/gallery';
+import Auth from './pages/auth';
+import Products from './pages/products';
+import Cart from './pages/cart';
+import Favorites from './pages/favorites';
+import Checkout from './pages/checkout';
+import ShippingPolicy from './pages/shipping-policy';
+import FAQ from './pages/faq';
+import PrivacyPolicy from './pages/privacy-policy';
+import TermsOfUse from './pages/terms-of-use';
+import CookieSettings from './pages/cookie-settings';
 
 const AdminLayout = lazy(() => import('./pages/admin-earthora/layout'));
 const AdminDashboard = lazy(() => import('./pages/admin-earthora/dashboard'));
@@ -38,23 +36,20 @@ const AdminCoupons = lazy(() => import('./pages/admin-earthora/coupons'));
 const AdminFestive = lazy(() => import('./pages/admin-earthora/festive'));
 const AdminSettings = lazy(() => import('./pages/admin-earthora/settings'));
 
-const CodexLayout = lazy(() => import('./pages/codex/layout'));
-const CodexDashboard = lazy(() => import('./pages/codex/dashboard'));
-const CodexAnalytics = lazy(() => import('./pages/codex/analytics'));
-const CodexReports = lazy(() => import('./pages/codex/reports'));
-const CodexSettings = lazy(() => import('./pages/codex/settings'));
+import NotFound from './pages/not-found';
 
 function Fallback() {
-  return <Redirect to="/" />;
+  return <NotFound />;
 }
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000,
-      gcTime: 10 * 60 * 1000,
-      retry: 1,
+      staleTime: 10 * 60 * 1000,
+      gcTime: 30 * 60 * 1000,
+      retry: 2,
       refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
     },
   },
 });
@@ -63,12 +58,6 @@ function PageTracker() {
   const [loc] = useLocation();
   useEffect(() => { trackPageView(loc); }, [loc]);
   return null;
-}
-
-function ConditionalChatWidget() {
-  const [location] = useLocation();
-  if (location.startsWith('/auth') || location.startsWith('/admin-earthora') || location.startsWith('/codex')) return null;
-  return <ChatWidget />;
 }
 
 export default function App() {
@@ -92,8 +81,10 @@ export default function App() {
                   <Route path="/favorites" component={Favorites} />
                   <Route path="/checkout" component={Checkout} />
                   <Route path="/shipping-policy" component={ShippingPolicy} />
-                  <Route path="/returns-refunds" component={ReturnsRefunds} />
                   <Route path="/faq" component={FAQ} />
+                  <Route path="/privacy-policy" component={PrivacyPolicy} />
+                  <Route path="/terms-of-use" component={TermsOfUse} />
+                  <Route path="/cookie-settings" component={CookieSettings} />
                   <Route path="/auth" component={Auth} />
 
                   <Route path="/admin-earthora">
@@ -108,7 +99,6 @@ export default function App() {
                       passwordPlaceholder="Security Password"
                       submitLabel="Authenticate"
                       loadingLabel={'Verifying\u2026'}
-                      mode="admin"
                     >
                       <AdminLayout>
                         <Switch>
@@ -127,38 +117,9 @@ export default function App() {
                     </Gate>
                   </Route>
 
-                  <Route path="/codex">
-                    <Redirect to="/codex/dashboard" />
-                  </Route>
-                  <Route path="/codex/:rest*">
-                    <Gate
-                      storageKey="codex_authenticated"
-                      passwordKey="codex_password"
-                      title="Codex Console"
-                      subtitle="Enter your developer key"
-                      passwordPlaceholder="Developer Key"
-                      submitLabel="Initialize Terminal"
-                      loadingLabel={'Decrypting\u2026'}
-                      mode="codex"
-                    >
-                      <CodexLayout>
-                        <Switch>
-                          <Route path="/codex/dashboard" component={CodexDashboard} />
-                          <Route path="/codex/analytics" component={CodexAnalytics} />
-                          <Route path="/codex/reports" component={CodexReports} />
-                          <Route path="/codex/settings" component={CodexSettings} />
-                          <Route>
-                            <Redirect to="/codex/dashboard" />
-                          </Route>
-                        </Switch>
-                      </CodexLayout>
-                    </Gate>
-                  </Route>
-
                   <Route component={Fallback} />
                 </Switch>
               </Suspense>
-              <ConditionalChatWidget />
             </WouterRouter>
           </CartProvider>
         </AuthProvider>

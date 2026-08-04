@@ -86,13 +86,8 @@ const faqData: FAQItem[] = [
   },
   {
     category: "orders",
-    question: "How does your Voice Ordering Assistant work?",
-    answer: "You can place orders by calling our automated Voice Assistant ('Mira'). You simply speak in English, Hindi, or Gujarati to choose products and confirm your address. Mira creates your order and texts a 24-hour Razorpay payment link directly to your phone via SMS and WhatsApp.",
-  },
-  {
-    category: "orders",
     question: "Can I modify or cancel my order after placing it?",
-    answer: "Yes, you can modify or cancel your order anytime before dispatch (prior to 2:00 PM IST). You can cancel through your account dashboard or by speaking to our Voice Assistant.",
+    answer: "Yes, you can modify or cancel your order anytime before dispatch (prior to 2:00 PM IST). You can cancel through your account dashboard or by contacting our support team.",
   },
 ];
 
@@ -160,7 +155,7 @@ export default function FAQ() {
               transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.3 }}
               className="lg:col-span-4 font-inter font-normal text-base sm:text-lg text-white/55 leading-relaxed tracking-[-0.02em]"
             >
-              Everything you need to know about our organic moringa harvesting process, nutrition claims, order shipping, and voice payments.
+              Everything you need to know about our organic moringa harvesting process, nutrition claims, order shipping, and payments.
             </motion.p>
           </div>
         </div>
@@ -265,7 +260,7 @@ export default function FAQ() {
         </div>
       </section>
 
-      {/* ── Voice Assistant & Contact Prompt ── */}
+      {/* ── Contact Prompt ── */}
       <section className="py-20 bg-[#FEFDF9] border-t border-black/5 text-center">
         <div className="container mx-auto px-6 max-w-3xl">
           <div className="w-12 h-12 rounded-2xl bg-emerald-700 text-white flex items-center justify-center mx-auto mb-4">
@@ -275,7 +270,7 @@ export default function FAQ() {
             Still have questions?
           </h2>
           <p className="font-inter text-sm sm:text-base text-black/60 leading-relaxed mb-8 max-w-xl mx-auto">
-            Our farm customer care team or AI Voice Assistant ('Mira') is ready to help you with instant answers and live phone order assistance.
+            Our farm customer care team is ready to help you with instant answers and order assistance.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
             <Link href="/contact" className="px-6 py-3 rounded-xl bg-black text-white font-inter text-sm font-medium hover:bg-black/85 transition-colors">

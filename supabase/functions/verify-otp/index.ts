@@ -4,7 +4,7 @@ const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-admin-password, x-codex-password",
+    "authorization, x-client-info, apikey, content-type, x-admin-password",
 };
 
 function getClientIp(req: Request): string {
@@ -50,18 +50,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
   try {
     const body = await req.json();
     const otp: string | undefined = body?.otp;
-    const domain: string | undefined = body?.domain;
+    const domain = "admin";
 
     if (!otp || typeof otp !== "string" || otp.length !== 6) {
       return new Response(
         JSON.stringify({ ok: false, error: "Invalid OTP format" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
-
-    if (!domain || !["admin", "codex"].includes(domain)) {
-      return new Response(
-        JSON.stringify({ ok: false, error: "Invalid domain" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }

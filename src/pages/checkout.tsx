@@ -134,6 +134,7 @@ export default function Checkout() {
   const [couponError, setCouponError] = useState("");
 
   const [paymentMethod, setPaymentMethod] = useState<"cod" | "razorpay">("cod");
+  const [allowMarketing, setAllowMarketing] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<any | null>(null);
 
@@ -732,6 +733,21 @@ export default function Checkout() {
                       )}
                     </div>
                   </div>
+                </div>
+
+                {/* Marketing Consent Checkbox */}
+                <div className="pt-2 border-t border-border/30">
+                  <label className="flex items-start gap-3 cursor-pointer group select-none">
+                    <input
+                      type="checkbox"
+                      checked={allowMarketing}
+                      onChange={(e) => setAllowMarketing(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 rounded border-border/70 text-primary focus:ring-primary/30 accent-emerald-700 cursor-pointer"
+                    />
+                    <span className="text-xs text-foreground/75 leading-relaxed font-inter">
+                      Keep me updated via WhatsApp & SMS with exclusive farm offers, new harvest announcements, and wellness recipes.
+                    </span>
+                  </label>
                 </div>
               </div>
 

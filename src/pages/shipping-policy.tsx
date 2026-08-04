@@ -181,7 +181,7 @@ export default function ShippingPolicy() {
                   <MapPin className="w-5 h-5 text-emerald-800" /> Address Adjustments
                 </h3>
                 <p className="font-inter text-sm text-black/65 leading-relaxed">
-                  Need to update your delivery address? If your order has not yet left our facility, contact our support team at <a href="mailto:contactus@earthorafarms.com" className="text-emerald-800 font-medium underline">contactus@earthorafarms.com</a> or via our Voice Assistant before 2:00 PM IST.
+                  Need to update your delivery address? If your order has not yet left our facility, contact our support team at <a href="mailto:contactus@earthorafarms.com" className="text-emerald-800 font-medium underline">contactus@earthorafarms.com</a> before 2:00 PM IST.
                 </p>
               </div>
 

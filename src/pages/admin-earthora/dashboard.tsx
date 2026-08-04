@@ -144,7 +144,7 @@ export default function AdminDashboard() {
 
       if (orderCountries) {
         for (const o of orderCountries as any[]) {
-          const country = (o.shipping_address as any)?.country || (o.shipping_address as any)?.state || "Unknown";
+          const country = (o.shipping_address as any)?.country || "India";
           countryOrders[country] = (countryOrders[country] || 0) + 1;
         }
       }
@@ -153,7 +153,7 @@ export default function AdminDashboard() {
       const combined: { name: string; traffic: number; orders: number }[] = [];
 
       for (const name of allCountries) {
-        if (name === "Unknown") continue;
+        if (name === "Unknown" || !name) continue;
         combined.push({
           name,
           traffic: countryTraffic[name] || 0,
@@ -161,17 +161,14 @@ export default function AdminDashboard() {
         });
       }
 
-      combined.sort((a, b) => b.traffic - a.traffic);
+      combined.sort((a, b) => (b.orders !== a.orders ? b.orders - a.orders : b.traffic - a.traffic));
       const top = combined.slice(0, 6);
 
       if (top.length === 0) {
         setMarkets([
-          { name: "India", pct: 100, growth: "+12 orders", visitors: 1420 },
-          { name: "United States", pct: 65, growth: "+5 orders", visitors: 920 },
-          { name: "United Kingdom", pct: 40, growth: "+2 orders", visitors: 580 },
-          { name: "Germany", pct: 25, growth: "No orders", visitors: 340 },
+          { name: "India", pct: 100, growth: "No orders yet", visitors: totalTraffic || 0 },
         ]);
-        setLiveVisitors(14);
+        setLiveVisitors(0);
         return;
       }
 

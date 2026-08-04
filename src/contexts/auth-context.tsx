@@ -28,8 +28,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session: s }, error }) => {
-      if (error && error.message.includes('refresh_token')) {
+      if (error) {
         supabase.auth.signOut().catch(() => {});
+        localStorage.clear();
       }
       setSession(s);
       const u = s?.user ?? null;
@@ -37,6 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (u) syncUser(u);
       setLoading(false);
     }).catch(() => {
+      supabase.auth.signOut().catch(() => {});
       setLoading(false);
     });
 
@@ -64,8 +66,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(null);
       sessionStorage.removeItem('admin_authenticated');
       sessionStorage.removeItem('admin_password');
-      sessionStorage.removeItem('codex_authenticated');
-      sessionStorage.removeItem('codex_password');
     }
   }, []);
 

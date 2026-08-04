@@ -10,7 +10,7 @@ const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-admin-password, x-codex-password",
+    "authorization, x-client-info, apikey, content-type, x-admin-password",
 };
 
 function constantTimeEqual(a: string, b: string): boolean {
@@ -32,55 +32,29 @@ function constantTimeEqual(a: string, b: string): boolean {
 async function verifyPassword(
   supabase: ReturnType<typeof createClient>,
   password: string,
-  domain: string,
 ): Promise<boolean> {
-  console.log(`[send-otp] verifyPassword called for domain: ${domain}`);
-  
-  if (domain === "admin") {
-    const envPassword = Deno.env.get("ADMIN_PASSWORD");
-    if (envPassword) {
-      console.log("[send-otp] Verifying against ADMIN_PASSWORD env var");
-      return constantTimeEqual(password, envPassword);
-    }
-    
-    console.log("[send-otp] Verifying against DB admin_settings table");
-    const { data, error } = await supabase
-      .from("admin_settings")
-      .select("value")
-      .eq("key", "admin_password")
-      .single();
-      
-    if (error) {
-      console.error("[send-otp] DB error querying admin_password:", error);
-      return false;
-    }
-    if (!data) {
-      console.error("[send-otp] No admin_password row found in admin_settings");
-      return false;
-    }
-    return constantTimeEqual(password, data.value);
+  const envPassword = Deno.env.get("ADMIN_PASSWORD");
+  if (envPassword) {
+    console.log("[send-otp] Verifying against ADMIN_PASSWORD env var");
+    return constantTimeEqual(password, envPassword);
   }
 
-  if (domain === "codex") {
-    console.log("[send-otp] Verifying codex key against DB admin_settings table");
-    const { data, error } = await supabase
-      .from("admin_settings")
-      .select("value")
-      .eq("key", "codex_password")
-      .single();
-      
-    if (error) {
-      console.error("[send-otp] DB error querying codex_password:", error);
-      return false;
-    }
-    if (!data) {
-      console.error("[send-otp] No codex_password row found in admin_settings");
-      return false;
-    }
-    return constantTimeEqual(password, data.value);
-  }
+  console.log("[send-otp] Verifying against DB admin_settings table");
+  const { data, error } = await supabase
+    .from("admin_settings")
+    .select("value")
+    .eq("key", "admin_password")
+    .single();
 
-  return false;
+  if (error) {
+    console.error("[send-otp] DB error querying admin_password:", error);
+    return false;
+  }
+  if (!data) {
+    console.error("[send-otp] No admin_password row found in admin_settings");
+    return false;
+  }
+  return constantTimeEqual(password, data.value);
 }
 
 function generateOtp(): string {
@@ -94,7 +68,7 @@ async function sendEmail(otp: string, domain: string): Promise<void> {
     return;
   }
 
-  const domainLabel = domain === "admin" ? "Admin Portal" : "Codex Developer Console";
+  const domainLabel = "Admin Portal";
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -170,18 +144,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
   try {
     const body = await req.json();
     const password: string | undefined = body?.password;
-    const domain: string | undefined = body?.domain;
+    const domain = "admin";
 
     if (!password || typeof password !== "string") {
       return new Response(
         JSON.stringify({ ok: false, error: "No password provided" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-      );
-    }
-
-    if (!domain || !["admin", "codex"].includes(domain)) {
-      return new Response(
-        JSON.stringify({ ok: false, error: "Invalid domain" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -200,7 +167,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    const valid = await verifyPassword(supabase, password, domain);
+    const valid = await verifyPassword(supabase, password);
     if (!valid) {
       await recordAttempt(supabase, clientIp, `send-otp:${domain}`);
       return new Response(
