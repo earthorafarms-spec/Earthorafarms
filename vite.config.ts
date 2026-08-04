@@ -26,7 +26,9 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: false,
     cssCodeSplit: false,
-    modulePreload: false,
+    modulePreload: {
+      resolveDependencies: () => [],
+    },
     rollupOptions: {
       output: {
         manualChunks: {

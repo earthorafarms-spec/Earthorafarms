@@ -170,11 +170,12 @@ export default function Checkout() {
           setCity((data.user_city as string) || "");
           setState((data.user_state as string) || "");
           setPostalCode((data.user_zip as string) || "");
-          setCountry((data.user_country as string) || "");
+          setCountry((data.user_country as string) || "India");
         } else {
           setEmail(emailAddr || "");
           setName(user?.user_metadata?.name || user?.user_metadata?.full_name || "");
           setPhone(user?.phone || "");
+          setCountry("India");
         }
       });
   }, [user, authLoading]);
@@ -382,6 +383,16 @@ export default function Checkout() {
             const txnId = response.razorpay_payment_id;
             const orderReferenceId = await saveOrderToDatabase("completed", txnId);
             setOrderSuccess({ order_number: orderReferenceId, method: "razorpay", total: totalAmount });
+
+            // Trigger invoice email sending asynchronously
+            try {
+              supabase.functions.invoke("send-invoice", {
+                body: { orderId: orderReferenceId },
+              });
+            } catch (emailErr) {
+              console.error("Error triggering invoice email:", emailErr);
+            }
+
             clearCart();
             toast({ title: "Payment successful!", description: `Order ID: ${orderReferenceId}` });
             resolve();

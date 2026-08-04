@@ -1,7 +1,7 @@
 import { ArrowUpRight } from "lucide-react";
 import { Link } from "wouter";
 import terraHeroBg from "@assets/generated_images/terra_hero_bg.webp";
-import terraBottle from "@assets/generated_images/hero_bottle_new.png";
+import terraBottle from "@assets/generated_images/user_bottle.png";
 
 const BG_IMAGE_URL = terraHeroBg;
 const PRODUCT_BOTTLE_URL = terraBottle;
