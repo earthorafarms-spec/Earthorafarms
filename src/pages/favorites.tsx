@@ -128,7 +128,7 @@ export default function Favorites() {
                 Explore our collection and click the heart icon to save products.
               </p>
               <Link
-                href="/products"
+                href="/our-product"
                 className="inline-flex items-center gap-2 bg-black text-white px-8 py-4 rounded-xl font-inter font-medium text-base hover:bg-black/85 transition-colors shadow-lg"
               >
                 <span>Explore Products</span>

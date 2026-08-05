@@ -1,4 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { PDFDocument, rgb, StandardFonts } from "https://esm.sh/pdf-lib";
+import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 
 declare const Deno: {
   env: { get(key: string): string | undefined };
@@ -114,14 +116,15 @@ Deno.serve(async (req: Request) => {
       .eq("payment_order_id", orderId)
       .single();
 
-    // Extract address details
+    // Extract details
     const shipping = order.shipping_address || {};
     const recipientEmail = shipping.email || order.user_id;
     const recipientName = shipping.name || "Customer";
     const recipientPhone = shipping.phone || "";
+    const recipientGst = shipping.gst || "N/A";
     const fullAddress = `${shipping.address || ""}, ${shipping.city || ""}, ${shipping.state || ""} - ${shipping.zip || ""}, ${shipping.country || ""}`;
 
-    const invoiceDate = new Date(order.created_at).toLocaleDateString("en-IN", {
+    const invoiceDateStr = new Date(order.created_at).toLocaleDateString("en-IN", {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
@@ -131,18 +134,17 @@ Deno.serve(async (req: Request) => {
     const transactionId = payment?.payment_transaction_id || "N/A";
     const totalAmount = Number(order.total_amount);
 
-    // Calculate line items for GST standard layout (5% Moringa Tax Rate)
-    const HSN_CODE = "12119029";
+    // Calculate line items details for tax calculations
     let subtotalTaxable = 0;
     let totalCgst = 0;
     let totalSgst = 0;
 
-    const itemsHtmlList = orderItems.map((item: any, idx: number) => {
+    const computedItems = orderItems.map((item: any, idx: number) => {
       const productName = item.products?.name || "Organic Moringa Supplement";
       const quantity = Number(item.quantity);
       const lineTotal = Number(item.total_price);
-      
       const unitPrice = Number(item.unit_price);
+      
       const taxableUnitPrice = unitPrice / 1.05;
       const taxableLineTotal = lineTotal / 1.05;
       const lineGst = lineTotal - taxableLineTotal;
@@ -153,164 +155,272 @@ Deno.serve(async (req: Request) => {
       totalCgst += lineCgst;
       totalSgst += lineSgst;
 
-      return `
-        <tr style="border-bottom: 1px solid #e8e6df;">
-          <td style="padding: 12px 8px; font-size: 13px; text-align: center; color: #444;">${idx + 1}</td>
-          <td style="padding: 12px 8px; font-size: 13px; color: #222; font-weight: 500;">
-            ${productName}
-          </td>
-          <td style="padding: 12px 8px; font-size: 13px; text-align: center; color: #444;">${HSN_CODE}</td>
-          <td style="padding: 12px 8px; font-size: 13px; text-align: center; color: #222; font-weight: 600;">${quantity}</td>
-          <td style="padding: 12px 8px; font-size: 13px; text-align: right; color: #444;">₹${taxableUnitPrice.toFixed(2)}</td>
-          <td style="padding: 12px 8px; font-size: 13px; text-align: right; color: #444;">₹${taxableLineTotal.toFixed(2)}</td>
-          <td style="padding: 12px 8px; font-size: 12px; text-align: center; color: #666;">
-            2.5% CGST (₹${lineCgst.toFixed(2)})<br/>
-            2.5% SGST (₹${lineSgst.toFixed(2)})
-          </td>
-          <td style="padding: 12px 8px; font-size: 13px; text-align: right; color: #222; font-weight: 600;">₹${lineTotal.toFixed(2)}</td>
-        </tr>
-      `;
-    }).join("");
+      return {
+        sNo: String(idx + 1),
+        name: productName,
+        hsn: item.products?.hsn_code || "12119029",
+        qty: String(quantity),
+        unitPrice: `Rs. ${taxableUnitPrice.toFixed(2)}`,
+        taxableVal: `Rs. ${taxableLineTotal.toFixed(2)}`,
+        taxes: `2.5% CGST (Rs. ${lineCgst.toFixed(2)})\n2.5% SGST (Rs. ${lineSgst.toFixed(2)})`,
+        total: `Rs. ${lineTotal.toFixed(2)}`,
+      };
+    });
 
     const grandTotalWords = numberToWords(totalAmount);
 
-    const emailHtml = `
-      <div style="font-family: Arial, sans-serif; max-width: 750px; margin: 0 auto; padding: 24px; background: #FAF9F5; color: #15271D; border-radius: 24px; border: 1px solid #CFDCD3;">
-        
-        <!-- Header / Banner -->
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
-          <tr>
-            <td>
-              <h1 style="margin: 0; font-size: 26px; color: #26593B; letter-spacing: -0.5px; font-family: Georgia, serif;">Earthora Farms</h1>
-              <p style="margin: 4px 0 0; font-size: 12px; color: #DC9950; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">Pure. Potent. Alive.</p>
-            </td>
-            <td style="text-align: right;">
-              <span style="background: #26593B; color: #FAF8F3; padding: 6px 16px; border-radius: 20px; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">Tax Invoice</span>
-              <p style="margin: 8px 0 0; font-size: 13px; color: #26593B; font-weight: 600;">Invoice #: INV-${orderId.substring(0, 8).toUpperCase()}</p>
-            </td>
-          </tr>
-        </table>
+    // ══════════════════════════════════════════════════════════════════════════
+    // PDF GENERATION USING PDF-LIB
+    // ══════════════════════════════════════════════════════════════════════════
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([595, 842]); // A4 Size standard in points (1 point = 1/72 inch)
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-        <!-- Invoice Meta Details -->
-        <table style="width: 100%; border-collapse: collapse; background: #ffffff; border-radius: 16px; border: 1px solid #E1E8E3; margin-bottom: 24px; padding: 16px;">
-          <tr>
-            <td style="padding: 16px; width: 50%; vertical-align: top; border-right: 1px solid #E1E8E3;">
-              <h3 style="margin: 0 0 8px; font-size: 12px; text-transform: uppercase; color: #888; letter-spacing: 0.5px;">Order Information</h3>
-              <p style="margin: 0 0 6px; font-size: 13px; color: #222;"><strong>Order ID:</strong> ${orderId}</p>
-              <p style="margin: 0 0 6px; font-size: 13px; color: #222;"><strong>Date:</strong> ${invoiceDate}</p>
-              <p style="margin: 0 0 6px; font-size: 13px; color: #222;"><strong>Payment Method:</strong> ${paymentMethod}</p>
-              <p style="margin: 0; font-size: 13px; color: #222;"><strong>Transaction ID:</strong> <span style="font-family: monospace; font-size: 12px; color: #555;">${transactionId}</span></p>
-            </td>
-            <td style="padding: 16px; width: 50%; vertical-align: top;">
-              <h3 style="margin: 0 0 8px; font-size: 12px; text-transform: uppercase; color: #888; letter-spacing: 0.5px;">Payment Status</h3>
-              <div style="display: inline-block; background: #DCE7C5; color: #26593B; font-weight: bold; padding: 6px 14px; border-radius: 12px; font-size: 14px; margin-bottom: 8px; border: 1px solid #CFDCD3;">
-                ✓ PAID
-              </div>
-              <p style="margin: 0; font-size: 12px; color: #666; line-height: 1.4;">Thank you for your payment. Your order is confirmed and is being prepared for shipment from our farm.</p>
-            </td>
-          </tr>
-        </table>
+    // Color definitions
+    const primaryColor = rgb(0.149, 0.349, 0.231); // #26593b green
+    const secondaryColor = rgb(0.862, 0.905, 0.772); // #dce7c5 sage
+    const textColor = rgb(0.082, 0.153, 0.114); // #15271d dark text
+    const borderGray = rgb(0.81, 0.86, 0.82);
 
-        <!-- Party Details -->
-        <table style="width: 100%; border-collapse: collapse; background: #ffffff; border-radius: 16px; border: 1px solid #E1E8E3; margin-bottom: 24px;">
-          <tr>
-            <!-- Supplier / From -->
-            <td style="padding: 16px; width: 50%; vertical-align: top; border-right: 1px solid #E1E8E3;">
-              <h3 style="margin: 0 0 10px; font-size: 12px; text-transform: uppercase; color: #888; letter-spacing: 0.5px;">Billed From (Supplier)</h3>
-              <p style="margin: 0 0 4px; font-size: 14px; font-weight: bold; color: #1b4332;">Earthora Farms Private Limited</p>
-              <p style="margin: 0 0 8px; font-size: 12px; color: #555; line-height: 1.4;">
-                12, Green Meadow Estate,<br/>
-                Botanical Garden Road, Ooty,<br/>
-                Tamil Nadu - 643001, India
-              </p>
-              <p style="margin: 0 0 4px; font-size: 12px; color: #444;"><strong>GSTIN:</strong> 33AAACE1234F1Z5 (Fictional)</p>
-              <p style="margin: 0; font-size: 12px; color: #444;"><strong>FSSAI Lic No:</strong> 12423999000123</p>
-            </td>
-            <!-- Customer / To -->
-            <td style="padding: 16px; width: 50%; vertical-align: top;">
-              <h3 style="margin: 0 0 10px; font-size: 12px; text-transform: uppercase; color: #888; letter-spacing: 0.5px;">Billed & Shipped To</h3>
-              <p style="margin: 0 0 4px; font-size: 14px; font-weight: bold; color: #222;">${recipientName}</p>
-              <p style="margin: 0 0 8px; font-size: 12px; color: #555; line-height: 1.4; white-space: pre-wrap;">${fullAddress}</p>
-              <p style="margin: 0 0 4px; font-size: 12px; color: #444;"><strong>Email:</strong> ${recipientEmail}</p>
-              <p style="margin: 0; font-size: 12px; color: #444;"><strong>Phone:</strong> ${recipientPhone}</p>
-            </td>
-          </tr>
-        </table>
+    // Draw main green header banner
+    page.drawRectangle({
+      x: 40,
+      y: 750,
+      width: 515,
+      height: 52,
+      color: primaryColor,
+    });
 
-        <!-- Itemized Table -->
-        <table style="width: 100%; border-collapse: collapse; background: #ffffff; border-radius: 16px; border: 1px solid #E1E8E3; overflow: hidden; margin-bottom: 24px;">
-          <thead>
-            <tr style="background: #26593B; color: #FAF8F3;">
-              <th style="padding: 12px 8px; font-size: 11px; text-transform: uppercase; text-align: center; font-weight: bold; width: 40px;">S.No</th>
-              <th style="padding: 12px 8px; font-size: 11px; text-transform: uppercase; text-align: left; font-weight: bold;">Description of Goods</th>
-              <th style="padding: 12px 8px; font-size: 11px; text-transform: uppercase; text-align: center; font-weight: bold; width: 80px;">HSN</th>
-              <th style="padding: 12px 8px; font-size: 11px; text-transform: uppercase; text-align: center; font-weight: bold; width: 50px;">Qty</th>
-              <th style="padding: 12px 8px; font-size: 11px; text-transform: uppercase; text-align: right; font-weight: bold; width: 90px;">Unit Price</th>
-              <th style="padding: 12px 8px; font-size: 11px; text-transform: uppercase; text-align: right; font-weight: bold; width: 100px;">Taxable Value</th>
-              <th style="padding: 12px 8px; font-size: 11px; text-transform: uppercase; text-align: center; font-weight: bold; width: 130px;">Taxes</th>
-              <th style="padding: 12px 8px; font-size: 11px; text-transform: uppercase; text-align: right; font-weight: bold; width: 100px;">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${itemsHtmlList}
-          </tbody>
-        </table>
+    page.drawText("TAX INVOICE / BILL OF SUPPLY", {
+      x: 297,
+      y: 771,
+      size: 14,
+      font: fontBold,
+      color: rgb(0.98, 0.97, 0.95),
+      alignment: 1, // Centered
+    } as any);
 
-        <!-- Calculations Summary -->
-        <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
-          <tr>
-            <!-- Left Empty Column / Terms -->
-            <td style="width: 55%; vertical-align: top; padding: 12px;">
-              <h4 style="margin: 0 0 6px; font-size: 12px; color: #26593B; text-transform: uppercase;">Amount in Words</h4>
-              <p style="margin: 0 0 16px; font-size: 13px; font-style: italic; color: #555;">${grandTotalWords}</p>
-              
-              <div style="border-top: 1px solid #E1E8E3; padding-top: 12px;">
-                <p style="margin: 0; font-size: 10px; color: #888; line-height: 1.4;">
-                  <strong>Terms & Declarations:</strong> We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct. Goods once sold cannot be returned unless damaged in transit.
-                </p>
-              </div>
-            </td>
-            <!-- Right calculations column -->
-            <td style="width: 45%; vertical-align: top; padding: 12px; background: #ffffff; border-radius: 16px; border: 1px solid #E1E8E3;">
-              <table style="width: 100%; border-collapse: collapse;">
-                <tr>
-                  <td style="padding: 6px 0; font-size: 13px; color: #555;">Total Taxable Value</td>
-                  <td style="padding: 6px 0; font-size: 13px; text-align: right; color: #222;">₹${subtotalTaxable.toFixed(2)}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 6px 0; font-size: 13px; color: #555;">CGST Total (2.5%)</td>
-                  <td style="padding: 6px 0; font-size: 13px; text-align: right; color: #222;">₹${totalCgst.toFixed(2)}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 6px 0; font-size: 13px; color: #555;">SGST Total (2.5%)</td>
-                  <td style="padding: 6px 0; font-size: 13px; text-align: right; color: #222; border-bottom: 1px solid #E1E8E3;">₹${totalSgst.toFixed(2)}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 10px 0 0; font-size: 16px; font-weight: bold; color: #26593B;">Grand Total</td>
-                  <td style="padding: 10px 0 0; font-size: 16px; font-weight: bold; text-align: right; color: #26593B;">₹${totalAmount.toFixed(2)}</td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-        </table>
+    // Brand and logo below header
+    page.drawText("Earthora Farms", { x: 40, y: 722, size: 18, font: fontBold, color: primaryColor });
+    page.drawText("PURE. POTENT. ALIVE.", { x: 40, y: 708, size: 8, font: fontBold, color: rgb(0.86, 0.6, 0.31) });
 
-        <!-- Signatory Sign-off Footer -->
-        <table style="width: 100%; border-collapse: collapse; margin-top: 16px; border-top: 1px dashed #CFDCD3; padding-top: 16px;">
-          <tr>
-            <td>
-              <p style="margin: 0; font-size: 11px; color: #888;">For customer support queries, email <a href="mailto:support@earthorafarms.com" style="color: #26593B; text-decoration: none;">support@earthorafarms.com</a></p>
-            </td>
-            <td style="text-align: right; vertical-align: bottom;">
-              <p style="margin: 0 0 4px; font-size: 12px; font-weight: bold; color: #26593B;">Earthora Farms Pvt Ltd</p>
-              <p style="margin: 0; font-size: 11px; color: #888; font-style: italic;">Authorized Signatory</p>
-            </td>
-          </tr>
-        </table>
+    // Divider line
+    page.drawLine({
+      start: { x: 40, y: 698 },
+      end: { x: 555, y: 698 },
+      thickness: 1,
+      color: borderGray,
+    });
 
+    // --- Row 1: Billed From & Invoice Meta Details ---
+    // Left Box: Supplier details
+    page.drawText("Billed From (Supplier):", { x: 40, y: 680, size: 9, font: fontBold, color: primaryColor });
+    page.drawText("Earthora Farms Private Limited", { x: 40, y: 668, size: 9, font: fontBold, color: textColor });
+    page.drawText("12, Green Meadow Estate,\nBotanical Garden Road, Ooty,\nTamil Nadu - 643001, India\nGSTIN: 33AAACE1234F1Z5", {
+      x: 40,
+      y: 656,
+      size: 8,
+      font: font,
+      color: textColor,
+      lineHeight: 11,
+    });
+
+    // Right Box: Invoice Meta Details
+    page.drawText("Invoice Details:", { x: 340, y: 680, size: 9, font: fontBold, color: primaryColor });
+    page.drawText(`Invoice #: INV-${orderId.substring(0, 8).toUpperCase()}`, { x: 340, y: 668, size: 8, font: fontBold, color: textColor });
+    page.drawText(`Invoice Date: ${invoiceDateStr}`, { x: 340, y: 656, size: 8, font: font, color: textColor });
+    page.drawText(`Order ID: ${orderId}`, { x: 340, y: 644, size: 8, font: font, color: textColor });
+    page.drawText(`Payment Method: ${paymentMethod}`, { x: 340, y: 632, size: 8, font: font, color: textColor });
+    page.drawText(`Transaction ID: ${transactionId}`, { x: 340, y: 620, size: 8, font: font, color: textColor });
+    
+    // Paid Status Badge
+    page.drawRectangle({
+      x: 340,
+      y: 598,
+      width: 50,
+      height: 16,
+      color: secondaryColor,
+    });
+    page.drawText("PAID", { x: 353, y: 603, size: 8, font: fontBold, color: primaryColor });
+
+    // Divider line
+    page.drawLine({
+      start: { x: 40, y: 588 },
+      end: { x: 555, y: 588 },
+      thickness: 1,
+      color: borderGray,
+    });
+
+    // --- Row 2: Billed & Shipped To details ---
+    page.drawText("Billed & Shipped To (Recipient):", { x: 40, y: 574, size: 9, font: fontBold, color: primaryColor });
+    page.drawText(recipientName, { x: 40, y: 562, size: 9, font: fontBold, color: textColor });
+    
+    // Wrap address details into multiple lines if needed
+    const addrLines = fullAddress.match(/.{1,70}(\s|$)/g) || [fullAddress];
+    let addrY = 550;
+    addrLines.forEach((line) => {
+      page.drawText(line.trim(), { x: 40, y: addrY, size: 8, font: font, color: textColor });
+      addrY -= 11;
+    });
+
+    page.drawText(`Phone: ${recipientPhone}`, { x: 40, y: addrY, size: 8, font: font, color: textColor });
+    page.drawText(`Email: ${recipientEmail}`, { x: 40, y: addrY - 11, size: 8, font: font, color: textColor });
+    page.drawText(`GSTIN: ${recipientGst}`, { x: 40, y: addrY - 22, size: 8, font: fontBold, color: textColor });
+
+    // --- Table Header ---
+    const tableHeaderY = 460;
+    page.drawRectangle({
+      x: 40,
+      y: tableHeaderY - 18,
+      width: 515,
+      height: 18,
+      color: primaryColor,
+    });
+
+    const colX = { sNo: 45, name: 75, hsn: 250, qty: 300, unitPrice: 335, taxableVal: 395, taxes: 455, total: 515 };
+
+    page.drawText("S.No", { x: colX.sNo, y: tableHeaderY - 12, size: 8, font: fontBold, color: rgb(0.98, 0.97, 0.95) });
+    page.drawText("Description of Goods", { x: colX.name, y: tableHeaderY - 12, size: 8, font: fontBold, color: rgb(0.98, 0.97, 0.95) });
+    page.drawText("HSN", { x: colX.hsn, y: tableHeaderY - 12, size: 8, font: fontBold, color: rgb(0.98, 0.97, 0.95) });
+    page.drawText("Qty", { x: colX.qty, y: tableHeaderY - 12, size: 8, font: fontBold, color: rgb(0.98, 0.97, 0.95) });
+    page.drawText("Unit Price", { x: colX.unitPrice, y: tableHeaderY - 12, size: 8, font: fontBold, color: rgb(0.98, 0.97, 0.95) });
+    page.drawText("Taxable Val", { x: colX.taxableVal, y: tableHeaderY - 12, size: 8, font: fontBold, color: rgb(0.98, 0.97, 0.95) });
+    page.drawText("Taxes", { x: colX.taxes, y: tableHeaderY - 12, size: 8, font: fontBold, color: rgb(0.98, 0.97, 0.95) });
+    page.drawText("Total", { x: colX.total, y: tableHeaderY - 12, size: 8, font: fontBold, color: rgb(0.98, 0.97, 0.95) });
+
+    // --- Table Rows ---
+    let rowY = tableHeaderY - 35;
+    computedItems.forEach((item) => {
+      // Draw background stripe or border
+      page.drawLine({
+        start: { x: 40, y: rowY - 12 },
+        end: { x: 555, y: rowY - 12 },
+        thickness: 0.5,
+        color: borderGray,
+      });
+
+      page.drawText(item.sNo, { x: colX.sNo, y: rowY, size: 8, font: font, color: textColor });
+      page.drawText(item.name, { x: colX.name, y: rowY, size: 8, font: fontBold, color: textColor });
+      page.drawText(item.hsn, { x: colX.hsn, y: rowY, size: 8, font: font, color: textColor });
+      page.drawText(item.qty, { x: colX.qty, y: rowY, size: 8, font: font, color: textColor });
+      page.drawText(item.unitPrice, { x: colX.unitPrice, y: rowY, size: 8, font: font, color: textColor });
+      page.drawText(item.taxableVal, { x: colX.taxableVal, y: rowY, size: 8, font: font, color: textColor });
+      
+      // Draw multi-line taxes column
+      const taxLines = item.taxes.split("\n");
+      page.drawText(taxLines[0], { x: colX.taxes, y: rowY + 3, size: 6.5, font: font, color: textColor });
+      page.drawText(taxLines[1], { x: colX.taxes, y: rowY - 5, size: 6.5, font: font, color: textColor });
+
+      page.drawText(item.total, { x: colX.total, y: rowY, size: 8, font: fontBold, color: textColor });
+
+      rowY -= 30; // Move down for the next item
+    });
+
+    // --- Totals Section ---
+    rowY -= 15;
+    // Box for totals
+    page.drawRectangle({
+      x: 320,
+      y: rowY - 80,
+      width: 235,
+      height: 80,
+      color: rgb(0.99, 0.99, 0.98),
+      borderColor: borderGray,
+      borderWidth: 1,
+    });
+
+    const totalsLabelsX = 330;
+    const totalsValuesX = 490;
+
+    page.drawText("Total Taxable Value:", { x: totalsLabelsX, y: rowY - 15, size: 8, font: font, color: textColor });
+    page.drawText(`Rs. ${subtotalTaxable.toFixed(2)}`, { x: totalsValuesX, y: rowY - 15, size: 8, font: font, color: textColor });
+
+    page.drawText("CGST Total (2.5%):", { x: totalsLabelsX, y: rowY - 30, size: 8, font: font, color: textColor });
+    page.drawText(`Rs. ${totalCgst.toFixed(2)}`, { x: totalsValuesX, y: rowY - 30, size: 8, font: font, color: textColor });
+
+    page.drawText("SGST Total (2.5%):", { x: totalsLabelsX, y: rowY - 45, size: 8, font: font, color: textColor });
+    page.drawText(`Rs. ${totalSgst.toFixed(2)}`, { x: totalsValuesX, y: rowY - 45, size: 8, font: font, color: textColor });
+
+    page.drawLine({
+      start: { x: 330, y: rowY - 52 },
+      end: { x: 545, y: rowY - 52 },
+      thickness: 0.5,
+      color: borderGray,
+    });
+
+    page.drawText("Grand Total:", { x: totalsLabelsX, y: rowY - 68, size: 10, font: fontBold, color: primaryColor });
+    page.drawText(`Rs. ${totalAmount.toFixed(2)}`, { x: totalsValuesX, y: rowY - 68, size: 10, font: fontBold, color: primaryColor });
+
+    // Amount in Words
+    page.drawText("Amount in Words:", { x: 40, y: rowY - 15, size: 8, font: fontBold, color: primaryColor });
+    
+    // Wrap words if needed
+    const wordsLines = grandTotalWords.match(/.{1,45}(\s|$)/g) || [grandTotalWords];
+    let wordsY = rowY - 28;
+    wordsLines.forEach((wLine) => {
+      page.drawText(wLine.trim(), { x: 40, y: wordsY, size: 8, font: font, color: textColor });
+      wordsY -= 11;
+    });
+
+    // --- Footer & Signatory ---
+    page.drawLine({
+      start: { x: 40, y: 100 },
+      end: { x: 555, y: 100 },
+      thickness: 0.5,
+      color: borderGray,
+      dashArray: [4, 4],
+    });
+
+    page.drawText("Terms & Declarations:\nWe declare that this invoice shows the actual price of the goods described\nand that all particulars are true and correct. Goods once sold cannot be returned.", {
+      x: 40,
+      y: 85,
+      size: 6.5,
+      font: font,
+      color: rgb(0.5, 0.5, 0.5),
+      lineHeight: 9,
+    });
+
+    page.drawText("Earthora Farms Private Limited", { x: 410, y: 85, size: 8, font: fontBold, color: primaryColor });
+    page.drawText("Authorized Signatory", { x: 450, y: 45, size: 8, font: font, color: rgb(0.5, 0.5, 0.5) });
+
+    // Save PDF to Uint8Array
+    const pdfBytes = await pdfDoc.save();
+    
+    // Encode to base64
+    const pdfBase64 = encodeBase64(pdfBytes);
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // EMAIL DISPATCH VIA RESEND API
+    // ══════════════════════════════════════════════════════════════════════════
+    const emailHtmlBody = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 24px; background: #FAF9F5; border-radius: 20px; border: 1px solid #CFDCD3; color: #15271D;">
+        <div style="background: #26593B; padding: 24px; border-radius: 14px; margin-bottom: 24px; text-align: center;">
+          <h1 style="color: #FAF8F3; margin: 0 0 8px; font-size: 22px; font-weight: normal; font-family: Georgia, serif;">Thank you for your order!</h1>
+          <p style="color: #DCE7C5; margin: 0; font-size: 14px;">Your payment has been successfully processed.</p>
+        </div>
+
+        <div style="background: #ffffff; border-radius: 14px; padding: 24px; border: 1px solid #E1E8E3; margin-bottom: 24px;">
+          <p style="margin: 0 0 12px; font-size: 15px; color: #15271D;">Hi <strong>${recipientName}</strong>,</p>
+          <p style="margin: 0 0 12px; font-size: 14px; color: #444; line-height: 1.6;">
+            We have successfully received your payment of <strong>₹${totalAmount.toFixed(2)}</strong> for order <strong>#${orderId.substring(0, 8).toUpperCase()}</strong>.
+          </p>
+          <p style="margin: 0 0 12px; font-size: 14px; color: #444; line-height: 1.6;">
+            We have generated the softcopy of your bill. Please find the official **Tax Invoice / Bill of Supply** PDF attached to this email.
+          </p>
+          <p style="margin: 0; font-size: 14px; color: #444; line-height: 1.6;">
+            Our farm team is already packaging your single-origin Moringa products to ensure maximum potency. We will send you another update with the tracking details as soon as it ships.
+          </p>
+        </div>
+
+        <p style="text-align: center; font-size: 12px; color: #777; margin: 0; line-height: 1.5;">
+          Warm regards,<br />
+          <strong>The Earthora Farms Team</strong><br />
+          <a href="https://earthorafarms.com" style="color: #26593B; text-decoration: none; font-weight: bold;">earthorafarms.com</a>
+        </p>
       </div>
     `;
 
-    // 4. Send Email via Resend
     const resendRes = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -320,8 +430,14 @@ Deno.serve(async (req: Request) => {
       body: JSON.stringify({
         from: "Earthora Farms <support@earthorafarms.com>",
         to: [recipientEmail],
-        subject: `Your Tax Invoice & Bill of Supply for Order #${orderId.substring(0, 8).toUpperCase()}`,
-        html: emailHtml,
+        subject: `Invoice for your Earthora Farms Order #${orderId.substring(0, 8).toUpperCase()}`,
+        html: emailHtmlBody,
+        attachments: [
+          {
+            filename: `Invoice_${orderId.substring(0, 8).toUpperCase()}.pdf`,
+            content: pdfBase64,
+          },
+        ],
       }),
     });
 

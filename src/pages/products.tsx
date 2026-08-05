@@ -214,13 +214,13 @@ export default function Products() {
                     Farm Favorite
                   </span>
                   <h3 className="font-dm text-2xl text-black font-normal tracking-[-0.03em] mb-1">
-                    Pure Leaf Powder
+                    Morilife+ Moringa Capsules
                   </h3>
                   <p className="font-inter text-xs text-black/50 mb-3">
                     90+ bioavailable nutrients in every scoop.
                   </p>
                   <span className="font-dm text-xl font-normal text-black block">
-                    ₹599
+                    ₹799
                   </span>
                 </div>
               </motion.div>

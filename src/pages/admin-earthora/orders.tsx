@@ -726,7 +726,7 @@ export default function AdminOrders() {
                         className="w-full h-9 px-2 rounded-xl border border-border/50 bg-[#fafaf8] outline-none focus:border-primary/50 text-foreground text-xs"
                       >
                         <option value="completed">Completed (Paid)</option>
-                        <option value="pending">Pending (COD)</option>
+                        <option value="pending">Pending</option>
                       </select>
                     </div>
 

@@ -26,6 +26,7 @@ import FAQ from './pages/faq';
 import PrivacyPolicy from './pages/privacy-policy';
 import TermsOfUse from './pages/terms-of-use';
 import CookieSettings from './pages/cookie-settings';
+import OurStory from './pages/our-story';
 
 const AdminLayout = lazy(() => import('./pages/admin-earthora/layout'));
 const AdminDashboard = lazy(() => import('./pages/admin-earthora/dashboard'));
@@ -72,6 +73,7 @@ export default function App() {
               <Suspense fallback={<PageLoader />}>
                 <Switch>
                   <Route path="/" component={Home} />
+                  <Route path="/our-story" component={OurStory} />
                   <Route path="/recipes" component={Recipes} />
                   <Route path="/contact" component={Contact} />
                   <Route path="/health-benefits" component={HealthBenefits} />

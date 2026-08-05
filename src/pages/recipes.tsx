@@ -307,54 +307,88 @@ export default function Recipes() {
       {/* ── Recipe Modal ── */}
       <AnimatePresence>
         {selectedRecipe && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <div 
+            className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4 md:p-6 overflow-y-auto"
+            onClick={() => setSelectedRecipe(null)}
+          >
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ opacity: 0, scale: 0.97, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-[#FEFDF9] rounded-3xl max-w-3xl w-full overflow-hidden border border-black/10 shadow-2xl relative max-h-[90vh] flex flex-col"
+              exit={{ opacity: 0, scale: 0.97, y: 15 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#FEFDF9] rounded-3xl max-w-4xl w-full overflow-hidden border border-black/5 shadow-2xl relative max-h-[85vh] flex flex-col md:flex-row"
             >
               <button
                 onClick={() => setSelectedRecipe(null)}
-                className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black transition-colors"
+                className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/80 text-black border border-black/10 flex items-center justify-center hover:bg-black hover:text-white transition-all shadow-md backdrop-blur-xs"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
 
-              <div className="relative aspect-[16/9] bg-[#ECEDEC] shrink-0">
-                <img src={selectedRecipe.image} alt={selectedRecipe.title} className="w-full h-full object-cover" />
-              </div>
-
-              <div className="p-6 sm:p-8 overflow-y-auto space-y-6">
-                <div>
-                  <h2 className="font-dm font-normal text-3xl sm:text-4xl text-black tracking-[-0.04em] mb-2">
-                    {selectedRecipe.title}
-                  </h2>
-                  <p className="font-inter text-base text-black/65">{selectedRecipe.description}</p>
+              {/* Left Column: Image & Ingredients */}
+              <div className="md:w-[42%] bg-[#F4F3EE] p-6 md:p-8 border-b md:border-b-0 md:border-r border-black/8 flex flex-col overflow-y-auto shrink-0">
+                <div className="relative aspect-square rounded-2xl overflow-hidden bg-[#ECEDEC] shadow-md mb-6 shrink-0">
+                  <img src={selectedRecipe.image} alt={selectedRecipe.title} className="w-full h-full object-cover" />
                 </div>
-
-                <div className="grid sm:grid-cols-2 gap-6 pt-6 border-t border-black/8">
-                  <div>
-                    <h3 className="font-dm text-lg text-black mb-3 font-medium">Ingredients</h3>
-                    <ul className="space-y-2 font-inter text-sm text-black/80">
+                <div className="space-y-5">
+                  <div className="flex items-center gap-4 text-[10px] sm:text-xs text-black/50 font-inter font-medium uppercase tracking-wider">
+                    <span className="flex items-center gap-1.5">
+                      <Clock className="w-4 h-4 text-emerald-800" />
+                      {selectedRecipe.time}
+                    </span>
+                    <span className="w-1 h-1 rounded-full bg-black/15" />
+                    <span className="flex items-center gap-1.5 truncate">
+                      <User className="w-4 h-4 text-emerald-800" />
+                      {selectedRecipe.author}
+                    </span>
+                  </div>
+                  <div className="pt-5 border-t border-black/8">
+                    <h3 className="font-dm text-lg text-black font-semibold tracking-[-0.02em] mb-4 flex items-center gap-2">
+                      <Leaf className="w-4 h-4 text-emerald-800" /> Ingredients
+                    </h3>
+                    <ul className="space-y-3 font-inter text-sm text-black/75">
                       {selectedRecipe.ingredients.map((ing, idx) => (
-                        <li key={idx} className="flex items-start gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 mt-2 shrink-0" />
+                        <li key={idx} className="flex items-start gap-2.5 leading-relaxed">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-700 mt-2 shrink-0" />
                           <span>{ing}</span>
                         </li>
                       ))}
                     </ul>
                   </div>
+                </div>
+              </div>
 
+              {/* Right Column: Narrative & Instructions */}
+              <div className="flex-1 p-6 md:p-8 overflow-y-auto flex flex-col justify-between">
+                <div className="space-y-6">
                   <div>
-                    <h3 className="font-dm text-lg text-black mb-3 font-medium">Instructions</h3>
-                    <ol className="space-y-3 font-inter text-sm text-black/80">
+                    {/* Tags */}
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {selectedRecipe.tags.map((tag, idx) => (
+                        <span key={idx} className="px-2.5 py-1 rounded-lg text-[10px] font-bold tracking-wider uppercase bg-emerald-950 text-white">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                    <h2 className="font-dm font-normal text-3xl md:text-4xl text-black tracking-[-0.04em] mb-3 leading-tight">
+                      {selectedRecipe.title}
+                    </h2>
+                    <p className="font-inter text-sm sm:text-base text-black/60 leading-relaxed">
+                      {selectedRecipe.description}
+                    </p>
+                  </div>
+
+                  <div className="pt-6 border-t border-black/8">
+                    <h3 className="font-dm text-lg text-black font-semibold tracking-[-0.02em] mb-5 flex items-center gap-2">
+                      <UtensilsCrossed className="w-4 h-4 text-emerald-800" /> Instructions
+                    </h3>
+                    <ol className="space-y-5 font-inter text-sm text-black/75">
                       {selectedRecipe.instructions.map((inst, idx) => (
-                        <li key={idx} className="flex items-start gap-3">
-                          <span className="w-6 h-6 rounded-full bg-black/5 text-black font-dm text-xs flex items-center justify-center shrink-0 font-medium">
+                        <li key={idx} className="flex items-start gap-4">
+                          <span className="w-7 h-7 rounded-full bg-emerald-800 text-white font-dm text-xs flex items-center justify-center shrink-0 font-semibold shadow-sm">
                             {idx + 1}
                           </span>
-                          <span className="leading-relaxed">{inst}</span>
+                          <span className="leading-relaxed pt-0.5">{inst}</span>
                         </li>
                       ))}
                     </ol>

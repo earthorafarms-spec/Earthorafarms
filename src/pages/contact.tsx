@@ -8,9 +8,9 @@ import { supabase } from "@/lib/supabase";
 
 const contactInfo = [
   { icon: Mail, label: "Email", value: "contactus@earthorafarms.com", href: "mailto:contactus@earthorafarms.com" },
-  { icon: Phone, label: "Phone", value: "+1 (555) 123-4567", href: "tel:+15551234567" },
+  { icon: Phone, label: "Phone", value: "+91 9228153821", href: "tel:+919228153821" },
   { icon: MapPin, label: "Farm Location", value: "123 Green Valley Rd, Aptos, CA 95003" },
-  { icon: Clock, label: "Operating Hours", value: "Mon – Fri, 9 AM – 6 PM PST" },
+  { icon: Clock, label: "Operating Hours", value: "Mon – Fri, 9 AM – 6 PM IST" },
 ];
 
 export default function Contact() {

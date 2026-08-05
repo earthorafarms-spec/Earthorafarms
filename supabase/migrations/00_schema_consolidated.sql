@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS products (
   price NUMERIC(10,2) NOT NULL,
   tag VARCHAR(100),
   badge VARCHAR(50),
+  hsn_code VARCHAR(50) DEFAULT '12119029',
   rating NUMERIC(3,2) DEFAULT 4.5,
   status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active','inactive','archived')),
   highlights TEXT[],
@@ -146,6 +147,7 @@ CREATE TABLE IF NOT EXISTS "User_details" (
     user_state VARCHAR(255) DEFAULT '',
     user_zip VARCHAR(255) DEFAULT '',
     user_country VARCHAR(255) DEFAULT '',
+    user_gst VARCHAR(255) DEFAULT '',
     additional_addresses JSONB DEFAULT '[]',
     user_created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     user_updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -231,10 +233,11 @@ DECLARE
   v_state TEXT;
   v_zip TEXT;
   v_country TEXT;
+  v_gst TEXT;
   v_order_id VARCHAR(255);
 BEGIN
-  SELECT user_name, user_phone, user_address, user_city, user_state, user_zip, user_country
-  INTO v_name, v_phone, v_address, v_city, v_state, v_zip, v_country
+  SELECT user_name, user_phone, user_address, user_city, user_state, user_zip, user_country, user_gst
+  INTO v_name, v_phone, v_address, v_city, v_state, v_zip, v_country, v_gst
   FROM "User_details"
   WHERE user_email = NEW.order_user_id
   LIMIT 1;
@@ -265,7 +268,8 @@ BEGIN
       'city', coalesce(v_city, ''),
       'state', coalesce(v_state, ''),
       'zip', coalesce(v_zip, ''),
-      'country', coalesce(v_country, '')
+      'country', coalesce(v_country, ''),
+      'gst', coalesce(v_gst, '')
     ),
     NEW.order_created_at
   )

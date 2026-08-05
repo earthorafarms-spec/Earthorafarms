@@ -45,7 +45,6 @@ const deliveryTimelines = [
   { region: "Metro Cities (Mumbai, Delhi, Bengaluru, etc.)", time: "2 – 3 Business Days" },
   { region: "Tier-2 & Tier-3 Cities across India", time: "3 – 5 Business Days" },
   { region: "Special Territories (North-East, J&K, Islands)", time: "5 – 7 Business Days" },
-  { region: "International Deliveries (US, UK, UAE, EU)", time: "5 – 9 Business Days" },
 ];
 
 export default function ShippingPolicy() {
@@ -147,7 +146,7 @@ export default function ShippingPolicy() {
                 Estimated Transit Times
               </span>
               <h2 className="font-dm font-normal text-3xl sm:text-4xl text-black tracking-[-0.04em]">
-                Domestic & Global Schedule
+                Domestic Delivery Schedule
               </h2>
               <p className="font-inter text-sm text-black/60 leading-relaxed mb-6">
                 All shipments include automated SMS and WhatsApp tracking links dispatched immediately upon courier handoff.
@@ -182,15 +181,6 @@ export default function ShippingPolicy() {
                 </h3>
                 <p className="font-inter text-sm text-black/65 leading-relaxed">
                   Need to update your delivery address? If your order has not yet left our facility, contact our support team at <a href="mailto:contactus@earthorafarms.com" className="text-emerald-800 font-medium underline">contactus@earthorafarms.com</a> before 2:00 PM IST.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-dm text-2xl text-black tracking-[-0.03em] mb-3 flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5 text-emerald-800" /> Customs & Duties
-                </h3>
-                <p className="font-inter text-sm text-black/65 leading-relaxed">
-                  For international orders outside India, local customs duties or import taxes may apply depending on your destination country's regulations. These fees are the responsibility of the recipient.
                 </p>
               </div>
             </div>

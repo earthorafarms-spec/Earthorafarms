@@ -39,6 +39,7 @@ interface AdminProduct {
   highlights: string[];
   rating: number;
   images: ProductImage[];
+  hsn_code?: string;
 }
 
 
@@ -51,7 +52,7 @@ export default function AdminProducts() {
 
   const [form, setForm] = useState({
     name: "", mrp: "", price: "", tag: "", badge: "", stockText: "", stock: "", description: "",
-    highlights: [""], rating: "", category: "moringa",
+    highlights: [""], rating: "", category: "moringa", hsn_code: "12119029",
   });
   const [images, setImages] = useState<string[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -103,6 +104,7 @@ export default function AdminProducts() {
           highlights: p.highlights || [],
           rating: Number(p.rating),
           images: Array.isArray(p.images) ? (p.images as any) : [],
+          hsn_code: p.hsn_code || "12119029",
         };
       });
       setProducts(mapped);
@@ -197,7 +199,7 @@ export default function AdminProducts() {
 
   const openForm = () => {
     setEditId(null);
-    setForm({ name: "", mrp: "", price: "", tag: "", badge: "", stockText: "In Stock", stock: "", description: "", highlights: [""], rating: "4.5", category: "moringa" });
+    setForm({ name: "", mrp: "", price: "", tag: "", badge: "", stockText: "In Stock", stock: "", description: "", highlights: [""], rating: "4.5", category: "moringa", hsn_code: "12119029" });
     setImages([]);
     setSelectedFiles([]);
     setShowForm(true);
@@ -217,6 +219,7 @@ export default function AdminProducts() {
       highlights: p.highlights?.length ? p.highlights : [""],
       rating: String(p.rating || 4.5),
       category: "moringa",
+      hsn_code: p.hsn_code || "12119029",
     });
     // Load existing product images as preview urls
     const existingImgUrls = (p.images || []).map((img: any) => img.url || img);
@@ -329,6 +332,7 @@ export default function AdminProducts() {
             highlights: form.highlights.filter((h) => h.trim()),
             rating: parseFloat(form.rating) || 4.5,
             category: form.category || "moringa",
+            hsn_code: form.hsn_code,
             ...(finalImages.length > 0 ? { images: finalImages as any } : {}),
           })
           .eq("id", editId);
@@ -365,6 +369,7 @@ export default function AdminProducts() {
           rating: parseFloat(form.rating) || 4.5,
           images: finalImages as any,
           category: form.category || "moringa",
+          hsn_code: form.hsn_code,
         })
         .select()
         .single();
@@ -675,7 +680,7 @@ export default function AdminProducts() {
                         </div>
                       )}
 
-                      <div className="grid grid-cols-3 gap-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
                           <label className="text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5 block">Tag / Subtitle</label>
                           <input type="text" value={form.tag} onChange={(e) => setForm({ ...form, tag: e.target.value })} placeholder="500mg · 90 Capsules" className="w-full h-11 px-4 text-sm bg-white border border-border/40 rounded-xl outline-none focus:border-primary/30 focus:ring-2 focus:ring-primary/5 transition-all placeholder:text-foreground/25" />
@@ -687,6 +692,10 @@ export default function AdminProducts() {
                         <div>
                           <label className="text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5 block">Category *</label>
                           <input type="text" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. moringa, amla" className="w-full h-11 px-4 text-sm bg-white border border-border/40 rounded-xl outline-none focus:border-primary/30 focus:ring-2 focus:ring-primary/5 transition-all placeholder:text-foreground/25" />
+                        </div>
+                        <div>
+                          <label className="text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5 block">HSN Code *</label>
+                          <input type="text" required value={form.hsn_code} onChange={(e) => setForm({ ...form, hsn_code: e.target.value })} placeholder="12119029" className="w-full h-11 px-4 text-sm bg-white border border-border/40 rounded-xl outline-none focus:border-primary/30 focus:ring-2 focus:ring-primary/5 transition-all placeholder:text-foreground/25" />
                         </div>
                       </div>
 

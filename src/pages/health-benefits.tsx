@@ -264,7 +264,7 @@ export default function HealthBenefits() {
             </div>
             <div className="lg:col-span-4 flex lg:justify-end">
               <Link
-                href="/products"
+                href="/our-product"
                 className="bg-black text-white px-8 py-4 rounded-xl font-inter font-medium text-base hover:bg-black/85 transition-all shadow-xl inline-flex items-center gap-2 group"
               >
                 <span>Shop The Collection</span>

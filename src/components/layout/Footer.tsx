@@ -1,13 +1,14 @@
 import { Instagram, Youtube, Twitter, ArrowUpRight, Leaf } from "lucide-react";
+import { Link } from "wouter";
 
 const shopLinks = [
-  { label: "Moringa Powder", href: "/products" },
-  { label: "Moringa Tablets", href: "/products" },
-  { label: "Wellness Bundles", href: "/products" },
+  { label: "Moringa Powder", href: "/our-product" },
+  { label: "Moringa Tablets", href: "/our-product" },
+  { label: "Wellness Bundles", href: "/our-product" },
 ];
 
 const exploreLinks = [
-  { label: "Our Story", href: "/" },
+  { label: "Our Story", href: "/our-story" },
   { label: "Health Benefits", href: "/#benefits" },
   { label: "Wellness Recipes", href: "/recipes" },
   { label: "Gallery", href: "/gallery" },
@@ -91,12 +92,12 @@ export function Footer() {
               <ul className="space-y-3">
                 {shopLinks.map(({ label, href }) => (
                   <li key={label}>
-                    <a
+                    <Link
                       href={href}
                       className="font-inter text-sm text-white/50 hover:text-white transition-colors tracking-[-0.01em]"
                     >
                       {label}
-                    </a>
+                    </Link>
                   </li>
                 ))}
               </ul>
@@ -110,12 +111,12 @@ export function Footer() {
               <ul className="space-y-3">
                 {exploreLinks.map(({ label, href }) => (
                   <li key={label}>
-                    <a
+                    <Link
                       href={href}
                       className="font-inter text-sm text-white/50 hover:text-white transition-colors tracking-[-0.01em]"
                     >
                       {label}
-                    </a>
+                    </Link>
                   </li>
                 ))}
               </ul>
@@ -129,12 +130,12 @@ export function Footer() {
               <ul className="space-y-3">
                 {supportLinks.map(({ label, href }) => (
                   <li key={label}>
-                    <a
+                    <Link
                       href={href}
                       className="font-inter text-sm text-white/50 hover:text-white transition-colors tracking-[-0.01em]"
                     >
                       {label}
-                    </a>
+                    </Link>
                   </li>
                 ))}
               </ul>

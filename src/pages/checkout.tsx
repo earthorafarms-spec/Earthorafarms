@@ -121,6 +121,7 @@ export default function Checkout() {
   const [state, setState] = useState("");
   const [postalCode, setPostalCode] = useState("");
   const [country, setCountry] = useState("India");
+  const [gst, setGst] = useState("");
   const [countryDropdownOpen, setCountryDropdownOpen] = useState(false);
 
   const selectedCountry = useMemo(() => {
@@ -133,13 +134,23 @@ export default function Checkout() {
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState("");
 
-  const [paymentMethod, setPaymentMethod] = useState<"cod" | "razorpay">("cod");
+  const paymentMethod = "razorpay";
   const [allowMarketing, setAllowMarketing] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<any | null>(null);
 
   const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const shippingAmount = 0; // free shipping
+
+  // Calculate discount if coupon is applied
+  const discountAmount = useMemo(() => {
+    if (!appliedCoupon) return 0;
+    if (appliedCoupon.type === "percentage") {
+      return (subtotal * appliedCoupon.value) / 100;
+    } else {
+      return Math.min(subtotal, appliedCoupon.value);
+    }
+  }, [appliedCoupon, subtotal]);
 
   // Auth gate & prefill user data
   useEffect(() => {
@@ -171,6 +182,7 @@ export default function Checkout() {
           setState((data.user_state as string) || "");
           setPostalCode((data.user_zip as string) || "");
           setCountry((data.user_country as string) || "India");
+          setGst((data.user_gst as string) || "");
         } else {
           setEmail(emailAddr || "");
           setName(user?.user_metadata?.name || user?.user_metadata?.full_name || "");
@@ -190,16 +202,6 @@ export default function Checkout() {
       </div>
     );
   }
-
-  // Calculate discount if coupon is applied
-  const discountAmount = useMemo(() => {
-    if (!appliedCoupon) return 0;
-    if (appliedCoupon.type === "percentage") {
-      return (subtotal * appliedCoupon.value) / 100;
-    } else {
-      return Math.min(subtotal, appliedCoupon.value);
-    }
-  }, [appliedCoupon, subtotal]);
 
   const totalAmount = Math.max(0, subtotal - discountAmount + shippingAmount);
 
@@ -259,6 +261,7 @@ export default function Checkout() {
         user_state: state,
         user_zip: postalCode,
         user_country: country,
+        user_gst: gst,
       })
       .eq("user_email", user?.email);
 
@@ -283,7 +286,7 @@ export default function Checkout() {
       payment_order_id: orderReferenceId,
       payment_amount: String(totalAmount),
       payment_status: status,
-      payment_method: paymentMethod === "cod" ? "COD" : "RAZORPAY",
+      payment_method: "RAZORPAY",
       payment_transaction_id: txnId,
     });
 
@@ -296,14 +299,6 @@ export default function Checkout() {
     return orderReferenceId;
   };
 
-  // ── COD flow ─────────────────────────────────────────────────────────────────
-  const handleCODOrder = async () => {
-    const txnId = `COD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    const orderReferenceId = await saveOrderToDatabase("completed", txnId);
-    setOrderSuccess({ order_number: orderReferenceId, method: "cod", total: totalAmount });
-    clearCart();
-    toast({ title: "Order placed successfully!", description: `Order ID: ${orderReferenceId}` });
-  };
 
   // ── Razorpay flow ─────────────────────────────────────────────────────────────
   const handleRazorpayOrder = async () => {
@@ -478,11 +473,7 @@ export default function Checkout() {
 
     setIsSubmitting(true);
     try {
-      if (paymentMethod === "cod") {
-        await handleCODOrder();
-      } else {
-        await handleRazorpayOrder();
-      }
+      await handleRazorpayOrder();
     } catch (err: any) {
       const msg = err?.message || "An unexpected error occurred.";
       if (!msg.includes("cancelled")) {
@@ -511,8 +502,8 @@ export default function Checkout() {
               </div>
               <div className="flex justify-between text-xs text-foreground/50">
                 <span>Payment method:</span>
-                <span className="font-semibold text-foreground uppercase">
-                  {orderSuccess.method === "razorpay" ? "Online Payment" : "Cash on Delivery"}
+                <span className="font-semibold text-foreground">
+                  Online Payment
                 </span>
               </div>
               <div className="flex justify-between text-xs text-foreground/50 border-t border-border/30 pt-2 mt-2">
@@ -541,7 +532,7 @@ export default function Checkout() {
             </div>
             <h2 className="font-dm font-normal text-3xl text-black tracking-[-0.04em] mb-2">Your Cart is Empty</h2>
             <p className="font-inter text-sm text-black/60 mb-8">Add items to your cart before proceeding to checkout.</p>
-            <Button className="w-full bg-black text-white py-4 rounded-xl font-inter font-medium" onClick={() => setLocation("/products")}>
+            <Button className="w-full bg-black text-white py-4 rounded-xl font-inter font-medium" onClick={() => setLocation("/our-product")}>
               Explore Products
             </Button>
           </div>
@@ -746,8 +737,20 @@ export default function Checkout() {
                   </div>
                 </div>
 
-                {/* Marketing Consent Checkbox */}
+                {/* GST Number */}
                 <div className="pt-2 border-t border-border/30">
+                  <label className="block text-xs font-medium text-foreground/60 mb-1.5">GSTIN / Tax Number (Optional)</label>
+                  <input
+                    type="text"
+                    value={gst}
+                    onChange={e => setGst(e.target.value)}
+                    placeholder="22AAAAA0000A1Z5"
+                    className="w-full px-3.5 py-2.5 text-sm bg-background border border-border/60 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/40 uppercase"
+                  />
+                </div>
+
+                {/* Marketing Consent Checkbox */}
+                <div className="pt-4 border-t border-border/30">
                   <label className="flex items-start gap-3 cursor-pointer group select-none">
                     <input
                       type="checkbox"
@@ -767,59 +770,17 @@ export default function Checkout() {
                 <h3 className="text-sm font-semibold text-foreground border-b border-border/30 pb-3">
                   Payment Method
                 </h3>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Cash on Delivery */}
-                  <div
-                    onClick={() => setPaymentMethod("cod")}
-                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex flex-col gap-2 ${paymentMethod === "cod"
-                        ? "border-primary bg-primary/5"
-                        : "border-border/60 bg-muted/20 hover:border-border"
-                      }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <Wallet className="w-5 h-5 text-primary" />
-                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${paymentMethod === "cod" ? "border-primary bg-primary" : "border-border"}`}>
-                        {paymentMethod === "cod" && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-foreground">Cash on Delivery</p>
-                      <p className="text-[10px] text-foreground/45 mt-0.5">Pay when delivered</p>
-                    </div>
-                  </div>
-
-                  {/* Pay Online via Razorpay */}
-                  <div
-                    onClick={() => setPaymentMethod("razorpay")}
-                    className={`p-4 rounded-xl border-2 cursor-pointer transition-all flex flex-col gap-2 ${paymentMethod === "razorpay"
-                        ? "border-primary bg-primary/5"
-                        : "border-border/60 bg-muted/20 hover:border-border"
-                      }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <CreditCard className="w-5 h-5 text-primary" />
-                      <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${paymentMethod === "razorpay" ? "border-primary bg-primary" : "border-border"}`}>
-                        {paymentMethod === "razorpay" && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-foreground">Pay Online</p>
-                      <p className="text-[10px] text-foreground/45 mt-0.5">Card, UPI, Netbanking via Razorpay</p>
-                    </div>
+                <div className="flex items-center gap-3 p-4 rounded-xl border border-primary/20 bg-primary/5">
+                  <CreditCard className="w-5 h-5 text-primary shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold text-foreground">Pay Online via Razorpay</p>
+                    <p className="text-[10px] text-foreground/50 mt-0.5">Card, UPI, Netbanking and Wallet accepted</p>
                   </div>
                 </div>
-
-                {paymentMethod === "razorpay" && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="flex items-center gap-2 text-[10px] text-foreground/50 bg-muted/30 px-3 py-2 rounded-lg border border-border/30"
-                  >
-                    <Shield className="w-3.5 h-3.5 text-green-700 shrink-0" />
-                    <span>Your payment is secured by Razorpay. We never store your card details.</span>
-                  </motion.div>
-                )}
+                <div className="flex items-center gap-2 text-[10px] text-foreground/50 bg-muted/30 px-3 py-2 rounded-lg border border-border/30">
+                  <Shield className="w-3.5 h-3.5 text-green-700 shrink-0" />
+                  <span>Your payment is secured by Razorpay. We never store your card details.</span>
+                </div>
               </div>
 
               <div className="flex items-center gap-2 text-xs text-foreground/40 px-2 justify-center">

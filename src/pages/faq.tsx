@@ -82,7 +82,7 @@ const faqData: FAQItem[] = [
   {
     category: "orders",
     question: "What payment methods do you accept?",
-    answer: "We accept all major Credit/Debit Cards, UPI (GPay, PhonePe, Paytm), NetBanking, Razorpay Payment Links, and Cash on Delivery (COD) across India.",
+    answer: "We accept all major Credit/Debit Cards, UPI (GPay, PhonePe, Paytm), NetBanking, and Razorpay Payment Links across India.",
   },
   {
     category: "orders",

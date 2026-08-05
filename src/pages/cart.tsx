@@ -32,7 +32,7 @@ export default function Cart() {
               Looks like you haven't added anything yet. Explore our botanical collection to find your daily ritual.
             </p>
             <Link
-              href="/products"
+              href="/our-product"
               className="inline-flex items-center gap-2 bg-white text-black px-8 py-4 rounded-xl font-inter font-medium text-base hover:bg-white/90 transition-colors shadow-xl"
             >
               <span>Shop Collection</span>

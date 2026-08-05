@@ -11,6 +11,7 @@ import { useEscapeKey } from "@/hooks/useEscapeKey";
 
 const navLinks = [
   { label: "Home", href: "/" },
+  { label: "Our Story", href: "/our-story" },
   { label: "Our Product", href: "/our-product" },
   { label: "Health Benefits", href: "/health-benefits" },
   { label: "Gallery", href: "/gallery" },
