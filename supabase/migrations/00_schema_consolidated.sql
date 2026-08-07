@@ -4,8 +4,13 @@
 -- Description: Everything in one migration — tables, views, triggers,
 --              functions, storage buckets, RLS policies, and grants.
 --              NO seed data (catalog is managed via the admin portal).
---              Voice agent (call_sessions, voice_orders, knowledge_base)
---              and chatbot (chat_sessions, chat_messages) schemas removed.
+-- ─────────────────────────────────────────────────────────────────────────
+-- CHANGES FROM PREVIOUS VERSION:
+--   - Removed legacy "Orders" table (replaced by normalized orders + order_items)
+--   - Removed redundant users table (User_details is the source of truth)
+--   - Removed sync_orders_trigger + trigger_sync_orders (no longer needed)
+--   - Removed 9 redundant ALTER TABLE orders ADD COLUMN statements
+--   - Clarified festive_deal_products VIEW vs festival_deal_products TABLE
 -- ═══════════════════════════════════════════════════════════════════════════
 
 -- ── GLOBAL TRIGGER FUNCTION ───────────────────────────────────────────────────
@@ -16,8 +21,6 @@ BEGIN
       NEW.user_updated_at = NOW();
    ELSIF TG_TABLE_NAME = 'Cart_details' THEN
       NEW.cart_updated_at = NOW();
-   ELSIF TG_TABLE_NAME = 'Orders' THEN
-      NEW.order_updated_at = NOW();
    ELSIF TG_TABLE_NAME = 'Payments' THEN
       NEW.payment_updated_at = NOW();
    ELSIF TG_TABLE_NAME = 'Order_history' THEN
@@ -110,7 +113,7 @@ CREATE TRIGGER update_coupon_details_modtime
 BEFORE UPDATE ON coupon_details
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- Backward compatibility view for frontend coupons queries
+-- Backward compatibility view for frontend coupon queries
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'coupons' AND relkind = 'v') THEN
@@ -136,6 +139,7 @@ SELECT
 FROM coupon_details;
 
 -- ── 4. USER DETAILS TABLE ─────────────────────────────────────────────────────
+-- Single source of truth for customer accounts.
 CREATE TABLE IF NOT EXISTS "User_details" (
     id SERIAL PRIMARY KEY,
     user_email VARCHAR(255) NOT NULL UNIQUE,
@@ -157,6 +161,19 @@ DROP TRIGGER IF EXISTS update_User_details_modtime ON "User_details";
 CREATE TRIGGER update_User_details_modtime
 BEFORE UPDATE ON "User_details"
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ── 4B. KEY ACCOUNTS USERS TABLE ──────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS kacc_users (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO kacc_users (email, password)
+VALUES ('dmmspart399@gmail.com', 'Pintu@earthora')
+ON CONFLICT (email) DO UPDATE SET password = EXCLUDED.password;
 
 -- ── 5. CONTACT DETAILS TABLE ──────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS "Contact_details" (
@@ -185,23 +202,9 @@ CREATE TRIGGER update_Cart_details_modtime
 BEFORE UPDATE ON "Cart_details"
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- ── 7. ORDERS (LEGACY) TABLE ──────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS "Orders" (
-    id SERIAL PRIMARY KEY,
-    order_user_id VARCHAR(255) NOT NULL,
-    order_product_id VARCHAR(255) NOT NULL,
-    order_product_quantity VARCHAR(255) NOT NULL,
-    order_product_price VARCHAR(255) NOT NULL,
-    order_created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    order_updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
-DROP TRIGGER IF EXISTS update_Orders_modtime ON "Orders";
-CREATE TRIGGER update_Orders_modtime
-BEFORE UPDATE ON "Orders"
-FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
--- ── 8. NORMALIZED ORDERS & ORDER ITEMS TABLES ────────────────────────────────
+-- ── 7. NORMALIZED ORDERS TABLE ────────────────────────────────────────────────
+-- Single source of truth for all orders (checkout writes here directly).
+-- Flat customer_ columns allow KACC portal to query without JSON parsing.
 CREATE TABLE IF NOT EXISTS orders (
   id VARCHAR(255) PRIMARY KEY,
   order_number VARCHAR(255) NOT NULL,
@@ -209,9 +212,20 @@ CREATE TABLE IF NOT EXISTS orders (
   status VARCHAR(100) DEFAULT 'pending',
   total_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
   shipping_address JSONB NOT NULL DEFAULT '{}',
+  -- Flat address columns for easy querying in KACC portal
+  customer_name    VARCHAR(255) DEFAULT '',
+  customer_email   VARCHAR(255) DEFAULT '',
+  customer_phone   VARCHAR(255) DEFAULT '',
+  customer_address TEXT DEFAULT '',
+  customer_city    VARCHAR(255) DEFAULT '',
+  customer_state   VARCHAR(255) DEFAULT '',
+  customer_zip     VARCHAR(255) DEFAULT '',
+  customer_country VARCHAR(255) DEFAULT 'India',
+  customer_gst     VARCHAR(255) DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- ── 8. ORDER ITEMS TABLE ──────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS order_items (
   id SERIAL PRIMARY KEY,
   order_id VARCHAR(255) NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
@@ -222,91 +236,18 @@ CREATE TABLE IF NOT EXISTS order_items (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Trigger function to sync "Orders" inserts to orders & order_items tables
-CREATE OR REPLACE FUNCTION sync_orders_trigger()
+-- ── 9. ORDER STATUS SYNC TRIGGER (Order_history → orders.status) ──────────────
+CREATE OR REPLACE FUNCTION sync_order_status_trigger()
 RETURNS TRIGGER AS $$
-DECLARE
-  v_name TEXT;
-  v_phone TEXT;
-  v_address TEXT;
-  v_city TEXT;
-  v_state TEXT;
-  v_zip TEXT;
-  v_country TEXT;
-  v_gst TEXT;
-  v_order_id VARCHAR(255);
 BEGIN
-  SELECT user_name, user_phone, user_address, user_city, user_state, user_zip, user_country, user_gst
-  INTO v_name, v_phone, v_address, v_city, v_state, v_zip, v_country, v_gst
-  FROM "User_details"
-  WHERE user_email = NEW.order_user_id
-  LIMIT 1;
-
-  SELECT id::text INTO v_order_id
-  FROM "Orders"
-  WHERE order_user_id = NEW.order_user_id
-    AND order_created_at >= NEW.order_created_at - interval '2 seconds'
-  ORDER BY id ASC
-  LIMIT 1;
-
-  IF v_order_id IS NULL THEN
-    v_order_id := NEW.id::text;
-  END IF;
-
-  INSERT INTO orders (id, order_number, user_id, status, total_amount, shipping_address, created_at)
-  VALUES (
-    v_order_id,
-    v_order_id,
-    NEW.order_user_id,
-    'pending',
-    0,
-    jsonb_build_object(
-      'name', coalesce(v_name, NEW.order_user_id),
-      'email', NEW.order_user_id,
-      'phone', coalesce(v_phone, ''),
-      'address', coalesce(v_address, ''),
-      'city', coalesce(v_city, ''),
-      'state', coalesce(v_state, ''),
-      'zip', coalesce(v_zip, ''),
-      'country', coalesce(v_country, ''),
-      'gst', coalesce(v_gst, '')
-    ),
-    NEW.order_created_at
-  )
-  ON CONFLICT (id) DO NOTHING;
-
-  INSERT INTO order_items (order_id, product_id, quantity, unit_price, total_price, created_at)
-  VALUES (
-    v_order_id,
-    NEW.order_product_id::uuid,
-    NEW.order_product_quantity::numeric::integer,
-    NEW.order_product_price::numeric,
-    (NEW.order_product_quantity::numeric * NEW.order_product_price::numeric),
-    NEW.order_created_at
-  );
-
-  UPDATE inventory
-  SET total_stock = CASE
-    WHEN (total_stock - NEW.order_product_quantity::numeric::integer) < 0 THEN 0
-    ELSE (total_stock - NEW.order_product_quantity::numeric::integer)
-  END,
-  updated_at = NOW()
-  WHERE product_id = NEW.order_product_id::uuid;
-
   UPDATE orders
-  SET total_amount = (SELECT sum(total_price) FROM order_items WHERE order_id = v_order_id)
-  WHERE id = v_order_id;
-
+  SET status = NEW.order_status
+  WHERE id = NEW.order_id;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-DROP TRIGGER IF EXISTS trigger_sync_orders ON "Orders";
-CREATE TRIGGER trigger_sync_orders
-AFTER INSERT ON "Orders"
-FOR EACH ROW EXECUTE FUNCTION sync_orders_trigger();
-
--- ── 9. PAYMENTS TABLE ─────────────────────────────────────────────────────────
+-- ── 10. PAYMENTS TABLE ────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS "Payments" (
     id SERIAL PRIMARY KEY,
     payment_order_id VARCHAR(255) NOT NULL,
@@ -323,7 +264,7 @@ CREATE TRIGGER update_Payments_modtime
 BEFORE UPDATE ON "Payments"
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- ── 10. ORDER HISTORY TABLE & STATUS TRIGGER ──────────────────────────────────
+-- ── 11. ORDER HISTORY TABLE ───────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS "Order_history" (
     id SERIAL PRIMARY KEY,
     order_id VARCHAR(255) NOT NULL,
@@ -337,22 +278,12 @@ CREATE TRIGGER update_Order_history_modtime
 BEFORE UPDATE ON "Order_history"
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
-CREATE OR REPLACE FUNCTION sync_order_status_trigger()
-RETURNS TRIGGER AS $$
-BEGIN
-  UPDATE orders
-  SET status = NEW.order_status
-  WHERE id = NEW.order_id;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
 DROP TRIGGER IF EXISTS trigger_sync_order_status ON "Order_history";
 CREATE TRIGGER trigger_sync_order_status
 AFTER INSERT OR UPDATE ON "Order_history"
 FOR EACH ROW EXECUTE FUNCTION sync_order_status_trigger();
 
--- ── 11. ADMIN ANALYTICS TABLE ─────────────────────────────────────────────────
+-- ── 12. ADMIN ANALYTICS TABLE ─────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS "Admin_analytics" (
     id SERIAL PRIMARY KEY,
     page_name VARCHAR(255) NOT NULL,
@@ -371,14 +302,14 @@ CREATE TRIGGER update_Admin_analytics_modtime
 BEFORE UPDATE ON "Admin_analytics"
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- ── 12. ADMIN SETTINGS TABLE (used by admin portal auth) ─────────────────────
+-- ── 13. ADMIN SETTINGS TABLE ──────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS admin_settings (
     key VARCHAR(100) PRIMARY KEY,
     value TEXT NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- ── 13. OTP CODES TABLE ───────────────────────────────────────────────────────
+-- ── 14. OTP CODES TABLE ───────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS otp_codes (
     id SERIAL PRIMARY KEY,
     otp VARCHAR(6) NOT NULL,
@@ -386,17 +317,6 @@ CREATE TABLE IF NOT EXISTS otp_codes (
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
     used BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- ── 14. USERS TABLE ───────────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS users (
-  id UUID PRIMARY KEY,
-  email VARCHAR(255) UNIQUE NOT NULL,
-  name VARCHAR(255) NOT NULL,
-  role VARCHAR(50) DEFAULT 'customer',
-  is_verified BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- ── 15. ANALYTICS EVENTS TABLE ────────────────────────────────────────────────
@@ -407,7 +327,8 @@ CREATE TABLE IF NOT EXISTS analytics_events (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- ── 16. FESTIVAL DETAILS & DEAL PRODUCTS TABLES & VIEWS ──────────────────────
+-- ── 16. FESTIVAL DETAILS, DEAL PRODUCTS TABLES & VIEWS ───────────────────────
+-- TABLE: festival_details — stores each festival/deal campaign
 CREATE TABLE IF NOT EXISTS festival_details (
   id SERIAL PRIMARY KEY,
   festival_title VARCHAR(255) NOT NULL,
@@ -428,6 +349,7 @@ CREATE TRIGGER update_festival_details_modtime
 BEFORE UPDATE ON festival_details
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- TABLE: festival_deal_products — maps products to festival deals
 CREATE TABLE IF NOT EXISTS festival_deal_products (
   id SERIAL PRIMARY KEY,
   deal_id INT REFERENCES festival_details(id) ON DELETE CASCADE,
@@ -435,18 +357,13 @@ CREATE TABLE IF NOT EXISTS festival_deal_products (
   UNIQUE(deal_id, product_id)
 );
 
+-- VIEW: festive_deals — compat alias for frontend (festive_ prefix convention)
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'festive_deals' AND relkind = 'v') THEN
     DROP VIEW festive_deals CASCADE;
   ELSIF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'festive_deals' AND relkind = 'r') THEN
     DROP TABLE festive_deals CASCADE;
-  END IF;
-
-  IF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'festive_deal_products' AND relkind = 'v') THEN
-    DROP VIEW festive_deal_products CASCADE;
-  ELSIF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'festive_deal_products' AND relkind = 'r') THEN
-    DROP TABLE festive_deal_products CASCADE;
   END IF;
 END $$;
 
@@ -465,6 +382,15 @@ SELECT
   festival_start_date as created_at,
   festival_end_date as updated_at
 FROM festival_details;
+
+-- VIEW: festive_deal_products — compat alias for frontend (festive_ prefix convention)
+-- NOTE: This is a VIEW on top of the TABLE festival_deal_products (different name)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_class WHERE relname = 'festive_deal_products' AND relkind = 'v') THEN
+    DROP VIEW festive_deal_products CASCADE;
+  END IF;
+END $$;
 
 CREATE OR REPLACE VIEW festive_deal_products AS
 SELECT
@@ -627,7 +553,6 @@ ALTER TABLE inventory ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "User_details" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Contact_details" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Cart_details" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "Orders" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Payments" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Order_history" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Admin_analytics" ENABLE ROW LEVEL SECURITY;
@@ -636,7 +561,6 @@ ALTER TABLE otp_codes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE coupon_details ENABLE ROW LEVEL SECURITY;
 ALTER TABLE festival_details ENABLE ROW LEVEL SECURITY;
 ALTER TABLE festival_deal_products ENABLE ROW LEVEL SECURITY;
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE analytics_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 ALTER TABLE order_items ENABLE ROW LEVEL SECURITY;
@@ -660,141 +584,95 @@ BEGIN
   END LOOP;
 END $$;
 
--- ── 25. PUBLIC READ TABLES (products, inventory, festival_details, reviews) ──
+-- ── 25. PUBLIC READ TABLES ────────────────────────────────────────────────────
 
 -- 25a. products
 DROP POLICY IF EXISTS "Public read products" ON products;
 CREATE POLICY "Public read products" ON products FOR SELECT TO anon, authenticated USING (true);
-
 DROP POLICY IF EXISTS "Admin write products" ON products;
 CREATE POLICY "Admin write products" ON products FOR INSERT TO anon, authenticated WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Admin update products" ON products;
 CREATE POLICY "Admin update products" ON products FOR UPDATE TO anon, authenticated USING (true) WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Admin delete products" ON products;
 CREATE POLICY "Admin delete products" ON products FOR DELETE TO anon, authenticated USING (true);
-
 DROP POLICY IF EXISTS "Service write products" ON products;
 CREATE POLICY "Service write products" ON products FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- 25b. inventory
 DROP POLICY IF EXISTS "Public read inventory" ON inventory;
 CREATE POLICY "Public read inventory" ON inventory FOR SELECT TO anon, authenticated USING (true);
-
 DROP POLICY IF EXISTS "Admin write inventory" ON inventory;
 CREATE POLICY "Admin write inventory" ON inventory FOR INSERT TO anon, authenticated WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Admin update inventory" ON inventory;
 CREATE POLICY "Admin update inventory" ON inventory FOR UPDATE TO anon, authenticated USING (true) WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Admin delete inventory" ON inventory;
 CREATE POLICY "Admin delete inventory" ON inventory FOR DELETE TO anon, authenticated USING (true);
-
 DROP POLICY IF EXISTS "Service write inventory" ON inventory;
 CREATE POLICY "Service write inventory" ON inventory FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- 25c. festival_details
 DROP POLICY IF EXISTS "Public read festival_details" ON festival_details;
 CREATE POLICY "Public read festival_details" ON festival_details FOR SELECT TO anon, authenticated USING (true);
-
 DROP POLICY IF EXISTS "Admin write festival_details" ON festival_details;
 CREATE POLICY "Admin write festival_details" ON festival_details FOR INSERT TO anon WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Admin update festival_details" ON festival_details;
 CREATE POLICY "Admin update festival_details" ON festival_details FOR UPDATE TO anon USING (true) WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Admin delete festival_details" ON festival_details;
 CREATE POLICY "Admin delete festival_details" ON festival_details FOR DELETE TO anon USING (true);
-
 DROP POLICY IF EXISTS "Service write festival_details" ON festival_details;
 CREATE POLICY "Service write festival_details" ON festival_details FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- 25d. festival_deal_products
 DROP POLICY IF EXISTS "Public read festival_deal_products" ON festival_deal_products;
 CREATE POLICY "Public read festival_deal_products" ON festival_deal_products FOR SELECT TO anon, authenticated USING (true);
-
 DROP POLICY IF EXISTS "Admin write festival_deal_products" ON festival_deal_products;
 CREATE POLICY "Admin write festival_deal_products" ON festival_deal_products FOR INSERT TO anon WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Admin delete festival_deal_products" ON festival_deal_products;
 CREATE POLICY "Admin delete festival_deal_products" ON festival_deal_products FOR DELETE TO anon USING (true);
-
 DROP POLICY IF EXISTS "Service write festival_deal_products" ON festival_deal_products;
 CREATE POLICY "Service write festival_deal_products" ON festival_deal_products FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- 25e. review_details
 DROP POLICY IF EXISTS "Public read review_details" ON review_details;
 CREATE POLICY "Public read review_details" ON review_details FOR SELECT TO anon, authenticated USING (true);
-
 DROP POLICY IF EXISTS "Anon submit review_details" ON review_details;
 CREATE POLICY "Anon submit review_details" ON review_details FOR INSERT TO anon, authenticated WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Service manage review_details" ON review_details;
 CREATE POLICY "Service manage review_details" ON review_details FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- ── 26. CUSTOMER-OWNED DATA POLICIES ──────────────────────────────────────────
 
--- 26a. users
-DROP POLICY IF EXISTS "Users read own" ON users;
-CREATE POLICY "Users read own" ON users FOR SELECT TO authenticated USING (id = auth.uid());
-
-DROP POLICY IF EXISTS "Users insert own" ON users;
-CREATE POLICY "Users insert own" ON users FOR INSERT TO authenticated WITH CHECK (id = auth.uid());
-
-DROP POLICY IF EXISTS "Users update own" ON users;
-CREATE POLICY "Users update own" ON users FOR UPDATE TO authenticated USING (id = auth.uid()) WITH CHECK (id = auth.uid());
-
-DROP POLICY IF EXISTS "Service manage users" ON users;
-CREATE POLICY "Service manage users" ON users FOR ALL TO service_role USING (true) WITH CHECK (true);
-
--- 26b. User_details
+-- 26a. User_details
 DROP POLICY IF EXISTS "Users read own User_details" ON "User_details";
 CREATE POLICY "Users read own User_details" ON "User_details" FOR SELECT TO authenticated USING (user_email = auth.email());
-
 DROP POLICY IF EXISTS "Anyone can insert User_details" ON "User_details";
 CREATE POLICY "Anyone can insert User_details" ON "User_details" FOR INSERT TO anon WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Users insert own User_details" ON "User_details";
 CREATE POLICY "Users insert own User_details" ON "User_details" FOR INSERT TO authenticated WITH CHECK (user_email = auth.email());
-
 DROP POLICY IF EXISTS "Users update own User_details" ON "User_details";
 CREATE POLICY "Users update own User_details" ON "User_details" FOR UPDATE TO authenticated USING (user_email = auth.email()) WITH CHECK (user_email = auth.email());
-
 DROP POLICY IF EXISTS "Service manage User_details" ON "User_details";
 CREATE POLICY "Service manage User_details" ON "User_details" FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- 26c. Cart_details
+-- 26b. Cart_details
 DROP POLICY IF EXISTS "Users manage own cart" ON "Cart_details";
 CREATE POLICY "Users manage own cart" ON "Cart_details" FOR ALL TO authenticated USING (cart_user_id = auth.email()) WITH CHECK (cart_user_id = auth.email());
-
 DROP POLICY IF EXISTS "Service manage Cart_details" ON "Cart_details";
 CREATE POLICY "Service manage Cart_details" ON "Cart_details" FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- 26d. Orders (includes auth.jwt() fallback for Razorpay checkout)
-DROP POLICY IF EXISTS "Users read own Orders" ON "Orders";
-CREATE POLICY "Users read own Orders" ON "Orders" FOR SELECT TO authenticated USING (order_user_id = auth.email() OR order_user_id = (auth.jwt() ->> 'email'));
-
-DROP POLICY IF EXISTS "Users insert Orders" ON "Orders";
-CREATE POLICY "Users insert Orders" ON "Orders" FOR INSERT TO authenticated WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Service manage Orders" ON "Orders";
-CREATE POLICY "Service manage Orders" ON "Orders" FOR ALL TO service_role USING (true) WITH CHECK (true);
-
--- 26e. orders
+-- 26c. orders (normalized table)
 DROP POLICY IF EXISTS "Admin read orders" ON orders;
 CREATE POLICY "Admin read orders" ON orders FOR SELECT TO anon USING (true);
-
 DROP POLICY IF EXISTS "Users read own orders" ON orders;
 CREATE POLICY "Users read own orders" ON orders FOR SELECT TO authenticated USING (user_id = auth.email() OR user_id = (auth.jwt() ->> 'email'));
-
+DROP POLICY IF EXISTS "Admin manage orders" ON orders;
+CREATE POLICY "Admin manage orders" ON orders FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS "Service manage orders" ON orders;
 CREATE POLICY "Service manage orders" ON orders FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- 26f. order_items
+-- 26d. order_items
 DROP POLICY IF EXISTS "Admin read order_items" ON order_items;
 CREATE POLICY "Admin read order_items" ON order_items FOR SELECT TO anon USING (true);
-
 DROP POLICY IF EXISTS "Users read own order_items" ON order_items;
 CREATE POLICY "Users read own order_items" ON order_items FOR SELECT TO authenticated USING (
   EXISTS (
@@ -803,17 +681,16 @@ CREATE POLICY "Users read own order_items" ON order_items FOR SELECT TO authenti
     AND (orders.user_id = auth.email() OR orders.user_id = (auth.jwt() ->> 'email'))
   )
 );
-
+DROP POLICY IF EXISTS "Admin manage order_items" ON order_items;
+CREATE POLICY "Admin manage order_items" ON order_items FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 DROP POLICY IF EXISTS "Service manage order_items" ON order_items;
 CREATE POLICY "Service manage order_items" ON order_items FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- 26g. Order_history
+-- 26e. Order_history
 DROP POLICY IF EXISTS "Admin read Order_history" ON "Order_history";
 CREATE POLICY "Admin read Order_history" ON "Order_history" FOR SELECT TO anon USING (true);
-
 DROP POLICY IF EXISTS "Admin insert Order_history" ON "Order_history";
 CREATE POLICY "Admin insert Order_history" ON "Order_history" FOR INSERT TO anon WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Users read own Order_history" ON "Order_history";
 CREATE POLICY "Users read own Order_history" ON "Order_history" FOR SELECT TO authenticated USING (
   EXISTS (
@@ -822,17 +699,14 @@ CREATE POLICY "Users read own Order_history" ON "Order_history" FOR SELECT TO au
     AND (orders.user_id = auth.email() OR orders.user_id = (auth.jwt() ->> 'email'))
   )
 );
-
 DROP POLICY IF EXISTS "Users insert Order_history" ON "Order_history";
 CREATE POLICY "Users insert Order_history" ON "Order_history" FOR INSERT TO authenticated WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Service manage Order_history" ON "Order_history";
 CREATE POLICY "Service manage Order_history" ON "Order_history" FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- 26h. Payments
+-- 26f. Payments
 DROP POLICY IF EXISTS "Admin read Payments" ON "Payments";
 CREATE POLICY "Admin read Payments" ON "Payments" FOR SELECT TO anon USING (true);
-
 DROP POLICY IF EXISTS "Users read own Payments" ON "Payments";
 CREATE POLICY "Users read own Payments" ON "Payments" FOR SELECT TO authenticated USING (
   EXISTS (
@@ -841,53 +715,44 @@ CREATE POLICY "Users read own Payments" ON "Payments" FOR SELECT TO authenticate
     AND (orders.user_id = auth.email() OR orders.user_id = (auth.jwt() ->> 'email'))
   )
 );
-
 DROP POLICY IF EXISTS "Users insert Payments" ON "Payments";
 CREATE POLICY "Users insert Payments" ON "Payments" FOR INSERT TO authenticated WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Service manage Payments" ON "Payments";
 CREATE POLICY "Service manage Payments" ON "Payments" FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- 26i. favorite_details
+-- 26g. favorite_details
 DROP POLICY IF EXISTS "Users manage own favorites" ON favorite_details;
 CREATE POLICY "Users manage own favorites" ON favorite_details FOR ALL TO authenticated USING (user_email = auth.email()) WITH CHECK (user_email = auth.email());
-
 DROP POLICY IF EXISTS "Service manage favorite_details" ON favorite_details;
 CREATE POLICY "Service manage favorite_details" ON favorite_details FOR ALL TO service_role USING (true) WITH CHECK (true);
 
--- ── 27. FORM SUBMISSION & ANALYTICS POLICIES ───────────────────────────────────
+-- ── 27. FORM SUBMISSION & ANALYTICS POLICIES ──────────────────────────────────
 
 -- 27a. Contact_details
 DROP POLICY IF EXISTS "Anon submit contact" ON "Contact_details";
 CREATE POLICY "Anon submit contact" ON "Contact_details" FOR INSERT TO anon, authenticated WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Service manage contacts" ON "Contact_details";
 CREATE POLICY "Service manage contacts" ON "Contact_details" FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- 27b. customer_restock_requests
 DROP POLICY IF EXISTS "Admin read restock_requests" ON customer_restock_requests;
 CREATE POLICY "Admin read restock_requests" ON customer_restock_requests FOR SELECT TO anon USING (true);
-
 DROP POLICY IF EXISTS "Anon request restock" ON customer_restock_requests;
 CREATE POLICY "Anon request restock" ON customer_restock_requests FOR INSERT TO anon, authenticated WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Service manage restock_requests" ON customer_restock_requests;
 CREATE POLICY "Service manage restock_requests" ON customer_restock_requests FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- 27c. Admin_analytics
 DROP POLICY IF EXISTS "Admin read analytics" ON "Admin_analytics";
 CREATE POLICY "Admin read analytics" ON "Admin_analytics" FOR SELECT TO anon USING (true);
-
 DROP POLICY IF EXISTS "Anon insert analytics" ON "Admin_analytics";
 CREATE POLICY "Anon insert analytics" ON "Admin_analytics" FOR INSERT TO anon, authenticated WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Service manage analytics" ON "Admin_analytics";
 CREATE POLICY "Service manage analytics" ON "Admin_analytics" FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- 27d. analytics_events
 DROP POLICY IF EXISTS "Anon insert analytics_events" ON analytics_events;
 CREATE POLICY "Anon insert analytics_events" ON analytics_events FOR INSERT TO anon, authenticated WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Service manage analytics_events" ON analytics_events;
 CREATE POLICY "Service manage analytics_events" ON analytics_events FOR ALL TO service_role USING (true) WITH CHECK (true);
 
@@ -896,30 +761,24 @@ CREATE POLICY "Service manage analytics_events" ON analytics_events FOR ALL TO s
 -- 28a. coupon_details
 DROP POLICY IF EXISTS "Admin read coupon_details" ON coupon_details;
 CREATE POLICY "Admin read coupon_details" ON coupon_details FOR SELECT TO anon USING (true);
-
 DROP POLICY IF EXISTS "Admin insert coupon_details" ON coupon_details;
 CREATE POLICY "Admin insert coupon_details" ON coupon_details FOR INSERT TO anon WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Admin update coupon_details" ON coupon_details;
 CREATE POLICY "Admin update coupon_details" ON coupon_details FOR UPDATE TO anon USING (true) WITH CHECK (true);
-
 DROP POLICY IF EXISTS "Admin delete coupon_details" ON coupon_details;
 CREATE POLICY "Admin delete coupon_details" ON coupon_details FOR DELETE TO anon USING (true);
 
 -- 28b. sms_alert_logs
 DROP POLICY IF EXISTS "Admin read sms_alert_logs" ON sms_alert_logs;
 CREATE POLICY "Admin read sms_alert_logs" ON sms_alert_logs FOR SELECT TO anon USING (true);
-
 DROP POLICY IF EXISTS "Service manage sms_alert_logs" ON sms_alert_logs;
 CREATE POLICY "Service manage sms_alert_logs" ON sms_alert_logs FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- ── 29. STORAGE POLICIES ───────────────────────────────────────────────────────
 DROP POLICY IF EXISTS "Public read product images" ON storage.objects;
 CREATE POLICY "Public read product images" ON storage.objects FOR SELECT TO anon, authenticated USING (bucket_id = 'product-images');
-
 DROP POLICY IF EXISTS "Anon/auth upload product images" ON storage.objects;
 CREATE POLICY "Anon/auth upload product images" ON storage.objects FOR INSERT TO anon, authenticated WITH CHECK (bucket_id = 'product-images');
-
 DROP POLICY IF EXISTS "Anon/auth update product images" ON storage.objects;
 CREATE POLICY "Anon/auth update product images" ON storage.objects FOR UPDATE TO anon, authenticated USING (bucket_id = 'product-images');
 
@@ -955,6 +814,9 @@ GRANT INSERT, UPDATE, DELETE ON inventory TO anon, authenticated;
 GRANT INSERT, UPDATE, DELETE ON festival_details TO anon;
 GRANT INSERT, DELETE ON festival_deal_products TO anon;
 GRANT INSERT, UPDATE, DELETE ON coupon_details TO anon;
+GRANT INSERT, UPDATE, DELETE ON orders TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON order_items TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON kacc_users TO anon, authenticated;
 GRANT INSERT ON "Order_history" TO anon;
 GRANT INSERT ON review_details TO anon, authenticated;
 GRANT INSERT ON "Contact_details" TO anon, authenticated;
@@ -966,21 +828,17 @@ GRANT INSERT ON analytics_events TO anon, authenticated;
 GRANT INSERT ON "User_details" TO anon;
 GRANT SELECT, INSERT, UPDATE ON "User_details" TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON "Cart_details" TO authenticated;
-GRANT SELECT, INSERT ON "Orders" TO authenticated;
 GRANT SELECT, INSERT ON "Payments" TO authenticated;
 GRANT SELECT, INSERT ON "Order_history" TO authenticated;
-GRANT SELECT ON orders TO authenticated;
-GRANT SELECT ON order_items TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON orders TO anon, authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON order_items TO anon, authenticated;
 GRANT SELECT, INSERT, DELETE ON favorite_details TO authenticated;
-GRANT SELECT, INSERT, UPDATE ON users TO authenticated;
 
 -- Security Definer Functions Privileges
 REVOKE EXECUTE ON FUNCTION restock_product FROM anon, authenticated;
 REVOKE EXECUTE ON FUNCTION trigger_low_stock_sms FROM anon, authenticated;
-REVOKE EXECUTE ON FUNCTION sync_orders_trigger FROM anon, authenticated;
 REVOKE EXECUTE ON FUNCTION sync_order_status_trigger FROM anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION restock_product TO service_role;
 GRANT EXECUTE ON FUNCTION trigger_low_stock_sms TO service_role;
-GRANT EXECUTE ON FUNCTION sync_orders_trigger TO service_role;
 GRANT EXECUTE ON FUNCTION sync_order_status_trigger TO service_role;

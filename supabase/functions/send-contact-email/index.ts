@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 declare const Deno: {
@@ -33,7 +34,7 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    const resendApiKey = Deno.env.get("RESEND_API_KEY_ADMIN") || Deno.env.get("RESEND_API_KEY");
     if (!resendApiKey) {
       console.warn("[send-contact-email] RESEND_API_KEY secret is not configured in Supabase secrets.");
       return new Response(

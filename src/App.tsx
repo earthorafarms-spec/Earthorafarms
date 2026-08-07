@@ -28,14 +28,20 @@ import TermsOfUse from './pages/terms-of-use';
 import CookieSettings from './pages/cookie-settings';
 import OurStory from './pages/our-story';
 
-const AdminLayout = lazy(() => import('./pages/admin-earthora/layout'));
-const AdminDashboard = lazy(() => import('./pages/admin-earthora/dashboard'));
-const AdminProducts = lazy(() => import('./pages/admin-earthora/products'));
-const AdminOrders = lazy(() => import('./pages/admin-earthora/orders'));
-const AdminAnalytics = lazy(() => import('./pages/admin-earthora/analytics'));
-const AdminCoupons = lazy(() => import('./pages/admin-earthora/coupons'));
-const AdminFestive = lazy(() => import('./pages/admin-earthora/festive'));
-const AdminSettings = lazy(() => import('./pages/admin-earthora/settings'));
+const AdminLayout = lazy(() => import('./pages/sun-earthora/layout'));
+const AdminDashboard = lazy(() => import('./pages/sun-earthora/dashboard'));
+const AdminProducts = lazy(() => import('./pages/sun-earthora/products'));
+const AdminOrders = lazy(() => import('./pages/sun-earthora/orders'));
+const AdminAnalytics = lazy(() => import('./pages/sun-earthora/analytics'));
+const AdminCoupons = lazy(() => import('./pages/sun-earthora/coupons'));
+const AdminFestive = lazy(() => import('./pages/sun-earthora/festive'));
+const AdminSettings = lazy(() => import('./pages/sun-earthora/settings'));
+
+import { KaccGate } from '@/components/KaccGate';
+const KaccLayout = lazy(() => import('./pages/kacc/layout'));
+const KaccDashboard = lazy(() => import('./pages/kacc/dashboard'));
+const KaccB2BGst = lazy(() => import('./pages/kacc/b2b-gst'));
+const KaccB2CNonGst = lazy(() => import('./pages/kacc/b2c-nongst'));
 
 import NotFound from './pages/not-found';
 
@@ -89,10 +95,10 @@ export default function App() {
                   <Route path="/cookie-settings" component={CookieSettings} />
                   <Route path="/auth" component={Auth} />
 
-                  <Route path="/admin-earthora">
-                    <Redirect to="/admin-earthora/dashboard" />
+                  <Route path="/sun-earthora">
+                    <Redirect to="/sun-earthora/dashboard" />
                   </Route>
-                  <Route path="/admin-earthora/:rest*">
+                  <Route path="/sun-earthora/:rest*">
                     <Gate
                       storageKey="admin_authenticated"
                       passwordKey="admin_password"
@@ -104,19 +110,37 @@ export default function App() {
                     >
                       <AdminLayout>
                         <Switch>
-                          <Route path="/admin-earthora/dashboard" component={AdminDashboard} />
-                          <Route path="/admin-earthora/products" component={AdminProducts} />
-                          <Route path="/admin-earthora/orders" component={AdminOrders} />
-                          <Route path="/admin-earthora/coupons" component={AdminCoupons} />
-                          <Route path="/admin-earthora/festive" component={AdminFestive} />
-                          <Route path="/admin-earthora/analytics" component={AdminAnalytics} />
-                          <Route path="/admin-earthora/settings" component={AdminSettings} />
+                          <Route path="/sun-earthora/dashboard" component={AdminDashboard} />
+                          <Route path="/sun-earthora/products" component={AdminProducts} />
+                          <Route path="/sun-earthora/orders" component={AdminOrders} />
+                          <Route path="/sun-earthora/coupons" component={AdminCoupons} />
+                          <Route path="/sun-earthora/festive" component={AdminFestive} />
+                          <Route path="/sun-earthora/analytics" component={AdminAnalytics} />
+                          <Route path="/sun-earthora/settings" component={AdminSettings} />
                           <Route>
-                            <Redirect to="/admin-earthora/dashboard" />
+                            <Redirect to="/sun-earthora/dashboard" />
                           </Route>
                         </Switch>
                       </AdminLayout>
                     </Gate>
+                  </Route>
+
+                  <Route path="/kacc">
+                    <Redirect to="/kacc/dashboard" />
+                  </Route>
+                  <Route path="/kacc/:rest*">
+                    <KaccGate>
+                      <KaccLayout>
+                        <Switch>
+                          <Route path="/kacc/dashboard" component={KaccDashboard} />
+                          <Route path="/kacc/b2b-gst" component={KaccB2BGst} />
+                          <Route path="/kacc/b2c-nongst" component={KaccB2CNonGst} />
+                          <Route>
+                            <Redirect to="/kacc/dashboard" />
+                          </Route>
+                        </Switch>
+                      </KaccLayout>
+                    </KaccGate>
                   </Route>
 
                   <Route component={Fallback} />

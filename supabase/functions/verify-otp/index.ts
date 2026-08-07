@@ -1,4 +1,10 @@
+// @ts-nocheck
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+declare const Deno: {
+  env: { get(key: string): string | undefined };
+  serve(handler: (req: Request) => Response | Promise<Response>): void;
+};
 
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -48,9 +54,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   try {
-    const body = await req.json();
+    const body = (await req.json()) as any;
     const otp: string | undefined = body?.otp;
-    const domain = "admin";
+    const domain: string = (body?.domain && typeof body.domain === "string") ? body.domain : "admin";
 
     if (!otp || typeof otp !== "string" || otp.length !== 6) {
       return new Response(

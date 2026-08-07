@@ -342,7 +342,7 @@ export default function AdminDashboard() {
               <div className="w-2.5 h-2.5 rounded-full bg-primary" />
               <h2 className="text-sm font-serif font-bold text-foreground">Recent Orders</h2>
             </div>
-            <button onClick={() => setLocation("/admin-earthora/orders")} className="text-xs text-primary hover:text-primary/70 transition-colors font-medium flex items-center gap-1">
+            <button onClick={() => setLocation("/sun-earthora/orders")} className="text-xs text-primary hover:text-primary/70 transition-colors font-medium flex items-center gap-1">
               View All
               <ChevronRight className="w-3 h-3" strokeWidth={1.5} />
             </button>

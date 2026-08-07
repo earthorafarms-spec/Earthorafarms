@@ -249,7 +249,7 @@ export default function Checkout() {
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
-  /** Save order rows to Supabase and return the first inserted order's ID */
+  /** Save order rows to Supabase and return the created order's ID */
   const saveOrderToDatabase = async (status: string, txnId: string) => {
     // 1. Update user shipping details
     await (supabase.from("User_details") as any)
@@ -265,38 +265,75 @@ export default function Checkout() {
       })
       .eq("user_email", user?.email);
 
-    // 2. Insert order rows
-    const orderRows = items.map((item) => ({
-      order_user_id: user?.email || "",
-      order_product_id: item.id,
-      order_product_quantity: String(item.quantity),
-      order_product_price: String(item.price),
+    // 2. Build shipping address payload
+    const shippingAddressPayload = {
+      name,
+      email: user?.email || email,
+      phone,
+      address,
+      city,
+      state,
+      zip: postalCode,
+      country,
+      gst: gst || "",
+    };
+
+    // 3. Generate a unique order ID and insert into normalized orders table
+    const orderId = `ORD-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const orderNumber = orderId;
+
+    const { error: orderErr } = await (supabase.from("orders") as any).insert({
+      id: orderId,
+      order_number: orderNumber,
+      user_id: user?.email || "",
+      status: "pending",
+      total_amount: totalAmount,
+      shipping_address: shippingAddressPayload,
+      // Flat columns for easy reading in KACC portal
+      customer_name: name,
+      customer_email: user?.email || email,
+      customer_phone: phone,
+      customer_address: address,
+      customer_city: city,
+      customer_state: state,
+      customer_zip: postalCode,
+      customer_country: country,
+      customer_gst: gst || "",
+    });
+
+    if (orderErr) throw orderErr;
+
+    // 4. Insert each cart item into order_items
+    const orderItemRows = items.map((item) => ({
+      order_id: orderId,
+      product_id: item.id,
+      quantity: item.quantity,
+      unit_price: item.price,
+      total_price: item.price * item.quantity,
     }));
 
-    const { data: insertedOrders, error: orderInsertErr } = await (supabase.from("Orders") as any)
-      .insert(orderRows)
-      .select();
+    const { error: itemsErr } = await (supabase.from("order_items") as any).insert(orderItemRows);
+    if (itemsErr) {
+      console.error("order_items insert error:", itemsErr);
+      // Don't throw — order is already saved, items error is non-fatal for the user
+    }
 
-    if (orderInsertErr) throw orderInsertErr;
-
-    const orderReferenceId = String(insertedOrders?.[0]?.id || Date.now());
-
-    // 3. Insert payment record
+    // 5. Insert payment record
     await (supabase.from("Payments") as any).insert({
-      payment_order_id: orderReferenceId,
+      payment_order_id: orderId,
       payment_amount: String(totalAmount),
       payment_status: status,
       payment_method: "RAZORPAY",
       payment_transaction_id: txnId,
     });
 
-    // 4. Insert order history
+    // 6. Insert order history
     await (supabase.from("Order_history") as any).insert({
-      order_id: orderReferenceId,
+      order_id: orderId,
       order_status: status === "completed" ? "pending" : "cancelled",
     });
 
-    return orderReferenceId;
+    return orderId;
   };
 
 

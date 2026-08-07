@@ -9,13 +9,13 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
 
 const navItems = [
-  { id: "dashboard",  label: "Dashboard",     icon: LayoutDashboard, path: "/admin-earthora/dashboard", hint: "Overview & key metrics" },
-  { id: "products",   label: "Products",       icon: Package,         path: "/admin-earthora/products", hint: "Manage inventory & listings" },
-  { id: "orders",     label: "Orders",         icon: ShoppingCart,    path: "/admin-earthora/orders", hint: "View & fulfill customer orders" },
-  { id: "coupons",    label: "Coupons",        icon: Tag,             path: "/admin-earthora/coupons", hint: "Create promotional discounts" },
-  { id: "festive",    label: "Festive Deals",  icon: Sparkles,        path: "/admin-earthora/festive", hint: "Seasonal campaigns & banners" },
-  { id: "analytics", label: "Analytics",      icon: TrendingUp,      path: "/admin-earthora/analytics", hint: "Revenue & traffic trends" },
-  { id: "settings",  label: "Settings",       icon: Settings,        path: "/admin-earthora/settings", hint: "Admin configuration" },
+  { id: "dashboard",  label: "Dashboard",     icon: LayoutDashboard, path: "/sun-earthora/dashboard", hint: "Overview & key metrics" },
+  { id: "products",   label: "Products",       icon: Package,         path: "/sun-earthora/products", hint: "Manage inventory & listings" },
+  { id: "orders",     label: "Orders",         icon: ShoppingCart,    path: "/sun-earthora/orders", hint: "View & fulfill customer orders" },
+  { id: "coupons",    label: "Coupons",        icon: Tag,             path: "/sun-earthora/coupons", hint: "Create promotional discounts" },
+  { id: "festive",    label: "Festive Deals",  icon: Sparkles,        path: "/sun-earthora/festive", hint: "Seasonal campaigns & banners" },
+  { id: "analytics", label: "Analytics",      icon: TrendingUp,      path: "/sun-earthora/analytics", hint: "Revenue & traffic trends" },
+  { id: "settings",  label: "Settings",       icon: Settings,        path: "/sun-earthora/settings", hint: "Admin configuration" },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -26,7 +26,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const notifRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
-  const activeTab = location.replace("/admin-earthora/", "").replace("/admin-earthora", "") || "dashboard";
+  const activeTab = location.replace("/sun-earthora/", "").replace("/sun-earthora", "") || "dashboard";
 
   useEffect(() => {
     async function fetchNotifications() {
@@ -237,7 +237,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                               {notifData.lowStock.slice(0, 5).map((item: any) => (
                                 <button
                                   key={item.id}
-                                  onClick={() => { setLocation("/admin-earthora/products"); setNotifOpen(false); }}
+                                  onClick={() => { setLocation("/sun-earthora/products"); setNotifOpen(false); }}
                                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[#fafaf8] transition-colors text-left"
                                 >
                                   <div className="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
@@ -262,7 +262,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                               {notifData.restockRequests.slice(0, 5).map((req: any) => (
                                 <button
                                   key={req.id}
-                                  onClick={() => { setLocation("/admin-earthora/products"); setNotifOpen(false); }}
+                                  onClick={() => { setLocation("/sun-earthora/products"); setNotifOpen(false); }}
                                   className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[#fafaf8] transition-colors text-left"
                                 >
                                   <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
@@ -302,7 +302,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     </div>
                     <div className="p-2 border-t border-border/20">
                       <button
-                        onClick={() => { setLocation("/admin-earthora/dashboard"); setNotifOpen(false); }}
+                        onClick={() => { setLocation("/sun-earthora/dashboard"); setNotifOpen(false); }}
                         className="w-full py-2 text-xs font-medium text-foreground/50 hover:text-foreground transition-colors text-center"
                       >
                         View Dashboard
