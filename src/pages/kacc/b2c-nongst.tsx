@@ -34,10 +34,11 @@ export default function KaccB2CNonGst() {
   const b2cOrders = orders
     .map((o) => {
       const amount = parseFloat(o.total_amount) || 0;
+      const addr = o.shipping_address || {};
 
-      // Read flat columns (set at checkout) — no JSON parsing needed
-      const gstNo = (o.customer_gst || "").trim();
-      const state = (o.customer_state || "").trim();
+      // Read flat columns with fallback to shipping_address JSON
+      const gstNo = (o.customer_gst || addr.gst || addr.user_gst || "").trim();
+      const state = (o.customer_state || addr.state || addr.user_state || "").trim();
 
       const taxableValue = amount / 1.18;
       const taxAmount = amount - taxableValue;
@@ -56,12 +57,12 @@ export default function KaccB2CNonGst() {
 
       return {
         id: o.id,
-        email: o.customer_email || o.user_id || "",
-        name: o.customer_name || o.user_id || "Retail Customer",
-        phone: o.customer_phone || "",
+        email: o.customer_email || addr.email || o.user_id || "",
+        name: o.customer_name || addr.name || o.user_id || "Retail Customer",
+        phone: o.customer_phone || addr.phone || "",
         gstNo,
-        address: o.customer_address || "",
-        city: o.customer_city || "",
+        address: o.customer_address || addr.address || "",
+        city: o.customer_city || addr.city || "",
         state: state || "",
         zip: o.customer_zip || "",
         amount,

@@ -46,7 +46,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const productSlug = formData.get("product_slug") as string;
     const isPrimary = formData.get("is_primary") === "true";
     const altText = formData.get("alt") as string;
-    const password = formData.get("password") as string;
+    const password = (formData.get("password") as string) || req.headers.get("x-admin-password") || "";
 
     if (!file || !productId || !productSlug) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
@@ -94,11 +94,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const fileName = `${productSlug}/${timestamp}.${fileExt}`;
     const rawFileName = `${productSlug}/${timestamp}_raw.${fileExt}`;
 
-    // Upload original to private bucket
+    // Upload original to private bucket (optional fallback)
     const fileBuffer = await file.arrayBuffer();
-    await supabase.storage
-      .from("product-images-raw")
-      .upload(rawFileName, fileBuffer, { contentType: file.type, upsert: true });
+    try {
+      await supabase.storage
+        .from("product-images-raw")
+        .upload(rawFileName, fileBuffer, { contentType: file.type, upsert: true });
+    } catch (_) {
+      // ignore if raw bucket does not exist
+    }
 
     // Upload to public bucket (same file for now)
     const { error: uploadError } = await supabase.storage

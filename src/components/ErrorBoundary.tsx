@@ -21,6 +21,19 @@ export class ErrorBoundary extends Component<Props, State> {
 
   override componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('ErrorBoundary caught:', error, info.componentStack);
+    const msg = error?.message || '';
+    if (
+      msg.includes('Failed to fetch dynamically imported module') ||
+      msg.includes('MIME type') ||
+      msg.includes('Importing a module script failed') ||
+      msg.includes('text/html')
+    ) {
+      const isReloaded = sessionStorage.getItem('chunk_reload_attempt');
+      if (!isReloaded) {
+        sessionStorage.setItem('chunk_reload_attempt', 'true');
+        window.location.reload();
+      }
+    }
   }
 
   override render() {

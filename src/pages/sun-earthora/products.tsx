@@ -245,7 +245,23 @@ export default function AdminProducts() {
     setUploading(true);
     const mrp = parseFloat(form.mrp);
     const price = parseFloat(form.price);
-    const id = form.name.toLowerCase().replace(/[^a-z]+/g, "-").replace(/(^-|-$)/g, "");
+    const baseSlug = form.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "product";
+    let id = baseSlug;
+
+    if (!editId) {
+      try {
+        const { data: existingSlug } = await (supabase.from("products") as any)
+          .select("slug")
+          .eq("slug", baseSlug)
+          .maybeSingle();
+
+        if (existingSlug) {
+          id = `${baseSlug}-${Math.random().toString(36).substring(2, 6)}`;
+        }
+      } catch (_) {
+        // fallback if check fails
+      }
+    }
 
     let finalImages: ProductImage[] = [];
 
@@ -256,17 +272,20 @@ export default function AdminProducts() {
           const file = selectedFiles[i];
           const isPrimary = i === 0;
           
+          const adminPassword = sessionStorage.getItem("admin_password") || "";
           const formData = new FormData();
           formData.append("file", file);
           formData.append("product_id", id);
           formData.append("product_slug", id);
           formData.append("is_primary", String(isPrimary));
           formData.append("alt", `${form.name} view ${i + 1}`);
+          formData.append("password", adminPassword);
 
           const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/upload-product-image`, {
             method: "POST",
             headers: {
-              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+              "x-admin-password": adminPassword,
             },
             body: formData
           });

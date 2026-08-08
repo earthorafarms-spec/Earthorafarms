@@ -1,4 +1,4 @@
-﻿-- ===========================================================================
+-- ===========================================================================
 -- EARTHORA FARMS - DATABASE SCHEMA v2 (CLEAN / DEDUPLICATED)
 -- File: 20260808_schema_v2.sql
 -- Created: 2026-08-08
@@ -148,8 +148,8 @@ FROM coupon_details;
 CREATE TABLE IF NOT EXISTS "User_details" (
     id SERIAL PRIMARY KEY,
     user_email VARCHAR(255) NOT NULL UNIQUE,
-    user_password VARCHAR(255) NOT NULL,
-    user_name VARCHAR(255) NOT NULL,
+    user_password VARCHAR(255) NOT NULL DEFAULT '',
+    user_name VARCHAR(255) NOT NULL DEFAULT '',
     user_phone VARCHAR(255) DEFAULT '',
     user_address VARCHAR(255) DEFAULT '',
     user_city VARCHAR(255) DEFAULT '',
@@ -161,6 +161,8 @@ CREATE TABLE IF NOT EXISTS "User_details" (
     user_created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     user_updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE "User_details" ALTER COLUMN user_password SET DEFAULT '';
+ALTER TABLE "User_details" ALTER COLUMN user_name SET DEFAULT '';
 DROP TRIGGER IF EXISTS update_User_details_modtime ON "User_details";
 CREATE TRIGGER update_User_details_modtime BEFORE UPDATE ON "User_details"
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -619,7 +621,7 @@ CREATE POLICY "Users read own Order_history" ON "Order_history" FOR SELECT TO au
     AND (orders.user_id = auth.email() OR orders.user_id = (auth.jwt() ->> 'email')))
 );
 DROP POLICY IF EXISTS "Users insert Order_history"   ON "Order_history";
-CREATE POLICY "Users insert Order_history"   ON "Order_history" FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Users insert Order_history"   ON "Order_history" FOR INSERT TO anon, authenticated WITH CHECK (true);
 DROP POLICY IF EXISTS "Service manage Order_history" ON "Order_history";
 CREATE POLICY "Service manage Order_history" ON "Order_history" FOR ALL TO service_role USING (true) WITH CHECK (true);
 
@@ -632,7 +634,7 @@ CREATE POLICY "Users read own Payments" ON "Payments" FOR SELECT TO authenticate
     AND (orders.user_id = auth.email() OR orders.user_id = (auth.jwt() ->> 'email')))
 );
 DROP POLICY IF EXISTS "Users insert Payments"   ON "Payments";
-CREATE POLICY "Users insert Payments"   ON "Payments" FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "Users insert Payments"   ON "Payments" FOR INSERT TO anon, authenticated WITH CHECK (true);
 DROP POLICY IF EXISTS "Service manage Payments" ON "Payments";
 CREATE POLICY "Service manage Payments" ON "Payments" FOR ALL TO service_role USING (true) WITH CHECK (true);
 
@@ -712,9 +714,9 @@ GRANT SELECT ON products, inventory, festival_details, festival_deal_products,
   TO anon, authenticated;
 
 GRANT INSERT, UPDATE, DELETE ON products, inventory TO anon, authenticated;
-GRANT INSERT, UPDATE, DELETE ON festival_details    TO anon;
-GRANT INSERT, DELETE         ON festival_deal_products TO anon;
-GRANT INSERT, UPDATE, DELETE ON coupon_details      TO anon;
+GRANT INSERT, UPDATE, DELETE ON festival_details    TO anon, authenticated;
+GRANT INSERT, DELETE         ON festival_deal_products TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON coupon_details      TO anon, authenticated;
 GRANT INSERT, UPDATE, DELETE ON orders, order_items TO anon, authenticated;
 GRANT INSERT, UPDATE, DELETE ON kacc_users          TO anon, authenticated;
 GRANT INSERT                 ON "Order_history"     TO anon;
@@ -725,8 +727,8 @@ GRANT INSERT                 ON review_details, "Contact_details",
 GRANT INSERT                         ON "User_details"  TO anon;
 GRANT SELECT, INSERT, UPDATE         ON "User_details"  TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON "Cart_details"  TO authenticated;
-GRANT SELECT, INSERT                 ON "Payments"      TO authenticated;
-GRANT SELECT, INSERT                 ON "Order_history" TO authenticated;
+GRANT SELECT, INSERT                 ON "Payments"      TO anon, authenticated;
+GRANT SELECT, INSERT                 ON "Order_history" TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON orders, order_items TO anon, authenticated;
 GRANT SELECT, INSERT, DELETE         ON favorite_details TO authenticated;
 

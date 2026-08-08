@@ -102,12 +102,12 @@ export function UserDashboardModal({ isOpen, onClose }: UserDashboardModalProps)
     if (!isOpen || !userEmail || activeTab !== 'orders') return;
     setOrdersLoading(true);
 
-    // Orders are stored in "Orders" table with order_user_id = user email
-    (supabase.from('Orders') as any)
-      .select('*')
-      .eq('order_user_id', userEmail)
-      .order('order_created_at', { ascending: false })
-      .then(async ({ data: legacyData, error }: { data: any[] | null; error: any }) => {
+    // Orders are stored in normalized "orders" table with user_id = user email
+    (supabase.from('orders') as any)
+      .select('*, order_items(id, quantity, unit_price, total_price, product_id, products(id, name, slug, images))')
+      .eq('user_id', userEmail)
+      .order('created_at', { ascending: false })
+      .then(({ data: dbOrders, error }: { data: any[] | null; error: any }) => {
         if (error) {
           console.error('Orders fetch error:', error.message);
           setOrders([]);
@@ -115,53 +115,27 @@ export function UserDashboardModal({ isOpen, onClose }: UserDashboardModalProps)
           return;
         }
 
-        if (!legacyData || legacyData.length === 0) {
+        if (!dbOrders || dbOrders.length === 0) {
           setOrders([]);
           setOrdersLoading(false);
           return;
         }
 
-        // Fetch product details for each row (by slug or id)
-        const mapped = await Promise.all(
-          legacyData.map(async (item: any) => {
-            // Try to get product by slug first, then by id
-            let prod: any = null;
-            const { data: bySlug } = await (supabase.from('products') as any)
-              .select('id, name, slug, images')
-              .eq('slug', item.order_product_id)
-              .maybeSingle();
-            if (bySlug) {
-              prod = bySlug;
-            } else {
-              const { data: byId } = await (supabase.from('products') as any)
-                .select('id, name, slug, images')
-                .eq('id', item.order_product_id)
-                .maybeSingle();
-              prod = byId;
-            }
-
-            const qty = Number(item.order_product_quantity) || 1;
-            const price = Number(item.order_product_price) || 0;
-
-            return {
-              id: item.id,
-              order_number: String(item.id),
-              status: 'processing',
-              total_amount: price * qty,
-              created_at: item.order_created_at || item.created_at,
-              shipping_address: null,
-              order_items: [
-                {
-                  id: item.id,
-                  quantity: qty,
-                  unit_price: price,
-                  total_price: price * qty,
-                  products: prod || { name: item.order_product_id, slug: item.order_product_id },
-                },
-              ],
-            };
-          })
-        );
+        const mapped = dbOrders.map((o: any) => ({
+          id: o.id,
+          order_number: o.order_number || o.id,
+          status: o.status || 'pending',
+          total_amount: Number(o.total_amount || 0),
+          created_at: o.created_at,
+          shipping_address: o.shipping_address,
+          order_items: (o.order_items || []).map((item: any) => ({
+            id: item.id,
+            quantity: Number(item.quantity || 1),
+            unit_price: Number(item.unit_price || 0),
+            total_price: Number(item.total_price || 0),
+            products: item.products || { name: item.product_id, slug: item.product_id },
+          })),
+        }));
 
         setOrders(mapped);
         setOrdersLoading(false);
@@ -174,11 +148,6 @@ export function UserDashboardModal({ isOpen, onClose }: UserDashboardModalProps)
     setProfileLoading(true);
 
     try {
-      const { data: existing } = await (supabase.from('User_details') as any)
-        .select('user_email')
-        .eq('user_email', userEmail)
-        .maybeSingle();
-
       const payload = {
         user_email: userEmail,
         user_name: profile.name,
@@ -190,9 +159,8 @@ export function UserDashboardModal({ isOpen, onClose }: UserDashboardModalProps)
         user_country: profile.country,
       };
 
-      const { error } = existing
-        ? await (supabase.from('User_details') as any).update(payload).eq('user_email', userEmail)
-        : await (supabase.from('User_details') as any).insert([payload]);
+      const { error } = await (supabase.from('User_details') as any)
+        .upsert(payload, { onConflict: 'user_email' });
 
       if (error) throw error;
       toast({ title: 'Profile updated', description: 'Your information has been saved.' });

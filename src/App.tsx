@@ -28,20 +28,43 @@ import TermsOfUse from './pages/terms-of-use';
 import CookieSettings from './pages/cookie-settings';
 import OurStory from './pages/our-story';
 
-const AdminLayout = lazy(() => import('./pages/sun-earthora/layout'));
-const AdminDashboard = lazy(() => import('./pages/sun-earthora/dashboard'));
-const AdminProducts = lazy(() => import('./pages/sun-earthora/products'));
-const AdminOrders = lazy(() => import('./pages/sun-earthora/orders'));
-const AdminAnalytics = lazy(() => import('./pages/sun-earthora/analytics'));
-const AdminCoupons = lazy(() => import('./pages/sun-earthora/coupons'));
-const AdminFestive = lazy(() => import('./pages/sun-earthora/festive'));
-const AdminSettings = lazy(() => import('./pages/sun-earthora/settings'));
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  componentImport: () => Promise<{ default: T }>
+) {
+  return lazy(async () => {
+    try {
+      const pageHasBeenReloaded = sessionStorage.getItem('page_reloaded_for_chunk');
+      const component = await componentImport();
+      if (pageHasBeenReloaded) {
+        sessionStorage.removeItem('page_reloaded_for_chunk');
+      }
+      return component;
+    } catch (error: any) {
+      const pageHasBeenReloaded = sessionStorage.getItem('page_reloaded_for_chunk');
+      if (!pageHasBeenReloaded) {
+        sessionStorage.setItem('page_reloaded_for_chunk', 'true');
+        window.location.reload();
+        return new Promise<{ default: T }>(() => {});
+      }
+      throw error;
+    }
+  });
+}
+
+const AdminLayout = lazyWithRetry(() => import('./pages/sun-earthora/layout'));
+const AdminDashboard = lazyWithRetry(() => import('./pages/sun-earthora/dashboard'));
+const AdminProducts = lazyWithRetry(() => import('./pages/sun-earthora/products'));
+const AdminOrders = lazyWithRetry(() => import('./pages/sun-earthora/orders'));
+const AdminAnalytics = lazyWithRetry(() => import('./pages/sun-earthora/analytics'));
+const AdminCoupons = lazyWithRetry(() => import('./pages/sun-earthora/coupons'));
+const AdminFestive = lazyWithRetry(() => import('./pages/sun-earthora/festive'));
+const AdminSettings = lazyWithRetry(() => import('./pages/sun-earthora/settings'));
 
 import { KaccGate } from '@/components/KaccGate';
-const KaccLayout = lazy(() => import('./pages/kacc/layout'));
-const KaccDashboard = lazy(() => import('./pages/kacc/dashboard'));
-const KaccB2BGst = lazy(() => import('./pages/kacc/b2b-gst'));
-const KaccB2CNonGst = lazy(() => import('./pages/kacc/b2c-nongst'));
+const KaccLayout = lazyWithRetry(() => import('./pages/kacc/layout'));
+const KaccDashboard = lazyWithRetry(() => import('./pages/kacc/dashboard'));
+const KaccB2BGst = lazyWithRetry(() => import('./pages/kacc/b2b-gst'));
+const KaccB2CNonGst = lazyWithRetry(() => import('./pages/kacc/b2c-nongst'));
 
 import NotFound from './pages/not-found';
 

@@ -65,3 +65,60 @@ export interface DbProduct {
   inventory: { total_stock: number }[];
   created_at: string;
 }
+
+export interface DbUser {
+  id: number;
+  user_email: string;
+  user_name: string;
+  user_phone?: string;
+  user_address?: string;
+  user_city?: string;
+  user_state?: string;
+  user_zip?: string;
+  user_country?: string;
+  user_gst?: string;
+  user_created_at?: string;
+}
+
+export interface DbOrder {
+  id: string;
+  order_number: string;
+  user_id: string;
+  status: string;
+  total_amount: number;
+  shipping_address: Record<string, any>;
+  customer_name?: string;
+  customer_email?: string;
+  customer_phone?: string;
+  customer_address?: string;
+  customer_city?: string;
+  customer_state?: string;
+  customer_zip?: string;
+  customer_country?: string;
+  customer_gst?: string;
+  created_at?: string;
+}
+
+export interface DbOrderItem {
+  id: number;
+  order_id: string;
+  product_id: string;
+  quantity: number;
+  unit_price: number;
+  total_price: number;
+  created_at?: string;
+}
+
+export interface DbCoupon {
+  id: number;
+  coupon_code: string;
+  coupon_discount_type: 'percentage' | 'fixed';
+  coupon_discount_amount: number;
+  coupon_discount_value: number;
+  coupon_min_order: number;
+  coupon_max_uses?: number;
+  coupon_used_count: number;
+  coupon_expiry_date?: string;
+  coupon_status: 'active' | 'inactive';
+  coupon_description: string;
+}

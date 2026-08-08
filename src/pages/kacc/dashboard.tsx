@@ -18,9 +18,9 @@ export default function KaccDashboard() {
   async function fetchOrders() {
     setLoading(true);
     try {
-      const { data, error } = await (supabase.from("Orders") as any)
-        .select("*")
-        .order("id", { ascending: false });
+      const { data, error } = await (supabase.from("orders") as any)
+        .select("*, order_items(*)")
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
       setOrders(data || []);
@@ -43,17 +43,19 @@ export default function KaccDashboard() {
   let totalIgst = 0;
 
   const processedOrders = orders.map((o) => {
-    let amount = parseFloat(o.order_amount) || 0;
+    let amount = Number(o.total_amount || 0);
     if (amount <= 0 && Array.isArray(o.order_items)) {
       amount = o.order_items.reduce((acc: number, item: any) => {
-        return acc + (parseFloat(item.total_price) || parseFloat(item.price) * (item.quantity || 1) || 0);
+        return acc + (Number(item.total_price) || Number(item.unit_price) * Number(item.quantity) || 0);
       }, 0);
     }
 
     const addr = o.shipping_address || {};
-    const gstNo = addr.gst || addr.user_gst || "";
-    const isB2B = Boolean(gstNo && String(gstNo).trim().length > 3);
-    const state = (addr.state || addr.user_state || "").trim().toLowerCase();
+    const customerName = o.customer_name || addr.name || o.user_id || "Customer";
+    const customerEmail = o.customer_email || addr.email || o.user_id || "";
+    const gstNo = (o.customer_gst || addr.gst || addr.user_gst || "").trim();
+    const isB2B = Boolean(gstNo && gstNo.length >= 3);
+    const state = (o.customer_state || addr.state || addr.user_state || "").trim().toLowerCase();
 
     // Tax computation (18% GST rate: 9% CGST + 9% SGST for intra-state TN, 18% IGST for inter-state)
     // Taxable Value = Amount / 1.18
@@ -88,11 +90,13 @@ export default function KaccDashboard() {
 
     return {
       ...o,
+      customerName,
+      customerEmail,
       calculatedAmount: amount,
       taxableValue,
       isB2B,
       gstNo,
-      state: addr.state || "N/A",
+      state: o.customer_state || addr.state || "N/A",
       cgst,
       sgst,
       igst,
@@ -286,7 +290,7 @@ export default function KaccDashboard() {
                 <tr key={o.id} className="hover:bg-black/2 transition-colors">
                   <td className="py-4 px-6 font-mono font-medium text-black">#{String(o.id).slice(0, 8)}</td>
                   <td className="py-4 px-6 font-medium text-black">
-                    {o.order_user_id || "Customer"}
+                    {o.customerName || o.customerEmail || "Customer"}
                   </td>
                   <td className="py-4 px-6">
                     <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold font-mono uppercase ${

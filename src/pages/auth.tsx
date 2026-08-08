@@ -51,11 +51,14 @@ export default function Auth() {
         if (error) throw error;
 
         const { error: dbError } = await (supabase.from("User_details") as any)
-          .insert({
-            user_email: email.trim(),
-            user_name: fullName.trim(),
-            user_password: password
-          });
+          .upsert(
+            {
+              user_email: email.trim(),
+              user_name: fullName.trim(),
+              user_password: password
+            },
+            { onConflict: "user_email" }
+          );
 
         if (dbError) {
           console.warn("User profile details note:", dbError.message);

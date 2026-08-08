@@ -219,9 +219,6 @@ export default function AdminOrders() {
       .on("postgres_changes", { event: "*", schema: "public", table: "orders" }, () => {
         fetchOrders();
       })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "Orders" }, () => {
-        setTimeout(fetchOrders, 800);
-      })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -266,15 +263,7 @@ export default function AdminOrders() {
         user_country: manualForm.country || "India",
       }, { onConflict: "user_email" });
 
-      // 2. Insert into legacy Orders table (same as checkout page)
-      await (supabase.from("Orders") as any).insert({
-        order_user_id: customerEmail,
-        order_product_id: manualForm.productId,
-        order_product_quantity: String(qty),
-        order_product_price: String(unitPrice),
-      });
-
-      // 3. Insert normalized order row for admin dashboard
+      // 2. Insert normalized order row for admin dashboard
       const { error: orderErr } = await (supabase.from("orders") as any).insert({
         id: orderId,
         order_number: orderId,
