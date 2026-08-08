@@ -131,15 +131,13 @@ export async function syncUserProfile(user: {
   user_metadata?: { name?: string };
   email_confirmed_at?: string | null;
 }) {
-  return (supabase.from('users') as any).upsert(
+  return (supabase.from('User_details') as any).upsert(
     {
-      id: user.id,
-      email: user.email ?? '',
-      name: user.user_metadata?.name ?? user.email?.split('@')[0] ?? '',
-      role: 'customer',
-      is_verified: user.email_confirmed_at != null,
+      user_email: user.email ?? '',
+      user_name: user.user_metadata?.name ?? user.email?.split('@')[0] ?? '',
+      user_password: '', // Placeholder password since they logged in via Supabase Auth
     },
-    { onConflict: 'id' }
+    { onConflict: 'user_email' }
   );
 }
 
