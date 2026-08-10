@@ -252,7 +252,7 @@ export default function Checkout() {
   /** Save order rows to Supabase and return the created order's ID */
   const saveOrderToDatabase = async (status: string, txnId: string) => {
     // 1. Update/insert user shipping details
-    const customerEmail = user?.email || email;
+    const customerEmail = (email || user?.email || "").trim();
     if (customerEmail) {
       await (supabase.from("User_details") as any).upsert(
         {
@@ -274,7 +274,7 @@ export default function Checkout() {
     // 2. Build shipping address payload
     const shippingAddressPayload = {
       name,
-      email: user?.email || email,
+      email: customerEmail,
       phone,
       address,
       city,
@@ -291,13 +291,13 @@ export default function Checkout() {
     const { error: orderErr } = await (supabase.from("orders") as any).insert({
       id: orderId,
       order_number: orderNumber,
-      user_id: user?.email || email || "",
+      user_id: customerEmail,
       status: "pending",
       total_amount: totalAmount,
       shipping_address: shippingAddressPayload,
       // Flat columns for easy reading in KACC portal
       customer_name: name,
-      customer_email: user?.email || email,
+      customer_email: customerEmail,
       customer_phone: phone,
       customer_address: address,
       customer_city: city,

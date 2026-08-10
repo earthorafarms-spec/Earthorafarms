@@ -178,8 +178,8 @@ Deno.serve(async (req: Request) => {
 
     // Extract details
     const shipping = order.shipping_address || {};
-    const recipientEmail = shipping.email || order.user_id;
-    const recipientName = shipping.name || "Customer";
+    const recipientEmail = (order.customer_email || shipping.email || order.user_id || "").trim();
+    const recipientName = order.customer_name || shipping.name || "Customer";
     const recipientPhone = shipping.phone || "";
     const recipientGst = shipping.gst || "N/A";
     const fullAddress = `${shipping.address || ""}, ${shipping.city || ""}, ${shipping.state || ""} - ${shipping.zip || ""}, ${shipping.country || ""}`;
@@ -521,28 +521,11 @@ Deno.serve(async (req: Request) => {
 
     if (!resendRes.ok) {
       const errText = await resendRes.text();
-      console.warn(`[send-invoice] Resend API Warning for ${recipientEmail}: ${errText}. Attempting fallback...`);
-
-      // Fallback: send to admin/developer email if customer email is unverified on Resend sandbox
-      resendRes = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${resendApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: "Earthora Farms <onboarding@resend.dev>",
-          to: ["earthorafarms@gmail.com"],
-          subject: `[Invoice Copy] Order #${orderId.substring(0, 8).toUpperCase()} for ${recipientEmail}`,
-          html: emailHtmlBody,
-          attachments: [
-            {
-              filename: `Invoice_${orderId.substring(0, 8).toUpperCase()}.pdf`,
-              content: pdfBase64,
-            },
-          ],
-        }),
-      });
+      console.warn(`[send-invoice] Resend API Warning for customer (${recipientEmail}): ${errText}`);
+      return new Response(
+        JSON.stringify({ ok: false, warning: `Resend API Warning for ${recipientEmail}: ${errText}` }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     return new Response(
