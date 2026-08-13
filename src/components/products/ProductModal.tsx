@@ -102,7 +102,7 @@ export const ProductModal = memo(function ProductModal({
                       </div>
                       {product.reviewCount > 0 && <span className="text-sm text-foreground/40">{product.reviewCount} ratings</span>}
                       <span className="text-foreground/20">|</span>
-                      <span className="text-sm text-green-700 font-medium">{product.stock}</span>
+                      <span className={`text-sm font-medium ${product.stock === 'Out of Stock' ? 'text-red-600 font-semibold' : 'text-green-700'}`}>{product.stock}</span>
                     </div>
 
                     <div className="flex items-baseline gap-3 mb-6">
@@ -125,12 +125,20 @@ export const ProductModal = memo(function ProductModal({
                     </div>
 
                     <div className="flex gap-3 pt-6 border-t border-border/20">
-                      <Button className="flex-1 h-13 text-sm gap-2.5 bg-primary hover:bg-primary/90 rounded-xl" onClick={onAddToCart}>
-                        <ShoppingCart className="w-4 h-4" strokeWidth={1.5} /> Add to Cart
-                      </Button>
-                      <Button variant="outline" className="flex-1 h-13 text-sm gap-2.5 border-primary/30 text-primary hover:bg-primary/5 rounded-xl" onClick={onBuyNow}>
-                        <Zap className="w-4 h-4" strokeWidth={1.5} /> Buy Now
-                      </Button>
+                      {product.stock === 'Out of Stock' ? (
+                        <Button disabled className="w-full h-13 text-sm gap-2.5 bg-red-100 text-red-600 font-semibold rounded-xl cursor-not-allowed border border-red-200">
+                          Currently Out of Stock
+                        </Button>
+                      ) : (
+                        <>
+                          <Button className="flex-1 h-13 text-sm gap-2.5 bg-primary hover:bg-primary/90 rounded-xl" onClick={onAddToCart}>
+                            <ShoppingCart className="w-4 h-4" strokeWidth={1.5} /> Add to Cart
+                          </Button>
+                          <Button variant="outline" className="flex-1 h-13 text-sm gap-2.5 border-primary/30 text-primary hover:bg-primary/5 rounded-xl" onClick={onBuyNow}>
+                            <Zap className="w-4 h-4" strokeWidth={1.5} /> Buy Now
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

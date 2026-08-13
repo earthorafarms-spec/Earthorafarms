@@ -78,28 +78,41 @@ export default function AdminProducts() {
   const fetchProducts = async () => {
     try {
       
-      const { data: rawData, error } = await supabase
-        .from("products")
-        .select("*, inventory(*)")
-        .neq("status", "archived")
-        .order("created_at", { ascending: false });
+      const [prodRes, orderItemsRes] = await Promise.all([
+        supabase
+          .from("products")
+          .select("*, inventory(*)")
+          .neq("status", "archived")
+          .order("created_at", { ascending: false }),
+        supabase.from("order_items").select("product_id, quantity"),
+      ]);
         
-      if (error) throw error;
+      if (prodRes.error) throw prodRes.error;
       
-      const data = rawData as any[];
+      const data = (prodRes.data || []) as any[];
+      const orderItems = (orderItemsRes.data || []) as any[];
+
+      const soldMap: Record<string, number> = {};
+      for (const item of orderItems) {
+        if (item.product_id) {
+          soldMap[item.product_id] = (soldMap[item.product_id] || 0) + (Number(item.quantity) || 0);
+        }
+      }
+
       const mapped = data.map((p: any) => {
         const inv = Array.isArray(p.inventory) ? p.inventory[0] : p.inventory;
+        const stockQty = inv?.total_stock ?? 0;
         return {
           id: p.id,
           name: p.name,
           mrp: Number(p.mrp),
           price: Number(p.price),
-          stock: inv?.total_stock ?? 0,
-          sold: 0,
+          stock: stockQty,
+          sold: soldMap[p.id] || 0,
           status: p.status,
           tag: p.tag || "",
           badge: p.badge || "",
-          stockText: inv?.total_stock && inv.total_stock > 15 ? "In Stock" : "Low Stock",
+          stockText: stockQty > 15 ? "In Stock" : stockQty > 0 ? "Low Stock" : "Out of Stock",
           description: p.description || "",
           highlights: p.highlights || [],
           rating: Number(p.rating),
@@ -120,13 +133,16 @@ export default function AdminProducts() {
     fetchProducts();
     
     const channel = supabase
-        .channel("inventory-changes")
+        .channel("inventory-and-order-changes")
         .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "inventory" },
-          () => {
-            fetchProducts();
-          }
+          () => fetchProducts()
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "order_items" },
+          () => fetchProducts()
         )
         .subscribe();
         

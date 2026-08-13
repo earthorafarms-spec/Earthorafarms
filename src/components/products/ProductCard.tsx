@@ -96,8 +96,8 @@ export const ProductCard = memo(function ProductCard({
         </p>
 
         {/* Stock */}
-        <p className="font-inter text-xs text-emerald-700 font-medium flex items-center gap-1.5 mb-4">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 inline-block" />
+        <p className={`font-inter text-xs font-medium flex items-center gap-1.5 mb-4 ${p.stock === 'Out of Stock' ? 'text-red-600' : 'text-emerald-700'}`}>
+          <span className={`w-1.5 h-1.5 rounded-full inline-block ${p.stock === 'Out of Stock' ? 'bg-red-600' : 'bg-emerald-600'}`} />
           {p.stock}
         </p>
 
@@ -119,22 +119,28 @@ export const ProductCard = memo(function ProductCard({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={(e) => { e.stopPropagation(); onAddToCart(); }}
-              className="bg-black text-white w-10 h-10 rounded-xl flex items-center justify-center hover:bg-black/80 transition-colors shadow-md shrink-0 group/btn"
-              aria-label="Add to cart"
-            >
-              <ShoppingBag className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); onBuyNow(); }}
-              className="border border-black/15 text-black/80 hover:text-black hover:border-black/30 w-10 h-10 rounded-xl flex items-center justify-center transition-all shrink-0 group/btn2"
-              aria-label="Buy now"
-            >
-              <ArrowUpRight className="w-4 h-4 group-hover/btn2:translate-x-0.5 group-hover/btn2:-translate-y-0.5 transition-transform" />
-            </button>
-          </div>
+          {p.stock === 'Out of Stock' ? (
+            <span className="px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 text-xs font-medium rounded-xl shrink-0">
+              Out of Stock
+            </span>
+          ) : (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={(e) => { e.stopPropagation(); onAddToCart(); }}
+                className="bg-black text-white w-10 h-10 rounded-xl flex items-center justify-center hover:bg-black/80 transition-colors shadow-md shrink-0 group/btn"
+                aria-label="Add to cart"
+              >
+                <ShoppingBag className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); onBuyNow(); }}
+                className="border border-black/15 text-black/80 hover:text-black hover:border-black/30 w-10 h-10 rounded-xl flex items-center justify-center transition-all shrink-0 group/btn2"
+                aria-label="Buy now"
+              >
+                <ArrowUpRight className="w-4 h-4 group-hover/btn2:translate-x-0.5 group-hover/btn2:-translate-y-0.5 transition-transform" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </motion.div>
