@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { supabase } from "@/lib/supabase";
 import { UserDashboardModal } from "@/components/user/UserDashboardModal";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
+import earthoraTextSvg from "@assets/generated_images/Earthora Text.svg";
 
 const navLinks = [
   { label: "Home", href: "/" },
@@ -100,10 +101,14 @@ export function Navbar() {
         transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
       >
         <div className="container mx-auto px-6 sm:px-10 h-20 flex items-center justify-between">
-          <Link href="/">
-            <span className="font-dm font-medium text-2xl tracking-[-0.04em] cursor-pointer">
-              Earthora
-            </span>
+          <Link href="/" className="flex items-center cursor-pointer py-1">
+            <img
+              src={earthoraTextSvg}
+              alt="Earthora"
+              className={`h-4.5 sm:h-5 w-auto object-contain transition-all duration-300 ${
+                isHomePage && !isScrolled ? "brightness-0 invert" : ""
+              }`}
+            />
           </Link>
 
           <nav className="hidden md:flex items-center gap-8 font-dm font-medium text-sm">
@@ -191,7 +196,7 @@ export function Navbar() {
                 className="fixed top-0 right-0 bottom-0 w-72 z-[101] bg-[#FAF9F5] text-black border-l border-black/10 shadow-2xl md:hidden flex flex-col"
               >
                 <div className="flex items-center justify-between h-20 px-6 border-b border-black/10">
-                  <span className="font-dm font-medium text-xl">Earthora</span>
+                  <img src={earthoraTextSvg} alt="Earthora" className="h-4.5 w-auto object-contain" />
                   <button onClick={() => setIsMobileOpen(false)} className="p-2 text-black/60 hover:text-black">
                     <X className="w-5 h-5" />
                   </button>

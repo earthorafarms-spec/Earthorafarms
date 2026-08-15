@@ -65,6 +65,7 @@ const KaccLayout = lazyWithRetry(() => import('./pages/kacc/layout'));
 const KaccDashboard = lazyWithRetry(() => import('./pages/kacc/dashboard'));
 const KaccB2BGst = lazyWithRetry(() => import('./pages/kacc/b2b-gst'));
 const KaccB2CNonGst = lazyWithRetry(() => import('./pages/kacc/b2c-nongst'));
+const KaccProducts = lazyWithRetry(() => import('./pages/kacc/products'));
 
 import NotFound from './pages/not-found';
 
@@ -158,6 +159,7 @@ export default function App() {
                           <Route path="/kacc/dashboard" component={KaccDashboard} />
                           <Route path="/kacc/b2b-gst" component={KaccB2BGst} />
                           <Route path="/kacc/b2c-nongst" component={KaccB2CNonGst} />
+                          <Route path="/kacc/products" component={KaccProducts} />
                           <Route>
                             <Redirect to="/kacc/dashboard" />
                           </Route>

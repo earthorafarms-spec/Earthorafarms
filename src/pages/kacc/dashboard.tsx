@@ -57,16 +57,14 @@ export default function KaccDashboard() {
     const isB2B = Boolean(gstNo && gstNo.length >= 3);
     const state = (o.customer_state || addr.state || addr.user_state || "").trim().toLowerCase();
 
-    // Tax computation (18% GST rate: 9% CGST + 9% SGST for intra-state TN, 18% IGST for inter-state)
-    // Taxable Value = Amount / 1.18
+    // Tax computation (18% GST rate: 9% CGST + 9% SGST for intra-state Gujarat, 18% IGST for inter-state)
     const taxableValue = amount / 1.18;
     const taxAmount = amount - taxableValue;
-
     let cgst = 0;
     let sgst = 0;
     let igst = 0;
 
-    const isIntraState = state.includes("tamil nadu") || state === "tn";
+    const isIntraState = state.includes("gujarat") || state === "gj" || state === "guj";
 
     if (isIntraState) {
       cgst = taxAmount / 2;

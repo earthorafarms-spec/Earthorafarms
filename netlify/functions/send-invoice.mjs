@@ -1,23 +1,25 @@
-// supabase/functions/send-invoice/index.ts
-// Supabase Edge Function — generates official Indian Tax Invoice PDF (Matching Mahi Enterprise grid layout) & dispatches via Resend API.
+// netlify/functions/send-invoice.mjs
+// Netlify Serverless Function — generates official Indian Tax Invoice PDF (Matching Mahi Enterprise standard grid layout) & dispatches via Resend API / SMTP / Supabase.
 
-// @ts-nocheck
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { PDFDocument, rgb, StandardFonts } from "https://esm.sh/pdf-lib@1.17.1";
+import { createClient } from "@supabase/supabase-js";
+import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
+import nodemailer from "nodemailer";
 
-declare const Deno: {
-  env: { get(key: string): string | undefined };
-  serve(handler: (req: Request) => Response | Promise<Response>): void;
-};
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "https://uynfeciklsijhbhukrwn.supabase.co";
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+const RESEND_API_KEY = process.env.RESEND_API_KEY_ADMIN || process.env.RESEND_API_KEY || "";
+const SMTP_PASS = process.env.SMTP_PASS || "";
+const SMTP_USER = process.env.SMTP_USER || "orders@earthorafarms.com";
+const SMTP_HOST = process.env.SMTP_HOST || "smtp.gmail.com";
+const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
 
-const corsHeaders: Record<string, string> = {
+const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-admin-password",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
 };
 
-function numberToWords(num: number): string {
+function numberToWords(num) {
   const a = [
     "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
     "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"
@@ -27,7 +29,7 @@ function numberToWords(num: number): string {
   const value = Math.round(num);
   if (value === 0) return "Zero";
 
-  function chunk(n: number): string {
+  function chunk(n) {
     if (n < 20) return a[n];
     if (n < 100) return b[Math.floor(n / 10)] + (n % 10 ? " " + a[n % 10] : "");
     return a[Math.floor(n / 100)] + " Hundred" + (n % 100 ? " and " + chunk(n % 100) : "");
@@ -54,35 +56,31 @@ function numberToWords(num: number): string {
   return str.trim() + " Rupees";
 }
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+export async function handler(event) {
+  if (event.httpMethod === "OPTIONS") {
+    return { statusCode: 204, headers: CORS_HEADERS, body: "" };
+  }
+
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, headers: CORS_HEADERS, body: JSON.stringify({ error: "Method not allowed" }) };
+  }
+
+  let orderId = "";
+  try {
+    const body = JSON.parse(event.body || "{}");
+    orderId = body.orderId || body.id || "";
+  } catch {
+    return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: "Invalid JSON payload" }) };
+  }
+
+  if (!orderId) {
+    return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: "Missing required field: orderId" }) };
   }
 
   try {
-    const { orderId } = (await req.json()) as { orderId?: string };
+    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    if (!orderId) {
-      return new Response(
-        JSON.stringify({ ok: false, error: "Missing required field: orderId" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const resendApiKey = Deno.env.get("RESEND_API_KEY_ADMIN") || Deno.env.get("RESEND_API_KEY");
-    if (!resendApiKey) {
-      console.warn("[send-invoice] RESEND_API_KEY secret is not configured in Supabase secrets.");
-      return new Response(
-        JSON.stringify({ ok: false, warning: "RESEND_API_KEY secret not configured in Supabase secrets." }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_ANON_KEY") || "";
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    // 1. Fetch Order details
+    // 1. Fetch Order
     let order = null;
     const { data: orderData } = await supabase
       .from("orders")
@@ -93,13 +91,13 @@ Deno.serve(async (req: Request) => {
     if (orderData) {
       order = orderData;
     } else {
-      const { data: capOrders } = await supabase
+      const { data: capOrderData } = await supabase
         .from("Orders")
         .select("*")
         .eq("id", orderId);
 
-      if (capOrders && capOrders.length > 0) {
-        const firstRow = capOrders[0];
+      if (capOrderData && capOrderData.length > 0) {
+        const firstRow = capOrderData[0];
         order = {
           id: firstRow.id,
           created_at: firstRow.order_created_at || new Date().toISOString(),
@@ -111,13 +109,10 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!order) {
-      return new Response(
-        JSON.stringify({ ok: false, error: `Order not found: ${orderId}` }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return { statusCode: 404, headers: CORS_HEADERS, body: JSON.stringify({ error: `Order not found: ${orderId}` }) };
     }
 
-    // 2. Fetch Order items
+    // 2. Fetch Order Items
     let orderItems = [];
     const { data: itemsData } = await supabase
       .from("order_items")
@@ -186,7 +181,7 @@ Deno.serve(async (req: Request) => {
     // PDF GENERATION VIA PDF-LIB (EXACT MAHI ENTERPRISE TAX INVOICE GRID)
     // ══════════════════════════════════════════════════════════════════════════
     const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([595, 842]);
+    const page = pdfDoc.addPage([595, 842]); // Standard A4 Page
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
@@ -201,6 +196,8 @@ Deno.serve(async (req: Request) => {
 
     // 1. TOP HEADER TITLE
     page.drawText("TAX INVOICE", { x: leftMargin, y, size: 11, font: fontBold, color: black });
+    
+    // ORIGINAL Badge Box
     page.drawRectangle({ x: 105, y: y - 2, width: 55, height: 14, borderColor: black, borderWidth: 0.8 });
     page.drawText("ORIGINAL", { x: 110, y: y + 1, size: 7.5, font: fontBold, color: black });
 
@@ -212,6 +209,7 @@ Deno.serve(async (req: Request) => {
     page.drawRectangle({ x: leftMargin, y: topBoxY - topBoxHeight, width, height: topBoxHeight, borderColor: black, borderWidth: 1 });
     page.drawLine({ start: { x: 300, y: topBoxY }, end: { x: 300, y: topBoxY - topBoxHeight }, thickness: 1, color: black });
 
+    // Left Seller Info
     let sellerY = topBoxY - 14;
     page.drawText("Earthora Farms & Foods Pvt. Ltd.", { x: leftMargin + 6, y: sellerY, size: 10, font: fontBold, color: black });
     sellerY -= 12;
@@ -221,6 +219,7 @@ Deno.serve(async (req: Request) => {
     sellerY -= 12;
     page.drawText("GSTIN: 24AAACE1234F1Z5  Mobile: 9825346884", { x: leftMargin + 6, y: sellerY, size: 8, font: fontBold, color: black });
 
+    // Right Invoice Details
     page.drawText("Invoice No.", { x: 340, y: topBoxY - 18, size: 8.5, font: fontBold, color: black });
     page.drawText(`ORD-${orderId.substring(0, 8).toUpperCase()}/26-27`, { x: 340, y: topBoxY - 30, size: 9, font: fontBold, color: black });
 
@@ -235,6 +234,7 @@ Deno.serve(async (req: Request) => {
     page.drawRectangle({ x: leftMargin, y: billBoxY - billBoxHeight, width, height: billBoxHeight, borderColor: black, borderWidth: 1 });
     page.drawLine({ start: { x: 290, y: billBoxY }, end: { x: 290, y: billBoxY - billBoxHeight }, thickness: 1, color: black });
 
+    // BILL TO
     let billY = billBoxY - 12;
     page.drawText("BILL TO", { x: leftMargin + 6, y: billY, size: 8, font: fontBold, color: black });
     billY -= 12;
@@ -248,6 +248,7 @@ Deno.serve(async (req: Request) => {
     }
     page.drawText(`GSTIN: ${recipientGst}    Place of Supply: ${recipientState}`, { x: leftMargin + 6, y: billY, size: 7.5, font, color: black });
 
+    // SHIP TO
     let shipY = billBoxY - 12;
     page.drawText("SHIP TO", { x: 296, y: shipY, size: 8, font: fontBold, color: black });
     shipY -= 12;
@@ -267,8 +268,10 @@ Deno.serve(async (req: Request) => {
     const tableHeight = 280;
     const tableBottomY = tableTopY - tableHeight;
 
+    // Outer table border
     page.drawRectangle({ x: leftMargin, y: tableBottomY, width, height: tableHeight, borderColor: black, borderWidth: 1 });
 
+    // Table Column Dividers
     const colSno = 65;
     const colItems = 315;
     const colHsn = 375;
@@ -281,6 +284,7 @@ Deno.serve(async (req: Request) => {
     page.drawLine({ start: { x: colQty, y: tableTopY }, end: { x: colQty, y: tableBottomY }, thickness: 1, color: black });
     page.drawLine({ start: { x: colRate, y: tableTopY }, end: { x: colRate, y: tableBottomY }, thickness: 1, color: black });
 
+    // Table Header Row
     const headerHeight = 20;
     page.drawLine({ start: { x: leftMargin, y: tableTopY - headerHeight }, end: { x: rightMargin, y: tableTopY - headerHeight }, thickness: 1, color: black });
 
@@ -291,6 +295,7 @@ Deno.serve(async (req: Request) => {
     page.drawText("RATE", { x: colQty + 22, y: tableTopY - 14, size: 8, font: fontBold, color: black });
     page.drawText("AMOUNT", { x: colRate + 15, y: tableTopY - 14, size: 8, font: fontBold, color: black });
 
+    // Render Items
     let rowY = tableTopY - headerHeight - 16;
     let totalQty = 0;
     let totalTaxableVal = 0;
@@ -317,6 +322,7 @@ Deno.serve(async (req: Request) => {
       rowY -= 14;
     });
 
+    // Tax rows inside main table
     const taxCgstAmt = isIntraState ? (totalTaxAmount / 2) : 0;
     const taxSgstAmt = isIntraState ? (totalTaxAmount / 2) : 0;
     const taxIgstAmt = isIntraState ? 0 : totalTaxAmount;
@@ -340,6 +346,7 @@ Deno.serve(async (req: Request) => {
       page.drawText(`${taxIgstAmt.toFixed(2)}`, { x: colRate + 15, y: taxRowY, size: 8.5, font: fontBold, color: black });
     }
 
+    // Main Table Total Row
     const tableTotalY = tableBottomY + 22;
     page.drawLine({ start: { x: leftMargin, y: tableTotalY }, end: { x: rightMargin, y: tableTotalY }, thickness: 1, color: black });
 
@@ -354,15 +361,18 @@ Deno.serve(async (req: Request) => {
     const hsnBoxHeight = 55;
     page.drawRectangle({ x: leftMargin, y: hsnBoxY - hsnBoxHeight, width, height: hsnBoxHeight, borderColor: black, borderWidth: 1 });
 
+    // HSN Header line
     page.drawLine({ start: { x: leftMargin, y: hsnBoxY - 18 }, end: { x: rightMargin, y: hsnBoxY - 18 }, thickness: 1, color: black });
     page.drawLine({ start: { x: leftMargin, y: hsnBoxY - 36 }, end: { x: rightMargin, y: hsnBoxY - 36 }, thickness: 1, color: black });
 
+    // Vertical dividers in HSN Grid
     page.drawLine({ start: { x: 120, y: hsnBoxY }, end: { x: 120, y: hsnBoxY - hsnBoxHeight }, thickness: 1, color: black });
     page.drawLine({ start: { x: 210, y: hsnBoxY }, end: { x: 210, y: hsnBoxY - hsnBoxHeight }, thickness: 1, color: black });
     page.drawLine({ start: { x: 450, y: hsnBoxY }, end: { x: 450, y: hsnBoxY - hsnBoxHeight }, thickness: 1, color: black });
 
     if (isIntraState) {
       page.drawLine({ start: { x: 330, y: hsnBoxY }, end: { x: 330, y: hsnBoxY - hsnBoxHeight }, thickness: 1, color: black });
+      // CGST / SGST sub-headers
       page.drawLine({ start: { x: 210, y: hsnBoxY - 9 }, end: { x: 450, y: hsnBoxY - 9 }, thickness: 0.8, color: black });
       page.drawLine({ start: { x: 260, y: hsnBoxY - 9 }, end: { x: 260, y: hsnBoxY - hsnBoxHeight }, thickness: 0.8, color: black });
       page.drawLine({ start: { x: 380, y: hsnBoxY - 9 }, end: { x: 380, y: hsnBoxY - hsnBoxHeight }, thickness: 0.8, color: black });
@@ -377,6 +387,7 @@ Deno.serve(async (req: Request) => {
       page.drawText("Amount", { x: 395, y: hsnBoxY - 16, size: 6.5, font: fontBold, color: black });
       page.drawText("Total Tax Amount", { x: 460, y: hsnBoxY - 13, size: 7.5, font: fontBold, color: black });
 
+      // Values Row
       page.drawText("12119029", { x: leftMargin + 12, y: hsnBoxY - 28, size: 7.5, font, color: black });
       page.drawText(totalTaxableVal.toFixed(2), { x: 135, y: hsnBoxY - 28, size: 7.5, font, color: black });
       page.drawText("9%", { x: 225, y: hsnBoxY - 28, size: 7.5, font, color: black });
@@ -385,6 +396,7 @@ Deno.serve(async (req: Request) => {
       page.drawText(taxSgstAmt.toFixed(2), { x: 395, y: hsnBoxY - 28, size: 7.5, font, color: black });
       page.drawText(`Rs. ${totalTaxAmount.toFixed(2)}`, { x: 460, y: hsnBoxY - 28, size: 7.5, font: fontBold, color: black });
 
+      // Total Row
       page.drawText("Total", { x: 70, y: hsnBoxY - 48, size: 8, font: fontBold, color: black });
       page.drawText(totalTaxableVal.toFixed(2), { x: 135, y: hsnBoxY - 48, size: 8, font: fontBold, color: black });
       page.drawText(taxCgstAmt.toFixed(2), { x: 275, y: hsnBoxY - 48, size: 8, font: fontBold, color: black });
@@ -424,6 +436,7 @@ Deno.serve(async (req: Request) => {
     page.drawLine({ start: { x: 200, y: bottomBoxY }, end: { x: 200, y: bottomBoxY - bottomBoxHeight }, thickness: 1, color: black });
     page.drawLine({ start: { x: 380, y: bottomBoxY }, end: { x: 380, y: bottomBoxY - bottomBoxHeight }, thickness: 1, color: black });
 
+    // Bank Details
     let bankY = bottomBoxY - 12;
     page.drawText("Bank Details", { x: leftMargin + 6, y: bankY, size: 8, font: fontBold, color: black });
     bankY -= 12;
@@ -435,6 +448,7 @@ Deno.serve(async (req: Request) => {
     bankY -= 11;
     page.drawText("Bank: Bank of Baroda, MAKARBA, GUJARAT", { x: leftMargin + 6, y: bankY, size: 7, font, color: black });
 
+    // Terms and Conditions
     let termsY = bottomBoxY - 12;
     page.drawText("Terms and Conditions", { x: 206, y: termsY, size: 8, font: fontBold, color: black });
     termsY -= 12;
@@ -446,14 +460,15 @@ Deno.serve(async (req: Request) => {
     termsY -= 10;
     page.drawText("   jurisdiction only", { x: 206, y: termsY, size: 7, font, color: black });
 
+    // Authorised Signatory
     page.drawText("Authorised Signatory For", { x: 400, y: bottomBoxY - 60, size: 8, font: fontBold, color: black });
     page.drawText("Earthora Farms & Foods Pvt. Ltd.", { x: 390, y: bottomBoxY - 72, size: 8, font: fontBold, color: black });
 
     const pdfBytes = await pdfDoc.save();
-    const pdfBase64 = btoa(String.fromCharCode(...new Uint8Array(pdfBytes)));
+    const pdfBase64 = Buffer.from(pdfBytes).toString("base64");
 
     // ══════════════════════════════════════════════════════════════════════════
-    // EMAIL DISPATCH VIA RESEND API
+    // EMAIL DISPATCH VIA RESEND API OR NODEMAILER SMTP OR SUPABASE EDGE
     // ══════════════════════════════════════════════════════════════════════════
     const emailHtmlBody = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 32px 24px; background: #FAF9F5; border-radius: 20px; border: 1px solid #CFDCD3; color: #15271D;">
@@ -483,47 +498,124 @@ Deno.serve(async (req: Request) => {
       </div>
     `;
 
-    const fromEmail = Deno.env.get("RESEND_FROM_EMAIL") || "Earthora Farms <contactus@earthorafarms.com>";
+    let emailSent = false;
+    let emailErrDetails = "";
 
-    const resendRes = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${resendApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: fromEmail,
-        to: [recipientEmail],
-        bcc: ["orders@earthorafarms.com", "contactus@earthorafarms.com"],
-        subject: `Tax Invoice for your Earthora Farms Order #ORD-${orderId.substring(0, 8).toUpperCase()}`,
-        html: emailHtmlBody,
-        attachments: [
-          {
-            filename: `Tax_Invoice_ORD-${orderId.substring(0, 8).toUpperCase()}.pdf`,
-            content: pdfBase64,
+    // Method 1: Try Resend API if RESEND_API_KEY is available
+    if (RESEND_API_KEY) {
+      try {
+        const fromEmail = process.env.RESEND_FROM_EMAIL || "Earthora Farms <contactus@earthorafarms.com>";
+        const resendRes = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${RESEND_API_KEY}`,
+            "Content-Type": "application/json",
           },
-        ],
-      }),
-    });
+          body: JSON.stringify({
+            from: fromEmail,
+            to: [recipientEmail],
+            bcc: ["orders@earthorafarms.com", "contactus@earthorafarms.com"],
+            subject: `Tax Invoice for your Earthora Farms Order #ORD-${orderId.substring(0, 8).toUpperCase()}`,
+            html: emailHtmlBody,
+            attachments: [
+              {
+                filename: `Tax_Invoice_ORD-${orderId.substring(0, 8).toUpperCase()}.pdf`,
+                content: pdfBase64,
+              },
+            ],
+          }),
+        });
 
-    if (!resendRes.ok) {
-      const errText = await resendRes.text();
-      console.warn(`[send-invoice] Resend API Warning for customer (${recipientEmail}): ${errText}`);
-      return new Response(
-        JSON.stringify({ ok: false, warning: `Resend API Warning for ${recipientEmail}: ${errText}` }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+        if (resendRes.ok) {
+          emailSent = true;
+        } else {
+          emailErrDetails = `Resend API Error (${resendRes.status}): ${await resendRes.text().catch(() => "")}`;
+        }
+      } catch (rErr) {
+        emailErrDetails = `Resend exception: ${rErr.message}`;
+      }
     }
 
-    return new Response(
-      JSON.stringify({ ok: true, recipient: recipientEmail }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  } catch (err: any) {
-    console.error("[send-invoice] Exception handled:", err);
-    return new Response(
-      JSON.stringify({ ok: false, error: err.message || "An unexpected error occurred." }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    // Method 2: Try Nodemailer SMTP if SMTP_PASS is available and Resend didn't send
+    if (!emailSent && SMTP_PASS) {
+      try {
+        const transporter = nodemailer.createTransport({
+          host: SMTP_HOST,
+          port: SMTP_PORT,
+          secure: SMTP_PORT === 465,
+          auth: {
+            user: SMTP_USER,
+            pass: SMTP_PASS,
+          },
+        });
+
+        await transporter.sendMail({
+          from: `"Earthora Farms" <${SMTP_USER}>`,
+          to: recipientEmail,
+          bcc: ["orders@earthorafarms.com", "contactus@earthorafarms.com"],
+          subject: `Tax Invoice for your Earthora Farms Order #ORD-${orderId.substring(0, 8).toUpperCase()}`,
+          html: emailHtmlBody,
+          attachments: [
+            {
+              filename: `Tax_Invoice_ORD-${orderId.substring(0, 8).toUpperCase()}.pdf`,
+              content: Buffer.from(pdfBytes),
+              contentType: "application/pdf",
+            },
+          ],
+        });
+        emailSent = true;
+      } catch (sErr) {
+        emailErrDetails += ` | SMTP exception: ${sErr.message}`;
+      }
+    }
+
+    // Method 3: Invoke Supabase Edge Function (which holds the active Supabase Secret RESEND_API_KEY)
+    if (!emailSent && SUPABASE_URL && SUPABASE_KEY) {
+      try {
+        const edgeRes = await fetch(`${SUPABASE_URL}/functions/v1/send-invoice`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${SUPABASE_KEY}`,
+          },
+          body: JSON.stringify({ orderId }),
+        });
+
+        if (edgeRes.ok) {
+          const edgeData = await edgeRes.json().catch(() => ({}));
+          if (edgeData.ok) {
+            emailSent = true;
+          } else {
+            emailErrDetails += ` | Supabase Edge Warning: ${JSON.stringify(edgeData)}`;
+          }
+        } else {
+          emailErrDetails += ` | Supabase Edge Error (${edgeRes.status}): ${await edgeRes.text().catch(() => "")}`;
+        }
+      } catch (sbErr) {
+        emailErrDetails += ` | Supabase Edge Exception: ${sbErr.message}`;
+      }
+    }
+
+    if (!emailSent) {
+      console.error("[send-invoice] Email delivery failed across all providers:", emailErrDetails);
+      return {
+        statusCode: 200,
+        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+        body: JSON.stringify({ ok: false, warning: `Invoice PDF generated, but email delivery failed: ${emailErrDetails}` }),
+      };
+    }
+
+    return {
+      statusCode: 200,
+      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+      body: JSON.stringify({ ok: true, recipient: recipientEmail }),
+    };
+  } catch (err) {
+    console.error("[send-invoice] Internal Error:", err);
+    return {
+      statusCode: 500,
+      headers: CORS_HEADERS,
+      body: JSON.stringify({ error: err.message || "Internal Server Error" }),
+    };
   }
-});
+}

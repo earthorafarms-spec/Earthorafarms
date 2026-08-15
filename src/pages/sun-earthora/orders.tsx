@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Filter, ChevronRight, Clock, RefreshCw, PackageOpen, Plus, User, MapPin, Phone, Mail, Package, X, Check, ShoppingCart } from "lucide-react";
+import { Search, Filter, ChevronRight, Clock, RefreshCw, PackageOpen, Plus, User, MapPin, Phone, Mail, Package, X, Check, ShoppingCart, Building } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
@@ -47,7 +47,7 @@ export default function AdminOrders() {
   const [activeStatusMenuId, setActiveStatusMenuId] = useState<string | null>(null);
   const { toast } = useToast();
 
-  // New offline order form state — taking all checkout fields
+  // New offline order form state — taking all checkout fields including GST Number
   const [manualForm, setManualForm] = useState({
     customerName: "",
     customerEmail: "",
@@ -57,6 +57,7 @@ export default function AdminOrders() {
     state: "",
     zip: "",
     country: "India",
+    gstNumber: "",
     productId: "",
     quantity: "1",
     unitPrice: "",
@@ -88,6 +89,15 @@ export default function AdminOrders() {
           id,
           order_number,
           shipping_address,
+          customer_name,
+          customer_email,
+          customer_phone,
+          customer_address,
+          customer_city,
+          customer_state,
+          customer_zip,
+          customer_country,
+          customer_gst,
           status,
           total_amount,
           created_at,
@@ -129,14 +139,15 @@ export default function AdminOrders() {
         return {
           id: o.id,
           orderNumber: o.order_number || o.id,
-          customer: shipping.name || shipping.email || o.id,
-          email: shipping.email || "",
-          phone: shipping.phone || "",
-          address: shipping.address || "",
-          city: shipping.city || "",
-          state: shipping.state || "",
-          zip: shipping.zip || shipping.postalCode || "",
-          country: shipping.country || "India",
+          customer: shipping.name || o.customer_name || shipping.email || o.id,
+          email: shipping.email || o.customer_email || "",
+          phone: shipping.phone || o.customer_phone || "",
+          address: shipping.address || o.customer_address || "",
+          city: shipping.city || o.customer_city || "",
+          state: shipping.state || o.customer_state || "",
+          zip: shipping.zip || shipping.postalCode || o.customer_zip || "",
+          country: shipping.country || o.customer_country || "India",
+          gstNumber: shipping.gst || o.customer_gst || shipping.gstNumber || "",
           items: itemsCount,
           itemsList,
           total: Number(o.total_amount || 0),
@@ -174,7 +185,8 @@ export default function AdminOrders() {
             o.customer.toLowerCase().includes(q) ||
             o.orderNumber.toLowerCase().includes(q) ||
             o.email.toLowerCase().includes(q) ||
-            o.status.toLowerCase().includes(q)
+            o.status.toLowerCase().includes(q) ||
+            (o.gstNumber && o.gstNumber.toLowerCase().includes(q))
         )
       );
     }
@@ -249,6 +261,7 @@ export default function AdminOrders() {
         state: manualForm.state,
         zip: manualForm.zip,
         country: manualForm.country || "India",
+        gst: manualForm.gstNumber || "",
       };
 
       // 1. Update/Insert User_details (same as checkout page)
@@ -261,6 +274,7 @@ export default function AdminOrders() {
         user_state: manualForm.state,
         user_zip: manualForm.zip,
         user_country: manualForm.country || "India",
+        user_gst: manualForm.gstNumber || "",
       }, { onConflict: "user_email" });
 
       // 2. Insert normalized order row for admin dashboard
@@ -271,6 +285,15 @@ export default function AdminOrders() {
         status: manualForm.orderStatus || "delivered",
         total_amount: totalAmount,
         shipping_address: shippingAddress,
+        customer_name: manualForm.customerName,
+        customer_email: customerEmail,
+        customer_phone: manualForm.customerPhone,
+        customer_address: manualForm.address,
+        customer_city: manualForm.city,
+        customer_state: manualForm.state,
+        customer_zip: manualForm.zip,
+        customer_country: manualForm.country || "India",
+        customer_gst: manualForm.gstNumber || "",
       });
 
       if (orderErr) throw orderErr;
@@ -310,6 +333,7 @@ export default function AdminOrders() {
         state: "",
         zip: "",
         country: "India",
+        gstNumber: "",
         productId: "",
         quantity: "1",
         unitPrice: "",
@@ -342,7 +366,7 @@ export default function AdminOrders() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by name, order ID, email..."
+                placeholder="Search by name, order ID, GSTIN..."
                 className="h-11 pl-10 pr-4 text-sm bg-white border border-border/40 rounded-xl outline-none focus:border-primary/30 focus:ring-2 focus:ring-primary/5 transition-all w-72 placeholder:text-foreground/30"
               />
             </div>
@@ -408,7 +432,14 @@ export default function AdminOrders() {
                     {order.customer.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()}
                   </div>
                   <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-foreground truncate">{order.customer}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold text-foreground truncate">{order.customer}</h3>
+                      {order.gstNumber && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                          GST: {order.gstNumber}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5 text-xs text-foreground/40">
                       <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded font-medium">
                         #{order.orderNumber}
@@ -536,7 +567,7 @@ export default function AdminOrders() {
                   </div>
                   <div>
                     <h2 className="text-sm font-bold text-foreground">Record Offline / Manual Order</h2>
-                    <p className="text-[11px] text-foreground/50">Capture full customer checkout details and sync automatically</p>
+                    <p className="text-[11px] text-foreground/50">Capture full customer checkout details & GSTIN and sync automatically</p>
                   </div>
                 </div>
                 <button
@@ -557,7 +588,7 @@ export default function AdminOrders() {
                     <User className="w-3 h-3 text-primary" /> Customer & Shipping Info
                   </span>
 
-                  <div className="grid grid-cols-3 gap-2.5 text-xs">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
                     <div>
                       <label className="block text-foreground/60 font-semibold text-[11px] mb-1">Full Name *</label>
                       <input
@@ -592,7 +623,18 @@ export default function AdminOrders() {
                       />
                     </div>
 
-                    <div className="col-span-3 grid grid-cols-4 gap-2">
+                    <div>
+                      <label className="block text-foreground/60 font-semibold text-[11px] mb-1">GST Number (Optional)</label>
+                      <input
+                        type="text"
+                        placeholder="22AAAAA0000A1Z5"
+                        value={manualForm.gstNumber}
+                        onChange={(e) => setManualForm({ ...manualForm, gstNumber: e.target.value.toUpperCase() })}
+                        className="w-full h-9 px-3 rounded-xl border border-border/50 bg-[#fafaf8] outline-none focus:border-primary/50 text-foreground text-xs uppercase"
+                      />
+                    </div>
+
+                    <div className="col-span-2 sm:col-span-4 grid grid-cols-4 gap-2">
                       <div className="col-span-2">
                         <input
                           type="text"
@@ -622,7 +664,7 @@ export default function AdminOrders() {
                       </div>
                     </div>
 
-                    <div className="col-span-3 grid grid-cols-2 gap-2">
+                    <div className="col-span-2 sm:col-span-4 grid grid-cols-2 gap-2">
                       <div>
                         <input
                           type="text"
@@ -842,6 +884,15 @@ export default function AdminOrders() {
                           <Phone className="w-3 h-3 text-foreground/30" /> Phone
                         </p>
                         <p className="font-medium text-foreground mt-0.5">{selectedOrder.phone}</p>
+                      </div>
+                    )}
+
+                    {selectedOrder.gstNumber && (
+                      <div>
+                        <p className="text-foreground/40 font-medium flex items-center gap-1">
+                          <Building className="w-3 h-3 text-foreground/30" /> GSTIN / GST Number
+                        </p>
+                        <p className="font-semibold font-mono text-foreground mt-0.5 uppercase">{selectedOrder.gstNumber}</p>
                       </div>
                     )}
 

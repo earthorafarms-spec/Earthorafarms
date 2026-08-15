@@ -25,19 +25,69 @@ export default function Contact() {
   const [error, setError] = useState("");
   const { toast } = useToast();
 
+  // Helper to detect programming code, HTML tags, scripts, and SQL syntax
+  const containsCode = (text: string): boolean => {
+    if (!text) return false;
+    const codePatterns = [
+      /<[a-z][\s\S]*>/i,                 // HTML/XML tags (<script>, <div>, <iframe>, etc.)
+      /javascript\s*:/i,                  // javascript: protocol
+      /on\w+\s*=/i,                       // Event handlers (onload=, onerror=, etc.)
+      /eval\s*\(/i,                       // JS eval()
+      /alert\s*\(/i,                      // JS alert()
+      /console\.(log|error|warn)\s*\(/i, // Console calls
+      /function\s*\w*\s*\(/i,            // JS function definition
+      /const\s+\w+\s*=/i,                // JS const declaration
+      /let\s+\w+\s*=/i,                  // JS let declaration
+      /var\s+\w+\s*=/i,                  // JS var declaration
+      /import\s+[\s\S]+from/i,           // JS import statement
+      /<\?php/i,                         // PHP opening tags
+      /SELECT\s+[\s\S]+FROM/i,            // SQL SELECT
+      /INSERT\s+INTO/i,                   // SQL INSERT
+      /DROP\s+TABLE/i,                    // SQL DROP
+      /DELETE\s+FROM/i,                  // SQL DELETE
+      /EXEC\s*\(/i,                       // SQL EXEC
+      /[{}]/                             // Code block braces (prevent JSON/script blocks)
+    ];
+    return codePatterns.some((pattern) => pattern.test(text));
+  };
+
+  // Strip unsafe characters (< > { }) automatically
+  const sanitizeInput = (val: string): string => {
+    return val.replace(/[<>{}]/g, "");
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    // 1. Block any submission containing programming code or scripts
+    if (containsCode(form.name) || containsCode(form.topic) || containsCode(form.message)) {
+      setError("Security Violation: Programming code, HTML tags, script snippets, or code blocks are not permitted in the contact form.");
+      toast({
+        title: "Code not allowed",
+        description: "Please remove any programming code or HTML tags from your message.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSubmitting(true);
+
+    // Sanitize input values
+    const cleanName = sanitizeInput(form.name);
+    const cleanEmail = form.email.trim();
+    const cleanPhone = sanitizeInput(form.phone);
+    const cleanTopic = sanitizeInput(form.topic);
+    const cleanMessage = sanitizeInput(form.message);
 
     try {
       const { error: dbErr } = await (supabase.from("Contact_details") as any)
         .insert({
-          contact_name: form.name,
-          contact_email: form.email,
-          contact_phone: form.phone,
-          contact_topic: form.topic,
-          contact_message: form.message,
+          contact_name: cleanName,
+          contact_email: cleanEmail,
+          contact_phone: cleanPhone,
+          contact_topic: cleanTopic,
+          contact_message: cleanMessage,
         });
 
       if (dbErr) throw dbErr;
@@ -53,11 +103,11 @@ export default function Contact() {
             "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
           },
           body: JSON.stringify({
-            name: form.name,
-            email: form.email,
-            phone: form.phone,
-            topic: form.topic,
-            message: form.message,
+            name: cleanName,
+            email: cleanEmail,
+            phone: cleanPhone,
+            topic: cleanTopic,
+            message: cleanMessage,
           }),
         });
       } catch (emailErr) {
@@ -166,7 +216,19 @@ export default function Contact() {
                   </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-6">
+                <form
+                  onSubmit={handleSubmit}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    toast({
+                      title: "File attachments disabled",
+                      description: "File uploads are disabled on this contact form for security.",
+                      variant: "destructive",
+                    });
+                  }}
+                  className="space-y-6"
+                >
                   <div className="grid sm:grid-cols-2 gap-6">
                     <div>
                       <label className="font-inter text-xs uppercase tracking-wider text-black/60 font-medium block mb-2">
@@ -176,7 +238,7 @@ export default function Contact() {
                         type="text"
                         required
                         value={form.name}
-                        onChange={(e) => setForm({ ...form, name: e.target.value })}
+                        onChange={(e) => setForm({ ...form, name: sanitizeInput(e.target.value) })}
                         placeholder="John Doe"
                         className="w-full bg-[#F4F3EE] border border-black/10 rounded-xl px-4 py-3 font-inter text-sm text-black placeholder:text-black/30 focus:outline-none focus:border-black/30 transition-colors"
                       />
@@ -190,7 +252,7 @@ export default function Contact() {
                         type="email"
                         required
                         value={form.email}
-                        onChange={(e) => setForm({ ...form, email: e.target.value })}
+                        onChange={(e) => setForm({ ...form, email: e.target.value.replace(/[<>{}]/g, "") })}
                         placeholder="john@example.com"
                         className="w-full bg-[#F4F3EE] border border-black/10 rounded-xl px-4 py-3 font-inter text-sm text-black placeholder:text-black/30 focus:outline-none focus:border-black/30 transition-colors"
                       />
@@ -200,12 +262,12 @@ export default function Contact() {
                   <div className="grid sm:grid-cols-2 gap-6">
                     <div>
                       <label className="font-inter text-xs uppercase tracking-wider text-black/60 font-medium block mb-2">
-                        Phone Number (Optional)
+                        Phone Number
                       </label>
                       <input
                         type="tel"
                         value={form.phone}
-                        onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                        onChange={(e) => setForm({ ...form, phone: sanitizeInput(e.target.value) })}
                         placeholder="+1 (555) 000-0000"
                         className="w-full bg-[#F4F3EE] border border-black/10 rounded-xl px-4 py-3 font-inter text-sm text-black placeholder:text-black/30 focus:outline-none focus:border-black/30 transition-colors"
                       />
@@ -218,7 +280,7 @@ export default function Contact() {
                       <input
                         type="text"
                         value={form.topic}
-                        onChange={(e) => setForm({ ...form, topic: e.target.value })}
+                        onChange={(e) => setForm({ ...form, topic: sanitizeInput(e.target.value) })}
                         placeholder="General Inquiry, Order Status..."
                         className="w-full bg-[#F4F3EE] border border-black/10 rounded-xl px-4 py-3 font-inter text-sm text-black placeholder:text-black/30 focus:outline-none focus:border-black/30 transition-colors"
                       />
@@ -233,11 +295,15 @@ export default function Contact() {
                       required
                       rows={5}
                       value={form.message}
-                      onChange={(e) => setForm({ ...form, message: e.target.value })}
+                      onChange={(e) => setForm({ ...form, message: sanitizeInput(e.target.value) })}
                       placeholder="How can we help you?"
                       className="w-full bg-[#F4F3EE] border border-black/10 rounded-xl px-4 py-3 font-inter text-sm text-black placeholder:text-black/30 focus:outline-none focus:border-black/30 transition-colors resize-none"
                     />
                   </div>
+
+                  <p className="font-inter text-[11px] text-black/40 text-center">
+                    🔒 File attachments and programming scripts/code snippets are disabled for form security.
+                  </p>
 
                   <button
                     type="submit"

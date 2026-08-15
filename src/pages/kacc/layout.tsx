@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import {
-  BarChart3, FileSpreadsheet, Users, LogOut, Leaf, ChevronRight, Menu, X, ArrowLeft
+  BarChart3, FileSpreadsheet, Users, LogOut, Leaf, ChevronRight, Menu, X, ArrowLeft, Package
 } from "lucide-react";
 
 const navItems = [
   { id: "dashboard", label: "Selling Overview & Tax", icon: BarChart3, path: "/kacc/dashboard", hint: "Key accounts revenue & GST summary" },
   { id: "b2b-gst", label: "B2B Customers (With GSTIN)", icon: FileSpreadsheet, path: "/kacc/b2b-gst", hint: "GST registered buyers & Excel reports" },
   { id: "b2c-nongst", label: "B2C Retail (No GST)", icon: Users, path: "/kacc/b2c-nongst", hint: "Non-GST consumer sales & Excel reports" },
+  { id: "products", label: "Product Margins & Costs", icon: Package, path: "/kacc/products", hint: "Actual cost, selling price & unit profit margin" },
 ];
 
 export default function KaccLayout({ children }: { children: React.ReactNode }) {
@@ -26,6 +27,8 @@ export default function KaccLayout({ children }: { children: React.ReactNode }) 
     ? "b2b-gst"
     : location.includes("b2c-nongst")
     ? "b2c-nongst"
+    : location.includes("products")
+    ? "products"
     : "dashboard";
 
   return (

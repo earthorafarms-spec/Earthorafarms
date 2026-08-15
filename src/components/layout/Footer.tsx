@@ -9,7 +9,7 @@ const shopLinks = [
 
 const exploreLinks = [
   { label: "Our Story", href: "/our-story" },
-  { label: "Health Benefits", href: "/#benefits" },
+  { label: "Health Benefits", href: "/health-benefits" },
   { label: "Wellness Recipes", href: "/recipes" },
   { label: "Gallery", href: "/gallery" },
 ];

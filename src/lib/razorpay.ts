@@ -82,19 +82,20 @@ export function openRazorpayModal({
     return;
   }
 
-  const rzp = new window.Razorpay({
-    key:         keyId,
+  const activeKeyId = keyId || (import.meta.env.VITE_RAZORPAY_KEY_ID as string) || 'rzp_test_1DP5mmOlF5G5ag';
+
+  const options: any = {
+    key: activeKeyId,
     amount,
-    currency,
-    order_id:    orderId,
-    name:        'Earthora Farms',
+    currency: currency || 'INR',
+    name: 'Earthora Farms',
     description: 'Organic Moringa Products',
-    image:       '/favicon.svg',
+    image: '/favicon.svg',
     prefill,
     theme: {
-      color: '#3d6b3f', // matches primary green brand color
+      color: '#3d6b3f',
     },
-    handler: (response) => {
+    handler: (response: RazorpaySuccessResponse) => {
       onSuccess(response);
     },
     modal: {
@@ -103,7 +104,13 @@ export function openRazorpayModal({
         else onFailure('Payment cancelled by user.');
       },
     },
-  });
+  };
+
+  if (orderId && !orderId.startsWith('order_demo_')) {
+    options.order_id = orderId;
+  }
+
+  const rzp = new window.Razorpay(options);
 
   rzp.on('payment.failed', (response: RazorpayFailureResponse) => {
     const msg = response?.error?.description || 'Payment failed. Please try again.';

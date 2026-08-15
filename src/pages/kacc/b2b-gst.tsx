@@ -43,7 +43,7 @@ export default function KaccB2BGst() {
       const taxableValue = amount / 1.18;
       const taxAmount = amount - taxableValue;
 
-      const isIntraState = !!state && (state.toLowerCase().includes("tamil nadu") || state.toLowerCase() === "tn");
+      const isIntraState = !!state && (state.toLowerCase().includes("gujarat") || state.toLowerCase() === "gj" || state.toLowerCase() === "guj");
       let cgst = 0;
       let sgst = 0;
       let igst = 0;

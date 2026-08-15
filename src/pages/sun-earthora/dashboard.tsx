@@ -58,7 +58,8 @@ export default function AdminDashboard() {
 
       const { data: rawOrders, error: orderErr } = await supabase
         .from("orders")
-        .select("*, order_items(*)");
+        .select("*, order_items(*)")
+        .order("created_at", { ascending: false });
 
       if (orderErr) throw orderErr;
 
@@ -84,13 +85,14 @@ export default function AdminDashboard() {
 
       const mappedOrders = dbOrders.map((o: any) => {
         const itemsCount = o.order_items ? o.order_items.reduce((acc: number, item: any) => acc + (item.quantity || 0), 0) : 0;
+        const shipping = o.shipping_address || {};
         return {
           id: o.order_number || o.id,
-          customer: (o.shipping_address as any)?.name || "Customer",
+          customer: shipping.name || o.customer_name || shipping.email || o.customer_email || "Customer",
           items: itemsCount,
-          total: Number(o.total_amount),
+          total: Number(o.total_amount || 0),
           status: o.status,
-          date: new Date(o.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+          date: new Date(o.created_at || Date.now()).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
         };
       });
 
@@ -354,9 +356,10 @@ export default function AdminDashboard() {
                 No orders yet.
               </div>
             ) : (
-              orders.slice(-4).map((order) => (
+              orders.slice(0, 4).map((order) => (
                 <div
                   key={order.id}
+                  onClick={() => setLocation("/sun-earthora/orders")}
                   className="flex items-center justify-between p-4 rounded-xl border border-border/30 hover:border-primary/20 hover:shadow-[0_4px_20px_rgba(0,0,0,0.02)] transition-all duration-300 bg-[#fafaf8]/50 group/order cursor-pointer"
                 >
                   <div className="flex items-center gap-3 min-w-0">

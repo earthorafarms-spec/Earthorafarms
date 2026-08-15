@@ -4,7 +4,6 @@ import {
   Truck,
   Clock,
   ShieldCheck,
-  Globe,
   Package,
   MapPin,
   CheckCircle2,
@@ -33,18 +32,12 @@ const shippingHighlights = [
     desc: "Shade-dried moringa packed in eco-friendly, UV-protective resealable pouches and reinforced recyclable cartons.",
     accent: "bg-[#ECEDEC]",
   },
-  {
-    icon: Globe,
-    title: "International Express",
-    desc: "Worldwide delivery via DHL Express / FedEx to over 30 countries with full real-time tracking.",
-    accent: "bg-[#FEFDF9]",
-  },
 ];
 
 const deliveryTimelines = [
-  { region: "Metro Cities (Mumbai, Delhi, Bengaluru, etc.)", time: "2 – 3 Business Days" },
-  { region: "Tier-2 & Tier-3 Cities across India", time: "3 – 5 Business Days" },
-  { region: "Special Territories (North-East, J&K, Islands)", time: "5 – 7 Business Days" },
+  { region: "Metro Cities (Mumbai, Delhi, Bengaluru, etc.)", time: "7 – 14 Business Days" },
+  { region: "Tier-2 & Tier-3 Cities across India", time: "7 – 14 Business Days" },
+  { region: "Special Territories (North-East, J&K, Islands)", time: "7 – 14 Business Days" },
 ];
 
 export default function ShippingPolicy() {
@@ -108,7 +101,7 @@ export default function ShippingPolicy() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid md:grid-cols-3 gap-6">
             {shippingHighlights.map((item, idx) => (
               <motion.div
                 key={idx}
@@ -139,7 +132,7 @@ export default function ShippingPolicy() {
       <section className="py-16 bg-[#FEFDF9] border-y border-black/5">
         <div className="container mx-auto px-6 sm:px-10 max-w-[1400px]">
           <div className="grid lg:grid-cols-12 gap-12 lg:gap-16 items-start">
-            
+
             {/* Delivery Timelines Column */}
             <div className="lg:col-span-6 space-y-6">
               <span className="font-inter text-xs uppercase tracking-wider text-black/40 font-medium block">
@@ -180,7 +173,7 @@ export default function ShippingPolicy() {
                   <MapPin className="w-5 h-5 text-emerald-800" /> Address Adjustments
                 </h3>
                 <p className="font-inter text-sm text-black/65 leading-relaxed">
-                  Need to update your delivery address? If your order has not yet left our facility, contact our support team at <a href="mailto:contactus@earthorafarms.com" className="text-emerald-800 font-medium underline">contactus@earthorafarms.com</a> before 2:00 PM IST.
+                  Need to update your delivery address? If your order has not yet left our facility, contact our support team at <a href="mailto:contactus@earthorafarms.com" className="text-emerald-800 font-medium underline">contactus@earthorafarms.com</a> immediately.
                 </p>
               </div>
             </div>

@@ -46,7 +46,7 @@ export function Hero() {
             {/* Line 3 */}
             <div className="flex items-center gap-x-[0.2em] flex-wrap py-1">
               <span className="overflow-hidden inline-block animate-word-reveal delay-900 py-1">
-                <span className="inline-block text-white pr-1">Leaf</span>
+                <span className="inline-block text-white pr-1">Capsule</span>
               </span>
             </div>
           </h1>
