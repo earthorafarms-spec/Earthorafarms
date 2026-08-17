@@ -34,7 +34,8 @@ function mapProduct(p: DbProduct, dbDeals: FestiveDeal[], dbReviews: DbReview[])
   const activeDeal = dbDeals.find((d) => {
     const starts = new Date(d.festival_start_date);
     const ends = new Date(d.festival_end_date);
-    return now >= starts && now <= ends && (d.festival_deal_products || []).some((dp) => dp.product_id === p.id);
+    // Use String() coercion to handle numeric vs string id mismatch from DB
+    return now >= starts && now <= ends && (d.festival_deal_products || []).some((dp) => String(dp.product_id) === String(p.id));
   });
 
   let badge = p.badge || '';
@@ -84,8 +85,7 @@ export async function fetchPublicProducts(): Promise<Product[]> {
 
   if (productsRes.error) throw productsRes.error;
   if (reviewsRes.error) throw reviewsRes.error;
-  if (dealsRes.error) throw dealsRes.error;
-
+  // Don't throw on deals error — just use empty array so products still load
   const dbDeals = (dealsRes.data || []) as FestiveDeal[];
   const dbReviews = (reviewsRes.data || []) as DbReview[];
 

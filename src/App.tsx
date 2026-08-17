@@ -59,6 +59,10 @@ const AdminAnalytics = lazyWithRetry(() => import('./pages/sun-earthora/analytic
 const AdminCoupons = lazyWithRetry(() => import('./pages/sun-earthora/coupons'));
 const AdminFestive = lazyWithRetry(() => import('./pages/sun-earthora/festive'));
 const AdminSettings = lazyWithRetry(() => import('./pages/sun-earthora/settings'));
+const DeveloperLayout = lazyWithRetry(() => import('./pages/developer/layout'));
+const DeveloperDashboard = lazyWithRetry(() => import('./pages/developer/dashboard'));
+const DeveloperWebsite = lazyWithRetry(() => import('./pages/developer/website'));
+const DeveloperPasswords = lazyWithRetry(() => import('./pages/developer/passwords'));
 
 import { KaccGate } from '@/components/KaccGate';
 const KaccLayout = lazyWithRetry(() => import('./pages/kacc/layout'));
@@ -166,6 +170,32 @@ export default function App() {
                         </Switch>
                       </KaccLayout>
                     </KaccGate>
+                  </Route>
+
+                  <Route path="/developer">
+                    <Redirect to="/developer/dashboard" />
+                  </Route>
+                  <Route path="/developer/:rest*">
+                    <Gate
+                      storageKey="dev_authenticated"
+                      passwordKey="dev_password"
+                      title="Developer Console"
+                      subtitle="Enter your security master password"
+                      passwordPlaceholder="Security Password"
+                      submitLabel="Authenticate"
+                      loadingLabel="Verifying..."
+                    >
+                      <DeveloperLayout>
+                        <Switch>
+                          <Route path="/developer/dashboard" component={DeveloperDashboard} />
+                          <Route path="/developer/website" component={DeveloperWebsite} />
+                          <Route path="/developer/passwords" component={DeveloperPasswords} />
+                          <Route>
+                            <Redirect to="/developer/dashboard" />
+                          </Route>
+                        </Switch>
+                      </DeveloperLayout>
+                    </Gate>
                   </Route>
 
                   <Route component={Fallback} />

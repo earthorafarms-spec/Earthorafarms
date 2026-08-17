@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, Sparkles, Filter } from 'lucide-react';
@@ -97,10 +98,12 @@ export default function Products() {
     toast({ title: 'Added to cart', description: `${p.name} has been added to your cart.` });
   }, [addToCart, toast]);
 
+  const [, setLocation] = useLocation();
+
   const handleBuyNow = useCallback((p: Product) => {
     addToCart({ id: p.id, name: p.name, price: p.price, image: p.imageMain });
-    toast({ title: 'Added to cart!', description: 'Proceed to checkout.' });
-  }, [addToCart, toast]);
+    setLocation('/checkout');
+  }, [addToCart, setLocation]);
 
   const handleSubmitReview = useCallback(async (productId: string) => {
     if (!reviewName.trim() || !reviewComment.trim()) return;
