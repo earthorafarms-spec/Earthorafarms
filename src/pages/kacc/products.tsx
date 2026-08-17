@@ -430,7 +430,6 @@ export default function KaccProducts() {
                   <th className="py-3.5 px-3">Selling Price (₹)</th>
                   <th className="py-3.5 px-3">Actual Cost / COGS (₹)</th>
                   <th className="py-3.5 px-3">Overhead / Pkg (₹)</th>
-                  <th className="py-3.5 px-3">GST Rate</th>
                   <th className="py-3.5 px-3">Net Rev (excl GST)</th>
                   <th className="py-3.5 px-3">Margin / Unit (₹)</th>
                   <th className="py-3.5 px-3 text-center">Margin %</th>
@@ -533,13 +532,6 @@ export default function KaccProducts() {
                             title="Packaging, label, and shipping overhead"
                           />
                         </div>
-                      </td>
-
-                      {/* Fixed 18% GST Badge (No Dropdown Needed) */}
-                      <td className="py-3.5 px-3">
-                        <span className="px-2.5 py-1 rounded-xl text-xs font-mono font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs inline-flex items-center gap-1">
-                          18% GST
-                        </span>
                       </td>
 
                       {/* Net Revenue excl GST */}

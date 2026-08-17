@@ -892,21 +892,6 @@ export default function Checkout() {
                     className="w-full px-3.5 py-2.5 text-sm bg-background border border-border/60 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary/40 uppercase"
                   />
                 </div>
-
-                {/* Marketing Consent Checkbox */}
-                <div className="pt-4 border-t border-border/30">
-                  <label className="flex items-start gap-3 cursor-pointer group select-none">
-                    <input
-                      type="checkbox"
-                      checked={allowMarketing}
-                      onChange={(e) => setAllowMarketing(e.target.checked)}
-                      className="mt-0.5 w-4 h-4 rounded border-border/70 text-primary focus:ring-primary/30 accent-emerald-700 cursor-pointer"
-                    />
-                    <span className="text-xs text-foreground/75 leading-relaxed font-inter">
-                      Keep me updated via WhatsApp & SMS with exclusive farm offers, new harvest announcements, and wellness recipes.
-                    </span>
-                  </label>
-                </div>
               </div>
 
               {/* Payment Method */}

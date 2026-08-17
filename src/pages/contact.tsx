@@ -9,7 +9,7 @@ import { supabase } from "@/lib/supabase";
 const contactInfo = [
   { icon: Mail, label: "Email", value: "contactus@earthorafarms.com", href: "mailto:contactus@earthorafarms.com" },
   { icon: Phone, label: "Phone", value: "+91 9228153821", href: "tel:+919228153821" },
-  { icon: MapPin, label: "Farm Location", value: "123 Green Valley Rd, Aptos, CA 95003" },
+  { icon: MapPin, label: "Farm Location", value: "Warehouse No. E-34, Mascot Industrial Park, Jadavpura Cross Road, Kadi-Vithalapur Highway, Kadi, Mehsana, Gujarat" },
   { icon: Clock, label: "Operating Hours", value: "Mon – Fri, 9 AM – 6 PM IST" },
 ];
 
@@ -21,6 +21,7 @@ export default function Contact() {
     topic: "",
     message: "",
   });
+  const [allowMarketing, setAllowMarketing] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const { toast } = useToast();
@@ -299,6 +300,20 @@ export default function Contact() {
                       placeholder="How can we help you?"
                       className="w-full bg-[#F4F3EE] border border-black/10 rounded-xl px-4 py-3 font-inter text-sm text-black placeholder:text-black/30 focus:outline-none focus:border-black/30 transition-colors resize-none"
                     />
+                  </div>
+
+                  <div className="pt-2">
+                    <label className="flex items-start gap-3 cursor-pointer group select-none">
+                      <input
+                        type="checkbox"
+                        checked={allowMarketing}
+                        onChange={(e) => setAllowMarketing(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 rounded border-black/10 text-black focus:ring-black/30 accent-emerald-800 cursor-pointer"
+                      />
+                      <span className="text-xs text-black/60 leading-relaxed font-inter">
+                        Keep me updated via WhatsApp & SMS with exclusive farm offers, new harvest announcements, and wellness recipes.
+                      </span>
+                    </label>
                   </div>
 
                   <p className="font-inter text-[11px] text-black/40 text-center">
