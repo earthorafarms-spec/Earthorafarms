@@ -27,6 +27,7 @@ import PrivacyPolicy from './pages/privacy-policy';
 import TermsOfUse from './pages/terms-of-use';
 import CookieSettings from './pages/cookie-settings';
 import OurStory from './pages/our-story';
+import ReviewOrder from '@/pages/review-order';
 
 function lazyWithRetry<T extends React.ComponentType<any>>(
   componentImport: () => Promise<{ default: T }>
@@ -116,6 +117,7 @@ export default function App() {
                   <Route path="/cart" component={Cart} />
                   <Route path="/favorites" component={Favorites} />
                   <Route path="/checkout" component={Checkout} />
+                  <Route path="/review-order" component={ReviewOrder} />
                   <Route path="/shipping-policy" component={ShippingPolicy} />
                   <Route path="/faq" component={FAQ} />
                   <Route path="/privacy-policy" component={PrivacyPolicy} />
