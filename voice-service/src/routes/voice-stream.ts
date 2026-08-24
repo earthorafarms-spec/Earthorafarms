@@ -39,16 +39,19 @@ function send(socket: WebSocket, msg: ServerMessage): void {
   }
 }
 
-/** Synthesize each sentence separately and stream WAVs to the client as ready. */
+/** Synthesize all sentences in parallel, stream WAVs to the client in order as each resolves. */
 async function streamTts(
   socket: WebSocket,
   text: string,
   language: string,
 ): Promise<void> {
   const tts = buildTtsForLanguage(language as 'en' | 'hi' | 'gu');
-  for (const sentence of splitSentences(text)) {
+  const sentences = splitSentences(text);
+  // Fire all TTS requests simultaneously — total time = slowest sentence, not sum of all.
+  const wavPromises = sentences.map((s) => tts.synthesize(s, language as 'en' | 'hi' | 'gu'));
+  for (const wavPromise of wavPromises) {
     if (socket.readyState !== socket.OPEN) break;
-    const wav = await tts.synthesize(sentence, language as 'en' | 'hi' | 'gu');
+    const wav = await wavPromise;
     if (socket.readyState === socket.OPEN) socket.send(wav);
   }
 }
