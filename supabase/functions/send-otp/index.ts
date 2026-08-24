@@ -76,11 +76,7 @@ async function verifyKaccCredentials(
     .maybeSingle();
 
   if (error || !data) {
-    console.warn(`[send-otp] DB query for kacc_users failed or user not in table. Checking default fallback for ${email}`);
-    // Hardcoded fallback safety if table not migrated yet in DB
-    if (email.trim().toLowerCase() === "dmmspart399@gmail.com" && password === "Pintu@earthora") {
-      return { valid: true };
-    }
+    console.warn(`[send-otp] DB query for kacc_users failed or user not in table for ${email}`);
     return { valid: false, errorMsg: "Unauthorized email address for Key Accounts portal" };
   }
 

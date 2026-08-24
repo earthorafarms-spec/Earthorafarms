@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, CreditCard, Shield, Sparkles, CheckCircle2, Ticket, Wallet, Loader2, Check, X, XCircle, ChevronDown, Globe, Search } from "lucide-react";
+import { ArrowLeft, CreditCard, Shield, Sparkles, CheckCircle2, Ticket, Loader2, Check, ChevronDown } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
@@ -134,8 +134,6 @@ export default function Checkout() {
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponError, setCouponError] = useState("");
 
-  const paymentMethod = "razorpay";
-  const [allowMarketing, setAllowMarketing] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState<any | null>(null);
 
@@ -145,10 +143,10 @@ export default function Checkout() {
   // Calculate discount if coupon is applied
   const discountAmount = useMemo(() => {
     if (!appliedCoupon) return 0;
-    if (appliedCoupon.type === "percentage") {
-      return (subtotal * appliedCoupon.value) / 100;
+    if (appliedCoupon.coupon_discount_type === "percentage") {
+      return (subtotal * appliedCoupon.coupon_discount_value) / 100;
     } else {
-      return Math.min(subtotal, appliedCoupon.value);
+      return Math.min(subtotal, appliedCoupon.coupon_discount_value);
     }
   }, [appliedCoupon, subtotal]);
 
@@ -270,10 +268,10 @@ export default function Checkout() {
     setCouponError("");
     try {
       const { data, error } = await (supabase
-        .from("coupons") as any)
+        .from("coupon_details") as any)
         .select("*")
-        .eq("code", couponCode.trim().toUpperCase())
-        .eq("status", "active")
+        .eq("coupon_code", couponCode.trim().toUpperCase())
+        .eq("coupon_status", "active")
         .single();
 
       if (error || !data) {
@@ -283,21 +281,21 @@ export default function Checkout() {
       }
 
       // Check min order validation
-      if (Number(data.min_order) > subtotal) {
-        setCouponError(`Minimum order amount of ₹${data.min_order} required.`);
+      if (Number(data.coupon_min_order) > subtotal) {
+        setCouponError(`Minimum order amount of ₹${data.coupon_min_order} required.`);
         setAppliedCoupon(null);
         return;
       }
 
       // Check expiry date
-      if (data.expiry_date && new Date(data.expiry_date) < new Date()) {
+      if (data.coupon_expiry_date && new Date(data.coupon_expiry_date) < new Date()) {
         setCouponError("This coupon has expired.");
         setAppliedCoupon(null);
         return;
       }
 
       setAppliedCoupon(data);
-      toast({ title: "Coupon Applied!", description: `Discount of ₹${data.value} is applied.` });
+      toast({ title: "Coupon Applied!", description: `Discount of ₹${data.coupon_discount_value} applied.` });
     } catch (e: any) {
       setCouponError(e.message || "Failed to validate coupon.");
     } finally {
@@ -958,7 +956,7 @@ export default function Checkout() {
                   {couponError && <p className="text-[10px] text-red-500 mt-1">{couponError}</p>}
                   {appliedCoupon && (
                     <p className="text-[10px] text-green-700 font-semibold mt-1 flex items-center gap-1">
-                      <Ticket className="w-3 h-3" /> Coupon "{appliedCoupon.code}" applied!
+                      <Ticket className="w-3 h-3" /> Coupon "{appliedCoupon.coupon_code}" applied!
                     </p>
                   )}
                 </div>
@@ -1020,11 +1018,7 @@ export default function Checkout() {
                   onClick={handlePlaceOrder}
                   disabled={isSubmitting || items.length === 0}
                 >
-                  {isSubmitting
-                    ? "Processing..."
-                    : paymentMethod === "razorpay"
-                      ? `Pay ₹${totalAmount.toFixed(2)} Online`
-                      : `Place Order (COD)`}
+                  {isSubmitting ? "Processing..." : `Pay ₹${totalAmount.toFixed(2)} Online`}
                 </Button>
 
                 <div className="mt-4 flex items-center justify-center gap-1 text-[11px] text-foreground/40 hover:text-foreground/70 transition-colors cursor-pointer" onClick={() => setLocation("/cart")}>

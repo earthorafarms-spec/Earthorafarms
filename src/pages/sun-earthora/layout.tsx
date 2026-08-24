@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
 import {
   LayoutDashboard, Package, ShoppingCart, TrendingUp, Tag, LogOut, Leaf, ChevronRight,
-  Inbox, Search, Menu, X, Sparkles, Settings, AlertTriangle, PackageOpen, Phone, RefreshCw
+  Inbox, Menu, X, Sparkles, Settings, AlertTriangle, PackageOpen, Phone, RefreshCw, MessageCircleQuestion
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
@@ -14,6 +14,7 @@ const navItems = [
   { id: "orders",     label: "Orders",         icon: ShoppingCart,    path: "/sun-earthora/orders", hint: "View & fulfill customer orders" },
   { id: "coupons",    label: "Coupons",        icon: Tag,             path: "/sun-earthora/coupons", hint: "Create promotional discounts" },
   { id: "festive",    label: "Festive Deals",  icon: Sparkles,        path: "/sun-earthora/festive", hint: "Seasonal campaigns & banners" },
+  { id: "voice-knowledge", label: "Voice Agent KB", icon: MessageCircleQuestion, path: "/sun-earthora/voice-knowledge", hint: "Approved answers for the voice ordering assistant" },
   { id: "analytics", label: "Analytics",      icon: TrendingUp,      path: "/sun-earthora/analytics", hint: "Revenue & traffic trends" },
   { id: "settings",  label: "Settings",       icon: Settings,        path: "/sun-earthora/settings", hint: "Admin configuration" },
 ];
@@ -188,10 +189,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="hidden md:flex items-center gap-2.5 bg-[#fafaf8] rounded-xl px-3.5 py-2 border border-border/40 focus-within:border-primary/30 focus-within:bg-white transition-all">
-              <Search className="w-3.5 h-3.5 text-foreground/30" strokeWidth={1.5} />
-              <input type="text" placeholder="Search Console..." className="bg-transparent text-xs text-foreground outline-none w-36 placeholder:text-foreground/30" />
-            </div>
             <div ref={notifRef} className="relative">
               <button
                 onClick={() => setNotifOpen(!notifOpen)}

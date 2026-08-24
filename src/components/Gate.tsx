@@ -10,6 +10,7 @@ interface GateProps {
   passwordPlaceholder: string;
   submitLabel: string;
   loadingLabel: string;
+  domain?: string;
 }
 
 export function Gate({
@@ -21,6 +22,7 @@ export function Gate({
   passwordPlaceholder,
   submitLabel,
   loadingLabel,
+  domain = 'admin',
 }: GateProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(() =>
     sessionStorage.getItem(storageKey) === 'true'
@@ -40,7 +42,7 @@ export function Gate({
     setErrorMsg('');
     try {
       const { data, error: fnError } = await supabase.functions.invoke('send-otp', {
-        body: { password, domain: 'admin' },
+        body: { password, domain },
       });
       if (fnError) throw fnError;
       if (data?.ok) {
@@ -68,7 +70,7 @@ export function Gate({
     setErrorMsg('');
     try {
       const { data, error: fnError } = await supabase.functions.invoke('verify-otp', {
-        body: { otp, domain: 'admin' },
+        body: { otp, domain },
       });
       if (fnError) throw fnError;
       if (data?.ok) {
@@ -95,7 +97,7 @@ export function Gate({
     setResent(true);
     try {
       const pwd = sessionStorage.getItem(passwordKey) || password;
-      await supabase.functions.invoke('send-otp', { body: { password: pwd, domain: 'admin' } });
+      await supabase.functions.invoke('send-otp', { body: { password: pwd, domain } });
     } catch {
       setErrorMsg('Failed to resend OTP');
     } finally {

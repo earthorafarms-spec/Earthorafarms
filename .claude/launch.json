@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "voice-service",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "voice-service"],
+      "port": 4000,
+      "url": "http://localhost:4000"
+    }
+  ]
+}

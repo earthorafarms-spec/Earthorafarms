@@ -28,3 +28,11 @@ yarn-error.log*
 
 # Local Netlify folder
 .netlify
+
+# Environment files (contain live secrets — never commit)
+.env
+voice-service/.env
+
+# Voice service build output
+voice-service/dist
+voice-service/node_modules

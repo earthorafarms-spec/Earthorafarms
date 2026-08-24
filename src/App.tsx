@@ -21,6 +21,7 @@ import Products from './pages/products';
 import Cart from './pages/cart';
 import Favorites from './pages/favorites';
 import Checkout from './pages/checkout';
+import VoiceCheckout from './pages/voice-checkout';
 import ShippingPolicy from './pages/shipping-policy';
 import FAQ from './pages/faq';
 import PrivacyPolicy from './pages/privacy-policy';
@@ -59,6 +60,7 @@ const AdminOrders = lazyWithRetry(() => import('./pages/sun-earthora/orders'));
 const AdminAnalytics = lazyWithRetry(() => import('./pages/sun-earthora/analytics'));
 const AdminCoupons = lazyWithRetry(() => import('./pages/sun-earthora/coupons'));
 const AdminFestive = lazyWithRetry(() => import('./pages/sun-earthora/festive'));
+const AdminVoiceKnowledge = lazyWithRetry(() => import('./pages/sun-earthora/voice-knowledge'));
 const AdminSettings = lazyWithRetry(() => import('./pages/sun-earthora/settings'));
 const DeveloperLayout = lazyWithRetry(() => import('./pages/developer/layout'));
 const DeveloperDashboard = lazyWithRetry(() => import('./pages/developer/dashboard'));
@@ -117,6 +119,7 @@ export default function App() {
                   <Route path="/cart" component={Cart} />
                   <Route path="/favorites" component={Favorites} />
                   <Route path="/checkout" component={Checkout} />
+                  <Route path="/voice-checkout/:token" component={VoiceCheckout} />
                   <Route path="/review-order" component={ReviewOrder} />
                   <Route path="/shipping-policy" component={ShippingPolicy} />
                   <Route path="/faq" component={FAQ} />
@@ -145,6 +148,7 @@ export default function App() {
                           <Route path="/sun-earthora/orders" component={AdminOrders} />
                           <Route path="/sun-earthora/coupons" component={AdminCoupons} />
                           <Route path="/sun-earthora/festive" component={AdminFestive} />
+                          <Route path="/sun-earthora/voice-knowledge" component={AdminVoiceKnowledge} />
                           <Route path="/sun-earthora/analytics" component={AdminAnalytics} />
                           <Route path="/sun-earthora/settings" component={AdminSettings} />
                           <Route>
@@ -186,6 +190,7 @@ export default function App() {
                       passwordPlaceholder="Security Password"
                       submitLabel="Authenticate"
                       loadingLabel="Verifying..."
+                      domain="developer"
                     >
                       <DeveloperLayout>
                         <Switch>

@@ -33,7 +33,10 @@ async function getGeo() {
   return { ip: '127.0.0.1', country: 'Unknown', city: 'Unknown' };
 }
 
+const INTERNAL_ROUTE_PREFIXES = ['/sun-earthora', '/developer', '/kacc'];
+
 export async function trackPageView(pageName: string) {
+  if (INTERNAL_ROUTE_PREFIXES.some((prefix) => pageName.startsWith(prefix))) return;
   if (sessionStorage.getItem('earthora_session_tracked')) return;
   sessionStorage.setItem('earthora_session_tracked', '1');
 

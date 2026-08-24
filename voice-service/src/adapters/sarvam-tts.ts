@@ -1,0 +1,74 @@
+import { SarvamAIClient } from 'sarvamai';
+import { config } from '../config.js';
+import type { TtsAdapter } from './types.js';
+import type { SupportedLanguage } from '../conversation/language.js';
+import { splitSentences, stitchWavs } from './wav-utils.js';
+
+// bulbul:v3 (default model) returns `audios: string[]` — base64-encoded WAV.
+//
+// NOTE ON THE `as` CAST BELOW: the `sarvamai` package's generated `.d.mts`
+// resolves `SarvamAI.TextToSpeechRequest` to a type missing several fields the
+// source file declares — including `target_language_code` (REQUIRED). This is
+// a TS resolution quirk in the SDK's `export *` chain, not a real API gap.
+// Casting past it rather than fighting a third-party SDK type-export bug.
+type TtsConvertParams = Parameters<SarvamAIClient['textToSpeech']['convert']>[0];
+
+const SUPPORTED_TO_BCP47: Record<SupportedLanguage, 'en-IN' | 'hi-IN' | 'gu-IN'> = {
+  en: 'en-IN',
+  hi: 'hi-IN',
+  gu: 'gu-IN',
+};
+
+// Empirically tuned per-language pace from the reference project at
+// D:\Work\Sun\Agent after direct comparison against the default (1.0).
+const PACE_BY_LANGUAGE: Record<SupportedLanguage, number> = {
+  en: 1.15,
+  hi: 1.05,
+  gu: 1.0,
+};
+
+// Lower temperature = more stable/consistent output, fewer word-mixing
+// artifacts. Default is 0.6; 0.3 is the fix for garbled long replies.
+const TTS_TEMPERATURE = 0.3;
+const SILENCE_GAP_MS = 100;
+
+export class SarvamTtsAdapter implements TtsAdapter {
+  private client: SarvamAIClient;
+
+  constructor() {
+    if (!config.SARVAM_API_KEY) {
+      throw new Error('SARVAM_API_KEY is not set — cannot use TTS_PROVIDER=sarvam.');
+    }
+    this.client = new SarvamAIClient({ apiSubscriptionKey: config.SARVAM_API_KEY });
+  }
+
+  private async synthesizeOne(text: string, language: SupportedLanguage): Promise<Buffer> {
+    const rawRequest = {
+      text,
+      target_language_code: SUPPORTED_TO_BCP47[language],
+      model: 'bulbul:v3',
+      speaker: config.SARVAM_TTS_SPEAKER,
+      pace: PACE_BY_LANGUAGE[language],
+      temperature: TTS_TEMPERATURE,
+    };
+    const response = await this.client.textToSpeech.convert(rawRequest as unknown as TtsConvertParams);
+    const audioBase64 = response.audios[0];
+    if (!audioBase64) throw new Error('Sarvam textToSpeech.convert returned no audio.');
+    return Buffer.from(audioBase64, 'base64');
+  }
+
+  async synthesize(text: string, language: SupportedLanguage): Promise<Buffer> {
+    // bulbul:v3 caps at 2500 characters.
+    const clipped = text.length > 2500 ? text.slice(0, 2500) : text;
+    const sentences = splitSentences(clipped);
+
+    if (sentences.length === 1) {
+      return this.synthesizeOne(sentences[0], language);
+    }
+
+    // Sarvam is more reliable per-sentence than on a long paragraph AND
+    // parallel calls cut total TTS time from (n × ~600ms) to ~600ms.
+    const wavBuffers = await Promise.all(sentences.map((s) => this.synthesizeOne(s, language)));
+    return stitchWavs(wavBuffers, SILENCE_GAP_MS);
+  }
+}

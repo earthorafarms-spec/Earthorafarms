@@ -30,7 +30,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session: s }, error }) => {
       if (error) {
         supabase.auth.signOut().catch(() => {});
-        localStorage.clear();
       }
       setSession(s);
       const u = s?.user ?? null;

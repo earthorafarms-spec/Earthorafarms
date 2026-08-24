@@ -14,10 +14,10 @@ const staticImageMap: Record<string, { main: string; hover: string }> = {
   amla: { main: heroLeavesImg, hover: heroLeavesImg },
 };
 
-function mapProduct(p: DbProduct, dbDeals: FestiveDeal[], dbReviews: DbReview[]): Product {
+function mapProduct(p: DbProduct, dbDeals: FestiveDeal[], dbReviews: DbReview[], now: Date): Product {
   const inv = Array.isArray(p.inventory) ? p.inventory[0] : p.inventory;
   const images = Array.isArray(p.images) ? p.images : [];
-  
+
   const fallback = staticImageMap[p.slug] || staticImageMap.powder;
   const rawPrimary = images.find((i) => i.is_primary)?.url || images[0]?.url;
   const rawSecondary = images.find((i) => !i.is_primary)?.url;
@@ -30,7 +30,6 @@ function mapProduct(p: DbProduct, dbDeals: FestiveDeal[], dbReviews: DbReview[])
   const mrp = Number(p.mrp);
   let price = Number(p.price);
 
-  const now = new Date();
   const activeDeal = dbDeals.find((d) => {
     const starts = new Date(d.festival_start_date);
     const ends = new Date(d.festival_end_date);
@@ -89,7 +88,8 @@ export async function fetchPublicProducts(): Promise<Product[]> {
   const dbDeals = (dealsRes.data || []) as FestiveDeal[];
   const dbReviews = (reviewsRes.data || []) as DbReview[];
 
-  return ((productsRes.data as DbProduct[]) || []).map((p) => mapProduct(p, dbDeals, dbReviews));
+  const now = new Date();
+  return ((productsRes.data as DbProduct[]) || []).map((p) => mapProduct(p, dbDeals, dbReviews, now));
 }
 
 export async function fetchReviews(): Promise<DbReview[]> {

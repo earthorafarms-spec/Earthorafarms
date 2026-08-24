@@ -1,0 +1,73 @@
+{
+  "gst": [
+    {
+      "name": "Gujarat intra-state -> CGST 9% + SGST 9%",
+      "input": { "totalAmount": 1180, "country": "India", "state": "Gujarat" },
+      "expected": { "isIndia": true, "isGujarat": true, "cgstAmount": 90, "sgstAmount": 90, "igstAmount": 0 }
+    },
+    {
+      "name": "Gujarat state abbreviation 'GJ' still counts as Gujarat",
+      "input": { "totalAmount": 1180, "country": "India", "state": "GJ" },
+      "expected": { "isIndia": true, "isGujarat": true, "cgstAmount": 90, "sgstAmount": 90, "igstAmount": 0 }
+    },
+    {
+      "name": "Other Indian state -> IGST 18%",
+      "input": { "totalAmount": 1180, "country": "India", "state": "Maharashtra" },
+      "expected": { "isIndia": true, "isGujarat": false, "cgstAmount": 0, "sgstAmount": 0, "igstAmount": 180 }
+    },
+    {
+      "name": "Non-India -> exempt",
+      "input": { "totalAmount": 1180, "country": "United States", "state": "California" },
+      "expected": { "isIndia": false, "isGujarat": false, "cgstAmount": 0, "sgstAmount": 0, "igstAmount": 0 }
+    }
+  ],
+  "festivalDeal": [
+    {
+      "name": "Percentage discount rounds like mapProduct()",
+      "input": { "basePrice": 799, "productId": "p1", "deals": [{ "id": "d1", "festivalName": "Diwali", "discountType": "percentage", "discountValue": 20, "productIds": ["p1"] }] },
+      "expected": 639
+    },
+    {
+      "name": "Fixed discount, floored at 0",
+      "input": { "basePrice": 100, "productId": "p1", "deals": [{ "id": "d1", "festivalName": "Clearance", "discountType": "fixed", "discountValue": 500, "productIds": ["p1"] }] },
+      "expected": 0
+    },
+    {
+      "name": "No matching deal -> unchanged price",
+      "input": { "basePrice": 799, "productId": "p1", "deals": [{ "id": "d1", "festivalName": "Diwali", "discountType": "percentage", "discountValue": 20, "productIds": ["some-other-product"] }] },
+      "expected": 799
+    }
+  ],
+  "coupon": [
+    {
+      "name": "Percentage coupon applies",
+      "input": { "coupon": { "id": 1, "code": "WELCOME10", "discountType": "percentage", "discountValue": 10, "minOrder": 0, "maxUses": null, "usedCount": 0, "expiryDate": null, "status": "active" }, "subtotal": 1000 },
+      "expected": { "valid": true, "discountAmount": 100 }
+    },
+    {
+      "name": "Fixed coupon capped at subtotal",
+      "input": { "coupon": { "id": 2, "code": "FLAT500", "discountType": "fixed", "discountValue": 500, "minOrder": 0, "maxUses": null, "usedCount": 0, "expiryDate": null, "status": "active" }, "subtotal": 300 },
+      "expected": { "valid": true, "discountAmount": 300 }
+    },
+    {
+      "name": "Below minimum order -> rejected",
+      "input": { "coupon": { "id": 3, "code": "BIG1000", "discountType": "fixed", "discountValue": 100, "minOrder": 2000, "maxUses": null, "usedCount": 0, "expiryDate": null, "status": "active" }, "subtotal": 500 },
+      "expected": { "valid": false, "discountAmount": 0 }
+    },
+    {
+      "name": "Expired coupon -> rejected",
+      "input": { "coupon": { "id": 4, "code": "OLD2020", "discountType": "percentage", "discountValue": 10, "minOrder": 0, "maxUses": null, "usedCount": 0, "expiryDate": "2020-01-01", "status": "active" }, "subtotal": 500 },
+      "expected": { "valid": false, "discountAmount": 0 }
+    },
+    {
+      "name": "Usage limit reached -> rejected",
+      "input": { "coupon": { "id": 5, "code": "LIMITED", "discountType": "percentage", "discountValue": 10, "minOrder": 0, "maxUses": 5, "usedCount": 5, "expiryDate": null, "status": "active" }, "subtotal": 500 },
+      "expected": { "valid": false, "discountAmount": 0 }
+    },
+    {
+      "name": "No coupon found -> rejected",
+      "input": { "coupon": null, "subtotal": 500 },
+      "expected": { "valid": false, "discountAmount": 0 }
+    }
+  ]
+}
