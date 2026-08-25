@@ -16,6 +16,7 @@ import { config } from './config.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerVoiceRoutes } from './routes/voice.js';
 import { registerVoiceStreamRoutes } from './routes/voice-stream.js';
+import { registerSmartfloStreamRoutes } from './routes/smartflo-stream.js';
 import { registerCheckoutRoutes } from './routes/checkout.js';
 import { registerPaymentWebhookRoutes } from './routes/payment-webhook.js';
 import { registerWhatsAppRoutes } from './routes/whatsapp.js';
@@ -60,6 +61,7 @@ export async function buildApp() {
   await registerHealthRoutes(app);
   await registerVoiceRoutes(app);
   await registerVoiceStreamRoutes(app);
+  await registerSmartfloStreamRoutes(app);
   await registerCheckoutRoutes(app);
 
   if (config.whatsappConfigured) {

@@ -61,6 +61,11 @@ const optionalSchema = z.object({
   // (D:\Work\Sun\Agent) landed on after direct comparison; override here to
   // try another (e.g. "shubh", "priya", "rahul").
   SARVAM_TTS_SPEAKER: z.string().default('neha'),
+  // Public bot socket advertised to the voice platform's dynamic resolver.
+  // Example: wss://voice.example.com/ws/voice/smartflo
+  VOICE_STREAM_PUBLIC_WSS_URL: z.string().url().refine((url) => url.startsWith('wss://'), {
+    message: 'VOICE_STREAM_PUBLIC_WSS_URL must use wss://',
+  }).optional(),
 
   GOOGLE_CLOUD_PROJECT_ID: z.string().optional(),
   GOOGLE_APPLICATION_CREDENTIALS_JSON: z.string().optional(),

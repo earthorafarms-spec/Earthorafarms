@@ -51,6 +51,25 @@ and safety checks:
   batch upload-and-wait route (`POST /voice/session/:id/audio-message`, hold-to-talk) still exists
   in `src/routes/voice.ts` for callers that can't do a persistent WebSocket.
 
+### Tata/VOICE Streaming WebSocket
+
+The service also exposes a telephony-compatible bidirectional socket at
+`wss://<voice-service-host>/ws/voice/smartflo`. This is the URL to configure as a **Static**
+VOICE Bot endpoint. It implements the documented `connected`, `start`, `media`, `stop`, `mark`,
+and `clear`-compatible flow, converts inbound G.711 mu-law/8 kHz audio to PCM16/16 kHz for Sarvam
+STT, and converts Sarvam TTS WAV output back to 160-byte G.711 mu-law frames.
+
+For a **Dynamic** endpoint, configure `GET` or `POST`
+`https://<voice-service-host>/voice/stream/endpoint`. It returns the platform's exact required
+payload (`sucess` is intentionally misspelled in that external contract). Set
+`VOICE_STREAM_PUBLIC_WSS_URL=wss://<voice-service-host>/ws/voice/smartflo` in production so the
+resolver always advertises the canonical public hostname.
+
+Do not use a LiveKit server's `wss://` signaling URL as the VOICE Bot endpoint: LiveKit speaks its
+own room/signaling protocol, while the telephony platform sends JSON media events and base64
+G.711 audio. If LiveKit is also self-hosted, keep its URL for LiveKit clients and use this bridge
+URL for the VOICE Bot connection.
+
 ## Known, accepted tradeoff: pricing logic duplication
 
 GST/coupon/festival-deal pricing logic is reimplemented here in `src/domain/pricing.ts` rather than

@@ -32,10 +32,13 @@ function mapRow(row: DbRow): CallSessionRow {
   };
 }
 
-export async function createCallSession(initialState: ConversationState): Promise<CallSessionRow> {
+export async function createCallSession(
+  initialState: ConversationState,
+  provider: CallSessionRow['provider'] = 'browser'
+): Promise<CallSessionRow> {
   const { data, error } = await supabase
     .from('voice_call_sessions')
-    .insert({ provider: 'browser', status: 'started', conversation_state: initialState })
+    .insert({ provider, status: 'started', conversation_state: initialState })
     .select('id, provider, status, conversation_state, expires_at')
     .single();
 

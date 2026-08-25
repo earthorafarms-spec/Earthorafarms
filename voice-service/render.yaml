@@ -33,6 +33,10 @@ services:
         sync: false
       - key: SARVAM_MODEL
         value: sarvam-105b
+      # Canonical public telephony socket, for example:
+      # wss://earthora-voice-service.onrender.com/ws/voice/smartflo
+      - key: VOICE_STREAM_PUBLIC_WSS_URL
+        sync: false
       - key: GOOGLE_CLOUD_PROJECT_ID
         sync: false
       - key: GOOGLE_APPLICATION_CREDENTIALS_JSON
