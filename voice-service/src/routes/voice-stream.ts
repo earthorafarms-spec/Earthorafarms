@@ -66,28 +66,34 @@ export async function registerVoiceStreamRoutes(app: FastifyInstance): Promise<v
       const pendingUtterances: Buffer[] = [];
 
       // ── Inactivity timer ────────────────────────────────────────────────────
-      // Fires after INACTIVITY_WARN_MS of no user audio. Sends "are you still
-      // there?" then waits INACTIVITY_HANGUP_MS before closing the socket.
+      // Fires after INACTIVITY_WARN_MS of user silence WHILE THE AGENT IS IDLE.
+      // A generation counter prevents stale handleInactivity() calls (that were
+      // rescheduled while sessionBusy=true) from firing after the agent resumes.
       let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
       let hangupTimer: ReturnType<typeof setTimeout> | null = null;
+      let inactivityGen = 0; // incremented on every reset/clear to abort stale instances
 
       function clearTimers(): void {
+        inactivityGen++; // abort any in-flight handleInactivity rescheduled instances
         if (inactivityTimer) { clearTimeout(inactivityTimer); inactivityTimer = null; }
         if (hangupTimer) { clearTimeout(hangupTimer); hangupTimer = null; }
       }
 
       function resetInactivityTimer(): void {
         clearTimers();
-        inactivityTimer = setTimeout(handleInactivity, INACTIVITY_WARN_MS);
+        const gen = inactivityGen;
+        inactivityTimer = setTimeout(() => { void handleInactivity(gen); }, INACTIVITY_WARN_MS);
       }
 
-      async function handleInactivity(): Promise<void> {
+      async function handleInactivity(gen: number): Promise<void> {
         inactivityTimer = null;
+        // Abort if we've been superseded by a newer timer cycle.
+        if (gen !== inactivityGen) return;
         if (socket.readyState !== socket.OPEN) return;
 
-        // If the agent is mid-reply, wait a bit and check again.
+        // Agent is busy (synthesizing/speaking) — reschedule, but only for this gen.
         if (sessionBusy) {
-          inactivityTimer = setTimeout(handleInactivity, 2_000);
+          inactivityTimer = setTimeout(() => { void handleInactivity(gen); }, 2_000);
           return;
         }
 
@@ -103,9 +109,11 @@ export async function registerVoiceStreamRoutes(app: FastifyInstance): Promise<v
           if (next) { void runTurn(next); return; } // user spoke — skip hangup
         }
 
-        // No utterance queued while warning played — schedule hard hangup.
+        // Still the active gen and no user spoke — schedule hard hangup.
+        if (gen !== inactivityGen) return;
         hangupTimer = setTimeout(() => {
           hangupTimer = null;
+          if (gen !== inactivityGen) return; // aborted by a reset after we scheduled
           if (socket.readyState === socket.OPEN) {
             send(socket, { type: 'call_end', reason: 'inactivity' });
             socket.close();
@@ -164,7 +172,8 @@ export async function registerVoiceStreamRoutes(app: FastifyInstance): Promise<v
             // Don't start the 7s timer yet — the client is still playing audio.
             // audio_done from the client will call resetInactivityTimer() once
             // playback finishes. Long fallback here covers dropped messages.
-            inactivityTimer = setTimeout(handleInactivity, INACTIVITY_WARN_MS + 30_000);
+            const gen = inactivityGen;
+            inactivityTimer = setTimeout(() => { void handleInactivity(gen); }, INACTIVITY_WARN_MS + 30_000);
           }
         }
       }
@@ -192,7 +201,10 @@ export async function registerVoiceStreamRoutes(app: FastifyInstance): Promise<v
           sessionBusy = false;
           const next = pendingUtterances.shift();
           if (next) void runTurn(next);
-          else inactivityTimer = setTimeout(handleInactivity, INACTIVITY_WARN_MS + 30_000);
+          else {
+            const gen = inactivityGen;
+            inactivityTimer = setTimeout(() => { void handleInactivity(gen); }, INACTIVITY_WARN_MS + 30_000);
+          }
         }
       }
 
@@ -220,8 +232,10 @@ export async function registerVoiceStreamRoutes(app: FastifyInstance): Promise<v
           return;
         }
 
-        // User is sending audio — reset the inactivity clock.
-        resetInactivityTimer();
+        // User is sending audio. Only reset the inactivity clock when the agent
+        // is idle — resetting during synthesis/speaking would start the 7s window
+        // too early (before the user can even hear the response).
+        if (!sessionBusy) resetInactivityTimer();
         accumulator.push(bufferFromRawData(data));
       });
 
