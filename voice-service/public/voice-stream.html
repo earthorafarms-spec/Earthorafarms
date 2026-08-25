@@ -67,12 +67,13 @@
   let pendingDecodes = 0; // number of decodeAudioData calls not yet resolved
   let audioTurnComplete = false; // true once server sends agent_audio_end
   let pendingCallEnd = false;    // true when call should end after audio drains
-  // Client-side energy gate: filters only the absolute noise floor (DC bias,
-  // mic not plugged in) — set very low so the server receives the quiet
-  // post-speech chunks it needs to count as silence and trigger flush.
-  // Setting this too high (e.g. 350) starves the server of silence chunks,
-  // making the accumulator hang in "listening" mode after the user stops talking.
-  const MIN_TRANSMIT_RMS = 30;
+  // Client-side energy gate: blocks ambient hum, fan noise, and background TV
+  // from reaching the server. 200 is well above DC bias / unplugged-mic noise
+  // (~0-30) but comfortably below normal speech (~1000-8000), so real speech
+  // always gets through while idle-room noise doesn't. The server still
+  // receives the post-speech silence chunks it needs to trigger flush because
+  // real speech residual decays through ~200 gradually, not a hard cut-off.
+  const MIN_TRANSMIT_RMS = 200;
 
   function setStatus(text, cls) {
     statusEl.textContent = text;

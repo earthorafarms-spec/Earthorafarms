@@ -140,6 +140,18 @@ export async function registerVoiceStreamRoutes(app: FastifyInstance): Promise<v
             return; // false trigger — nothing to respond to
           }
 
+          // Drop transcriptions in scripts we don't support (Kannada, Tamil,
+          // Telugu, Malayalam, Odia, …). Sarvam sometimes picks up background
+          // audio and transcribes it as a regional Indian language — those turns
+          // would confuse the LLM and should be silently discarded.
+          // Unicode ranges: Odia U+0B00-U+0B7F, Tamil U+0B80-U+0BFF,
+          // Telugu U+0C00-U+0C7F, Kannada U+0C80-U+0CFF, Malayalam U+0D00-U+0D7F.
+          // Devanagari (U+0900-U+097F) and Gujarati (U+0A80-U+0AFF) are supported.
+          if (/[଀-෿]/.test(transcription.text)) {
+            req.log.info({ text: transcription.text }, 'dropping turn — unsupported script');
+            return;
+          }
+
           // Correct common STT misrecognitions of brand/product names.
           transcription.text = transcription.text
             .replace(/\barthora\s+farms?\b/gi, 'Earthora Farms')
