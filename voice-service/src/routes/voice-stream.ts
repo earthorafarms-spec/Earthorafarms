@@ -72,6 +72,9 @@ export async function registerVoiceStreamRoutes(app: FastifyInstance): Promise<v
       let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
       let hangupTimer: ReturnType<typeof setTimeout> | null = null;
       let inactivityGen = 0; // incremented on every reset/clear to abort stale instances
+      // True while the inactivity warning audio is in flight — the next audio_done
+      // should start the 3-second hangup countdown instead of resetting the watch.
+      let pendingHangup = false;
 
       function clearTimers(): void {
         inactivityGen++; // abort any in-flight handleInactivity rescheduled instances
@@ -102,23 +105,33 @@ export async function registerVoiceStreamRoutes(app: FastifyInstance): Promise<v
           const warnText = "Are you still there?";
           send(socket, { type: 'agent_reply_text', text: warnText, language: 'en' });
           await streamTts(socket, warnText, 'en');
+          // Flag BEFORE agent_audio_end so when the client finishes playing the
+          // warning and sends audio_done, the handler starts the hangup countdown
+          // instead of resetting the inactivity watch.
+          pendingHangup = true;
           send(socket, { type: 'agent_audio_end', endCall: false });
         } finally {
           sessionBusy = false;
           const next = pendingUtterances.shift();
-          if (next) { void runTurn(next); return; } // user spoke — skip hangup
+          if (next) {
+            pendingHangup = false; // user spoke during warning — cancel intent
+            void runTurn(next);
+            return;
+          }
         }
 
-        // Still the active gen and no user spoke — schedule hard hangup.
-        if (gen !== inactivityGen) return;
+        // Safety fallback: if audio_done never arrives (browser crash, proxy drop)
+        // hang up after a generous timeout — warning audio is ~1s, so 15s is plenty.
+        if (gen !== inactivityGen) { pendingHangup = false; return; }
         hangupTimer = setTimeout(() => {
           hangupTimer = null;
-          if (gen !== inactivityGen) return; // aborted by a reset after we scheduled
+          pendingHangup = false;
+          if (gen !== inactivityGen) return;
           if (socket.readyState === socket.OPEN) {
             send(socket, { type: 'call_end', reason: 'inactivity' });
             socket.close();
           }
-        }, INACTIVITY_HANGUP_MS);
+        }, 15_000);
       }
 
       // ── Turn runner ─────────────────────────────────────────────────────────
@@ -236,8 +249,25 @@ export async function registerVoiceStreamRoutes(app: FastifyInstance): Promise<v
           try {
             const parsed = JSON.parse(data.toString('utf8'));
             if (parsed.type === 'ping') send(socket, { type: 'pong' });
-            // Client finished playing all agent audio — safe to start inactivity watch.
-            else if (parsed.type === 'audio_done') resetInactivityTimer();
+            else if (parsed.type === 'audio_done') {
+              if (pendingHangup) {
+                // Warning just finished playing — start the hard hangup countdown.
+                pendingHangup = false;
+                clearTimers();
+                const gen = inactivityGen;
+                hangupTimer = setTimeout(() => {
+                  hangupTimer = null;
+                  if (gen !== inactivityGen) return;
+                  if (socket.readyState === socket.OPEN) {
+                    send(socket, { type: 'call_end', reason: 'inactivity' });
+                    socket.close();
+                  }
+                }, INACTIVITY_HANGUP_MS);
+              } else {
+                // Normal agent reply finished — start fresh inactivity watch.
+                resetInactivityTimer();
+              }
+            }
           } catch {
             // ignore malformed control messages
           }
