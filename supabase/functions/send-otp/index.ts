@@ -6,13 +6,23 @@ declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void;
 };
 
+const ALLOWED_ORIGINS = [
+  "https://earthorafarms.com",
+  "https://www.earthorafarms.com",
+  "http://localhost:5173",
+  "http://localhost:3000",
+];
 
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-admin-password",
-};
+function buildCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("origin") || "";
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    "Access-Control-Allow-Origin": allowed,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-admin-password",
+    "Vary": "Origin",
+  };
+}
 
 function constantTimeEqual(a: string, b: string): boolean {
   const encoder = new TextEncoder();
@@ -30,31 +40,28 @@ function constantTimeEqual(a: string, b: string): boolean {
   return mismatch === 0;
 }
 
+async function hashOtp(otp: string): Promise<string> {
+  const data = new TextEncoder().encode(otp);
+  const hashBuf = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hashBuf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 async function verifyPassword(
   supabase: ReturnType<typeof createClient>,
   password: string,
 ): Promise<boolean> {
   const envPassword = Deno.env.get("ADMIN_PASSWORD");
   if (envPassword) {
-    console.log("[send-otp] Verifying against ADMIN_PASSWORD env var");
     return constantTimeEqual(password, envPassword);
   }
 
-  console.log("[send-otp] Verifying against DB admin_settings table");
   const { data, error } = await supabase
     .from("admin_settings")
     .select("value")
     .eq("key", "admin_password")
     .single();
 
-  if (error) {
-    console.error("[send-otp] DB error querying admin_password:", error);
-    return false;
-  }
-  if (!data) {
-    console.error("[send-otp] No admin_password row found in admin_settings");
-    return false;
-  }
+  if (error || !data) return false;
   return constantTimeEqual(password, data.value);
 }
 
@@ -67,8 +74,6 @@ async function verifyKaccCredentials(
     return { valid: false, errorMsg: "Valid email address is required" };
   }
 
-  console.log(`[send-otp] Verifying KACC user against DB kacc_users table for email: ${email}`);
-
   const { data, error } = await supabase
     .from("kacc_users")
     .select("password")
@@ -76,7 +81,6 @@ async function verifyKaccCredentials(
     .maybeSingle();
 
   if (error || !data) {
-    console.warn(`[send-otp] DB query for kacc_users failed or user not in table for ${email}`);
     return { valid: false, errorMsg: "Unauthorized email address for Key Accounts portal" };
   }
 
@@ -100,7 +104,7 @@ async function sendEmail(otp: string, domain: string, recipientEmail?: string): 
   const targetEmail = (recipientEmail && recipientEmail.trim()) ? recipientEmail.trim() : "earthorafarms@gmail.com";
 
   if (!apiKey) {
-    console.log(`[send-otp] OTP for ${domain} (${targetEmail}): ${otp}`);
+    // No email provider configured — OTP not delivered via email
     return { success: true };
   }
 
@@ -120,7 +124,7 @@ async function sendEmail(otp: string, domain: string, recipientEmail?: string): 
         html: `
           <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#fafaf8;border-radius:16px;">
             <h2 style="color:#1b4332;margin:0 0 8px;">${domainLabel}</h2>
-            <p style="color:#666;font-size:14px;margin:0 0 24px;">Use the OTP below to complete sign-in for ${targetEmail}.</p>
+            <p style="color:#666;font-size:14px;margin:0 0 24px;">Use the OTP below to complete sign-in.</p>
             <div style="background:#fff;border-radius:12px;padding:24px;text-align:center;border:1px solid #eee;">
               <span style="font-size:36px;font-weight:700;letter-spacing:8px;color:#1b4332;font-family:monospace;">${otp}</span>
             </div>
@@ -132,49 +136,20 @@ async function sendEmail(otp: string, domain: string, recipientEmail?: string): 
 
     if (!res.ok) {
       const errText = await res.text();
-      console.error(`[send-otp] Resend API error for ${targetEmail}: ${res.status} ${errText}`);
-
-      // Fallback dispatch if primary target fails due to Resend testing recipient restrictions
-      const backupRecipient = targetEmail === "earthorafarms@gmail.com" ? "dmmspart399@gmail.com" : "earthorafarms@gmail.com";
-      console.log(`[send-otp] Retrying email dispatch to backup recipient (${backupRecipient})...`);
-      
-      const retryRes = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: "Earthora Farms <onboarding@resend.dev>",
-          to: backupRecipient,
-          subject: `[${domainLabel}] Your OTP Code`,
-          html: `
-            <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#fafaf8;border-radius:16px;">
-              <h2 style="color:#1b4332;margin:0 0 8px;">${domainLabel}</h2>
-              <p style="color:#666;font-size:14px;margin:0 0 24px;">Use the OTP below to complete sign-in for ${domainLabel}.</p>
-              <div style="background:#fff;border-radius:12px;padding:24px;text-align:center;border:1px solid #eee;">
-                <span style="font-size:36px;font-weight:700;letter-spacing:8px;color:#1b4332;font-family:monospace;">${otp}</span>
-              </div>
-              <p style="color:#999;font-size:12px;margin-top:20px;">This code expires in 5 minutes.</p>
-            </div>
-          `,
-        }),
-      });
-
-      if (retryRes.ok) {
-        return { success: true };
-      }
-
+      console.error(`[send-otp] Resend API error for ${domain}: ${res.status}`);
       return { success: false, resendError: errText };
     }
     return { success: true };
   } catch (err: any) {
-    console.error("[send-otp] Email dispatch exception:", err);
+    console.error("[send-otp] Email dispatch exception:", err?.message);
     return { success: false, resendError: err?.message };
   }
 }
 
 function getClientIp(req: Request): string {
+  // CF-Connecting-IP is set by Cloudflare and cannot be spoofed by request sender
+  const cfIp = req.headers.get("cf-connecting-ip");
+  if (cfIp) return cfIp.trim();
   const forwarded = req.headers.get("x-forwarded-for");
   if (forwarded) return forwarded.split(",")[0].trim();
   return req.headers.get("x-real-ip") || "unknown";
@@ -212,6 +187,8 @@ async function recordAttempt(
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
+  const corsHeaders = buildCorsHeaders(req);
+
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -270,10 +247,19 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     const otp = generateOtp();
+    const otpHash = await hashOtp(otp);
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
+    // Invalidate any existing unused OTPs for this domain before inserting new one
+    await supabase
+      .from("otp_codes")
+      .delete()
+      .eq("domain", domain)
+      .eq("used", false)
+      .gte("expires_at", new Date().toISOString());
+
     const { error: insertErr } = await supabase.from("otp_codes").insert({
-      otp,
+      otp: otpHash,
       domain,
       expires_at: expiresAt,
       used: false,

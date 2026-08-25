@@ -439,7 +439,7 @@ export default function Checkout() {
     try {
       const createRes = await fetch("/.netlify/functions/create-razorpay-order", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Internal-Key": import.meta.env.VITE_NETLIFY_KEY || "" },
         body: JSON.stringify({
           amount: amountPaise,
           currency: "INR",
@@ -477,7 +477,7 @@ export default function Checkout() {
             try {
               const verifyRes = await fetch("/.netlify/functions/verify-razorpay-payment", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", "X-Internal-Key": import.meta.env.VITE_NETLIFY_KEY || "" },
                 body: JSON.stringify({
                   razorpay_order_id: response.razorpay_order_id,
                   razorpay_payment_id: response.razorpay_payment_id,
@@ -507,7 +507,7 @@ export default function Checkout() {
             try {
               fetch("/.netlify/functions/send-invoice", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", "X-Internal-Key": import.meta.env.VITE_NETLIFY_KEY || "" },
                 body: JSON.stringify({ orderId: orderReferenceId }),
               })
                 .then((res) => res.json())

@@ -149,9 +149,7 @@ CREATE TABLE IF NOT EXISTS kacc_users (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
--- Insert the default KACC user (upsert so re-running is safe)
-INSERT INTO kacc_users (email, password)
-VALUES ('dmmspart399@gmail.com', 'Pintu@earthora')
+-- Default KACC user: add via the admin portal after first deploy
 ON CONFLICT (email) DO UPDATE SET password = EXCLUDED.password;
 
 -- ── 5. CONTACT DETAILS ───────────────────────────────────────────────────────
@@ -278,7 +276,7 @@ CREATE TABLE IF NOT EXISTS admin_settings (
 -- ── 14. OTP CODES ────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS otp_codes (
     id SERIAL PRIMARY KEY,
-    otp VARCHAR(6) NOT NULL,
+    otp VARCHAR(64) NOT NULL, -- stores SHA-256 hash of the 6-digit OTP
     domain VARCHAR(50) NOT NULL,
     expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
     used BOOLEAN DEFAULT FALSE,
@@ -353,7 +351,7 @@ CREATE TABLE IF NOT EXISTS review_details (
   id SERIAL PRIMARY KEY,
   review_product_id VARCHAR(255) NOT NULL,
   review_user_id VARCHAR(255) NOT NULL,
-  review_rating VARCHAR(255) NOT NULL,
+  review_rating NUMERIC(2,1) NOT NULL CHECK (review_rating BETWEEN 1 AND 5),
   review_comment TEXT NOT NULL,
   review_created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
   review_updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -597,7 +595,8 @@ CREATE POLICY "Service write festival_deal_products" ON festival_deal_products F
 DROP POLICY IF EXISTS "Public read review_details"    ON review_details;
 CREATE POLICY "Public read review_details"    ON review_details FOR SELECT TO anon, authenticated USING (true);
 DROP POLICY IF EXISTS "Anon submit review_details"    ON review_details;
-CREATE POLICY "Anon submit review_details"    ON review_details FOR INSERT TO anon, authenticated WITH CHECK (true);
+DROP POLICY IF EXISTS "Authenticated submit review_details" ON review_details;
+CREATE POLICY "Authenticated submit review_details" ON review_details FOR INSERT TO authenticated WITH CHECK (true);
 DROP POLICY IF EXISTS "Service manage review_details" ON review_details;
 CREATE POLICY "Service manage review_details" ON review_details FOR ALL TO service_role USING (true) WITH CHECK (true);
 

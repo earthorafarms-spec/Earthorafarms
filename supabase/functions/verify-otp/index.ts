@@ -6,17 +6,37 @@ declare const Deno: {
   serve(handler: (req: Request) => Response | Promise<Response>): void;
 };
 
-const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-admin-password",
-};
+const ALLOWED_ORIGINS = [
+  "https://earthorafarms.com",
+  "https://www.earthorafarms.com",
+  "http://localhost:5173",
+  "http://localhost:3000",
+];
+
+function buildCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("origin") || "";
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    "Access-Control-Allow-Origin": allowed,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-admin-password",
+    "Vary": "Origin",
+  };
+}
 
 function getClientIp(req: Request): string {
+  // CF-Connecting-IP is set by Cloudflare and cannot be spoofed by request sender
+  const cfIp = req.headers.get("cf-connecting-ip");
+  if (cfIp) return cfIp.trim();
   const forwarded = req.headers.get("x-forwarded-for");
   if (forwarded) return forwarded.split(",")[0].trim();
   return req.headers.get("x-real-ip") || "unknown";
+}
+
+async function hashOtp(otp: string): Promise<string> {
+  const data = new TextEncoder().encode(otp);
+  const hashBuf = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hashBuf)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 async function checkRateLimit(
@@ -49,6 +69,8 @@ async function recordAttempt(
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
+  const corsHeaders = buildCorsHeaders(req);
+
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -78,12 +100,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
       );
     }
 
+    const otpHash = await hashOtp(otp);
     const now = new Date().toISOString();
 
     const { data, error } = await supabase
       .from("otp_codes")
       .select("id")
-      .eq("otp", otp)
+      .eq("otp", otpHash)
       .eq("domain", domain)
       .eq("used", false)
       .gte("expires_at", now)
@@ -105,9 +128,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
       );
     }
 
+    // Delete the OTP row after successful use — prevents reuse without relying on 'used' flag
     await supabase
       .from("otp_codes")
-      .update({ used: true })
+      .delete()
       .eq("id", data[0].id);
 
     return new Response(JSON.stringify({ ok: true }), {

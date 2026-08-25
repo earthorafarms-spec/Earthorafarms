@@ -2,13 +2,14 @@
 // Server-side function — creates a Razorpay order via the REST API.
 // KEY_SECRET never leaves this file and never reaches the browser.
 
-const KEY_ID     = process.env.RAZORPAY_KEY_ID     ?? '';
-const KEY_SECRET = process.env.RAZORPAY_KEY_SECRET  ?? '';
+const KEY_ID              = process.env.RAZORPAY_KEY_ID      ?? '';
+const KEY_SECRET          = process.env.RAZORPAY_KEY_SECRET   ?? '';
+const NETLIFY_INTERNAL_KEY = process.env.NETLIFY_INTERNAL_KEY ?? '';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Internal-Key',
 };
 
 export async function handler(event) {
@@ -18,6 +19,11 @@ export async function handler(event) {
 
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Method not allowed' }) };
+  }
+
+  const reqKey = event.headers['x-internal-key'] || '';
+  if (NETLIFY_INTERNAL_KEY && reqKey !== NETLIFY_INTERNAL_KEY) {
+    return { statusCode: 401, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Unauthorized' }) };
   }
 
   if (!KEY_ID || !KEY_SECRET) {

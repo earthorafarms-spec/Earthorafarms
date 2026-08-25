@@ -5,13 +5,21 @@ import { createClient } from "@supabase/supabase-js";
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import nodemailer from "nodemailer";
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "https://uynfeciklsijhbhukrwn.supabase.co";
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+const SUPABASE_URL = process.env.SUPABASE_URL || "";
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const RESEND_API_KEY = process.env.RESEND_API_KEY_ADMIN || process.env.RESEND_API_KEY || "";
 const SMTP_PASS = process.env.SMTP_PASS || "";
 const SMTP_USER = process.env.SMTP_USER || "orders@earthorafarms.com";
 const SMTP_HOST = process.env.SMTP_HOST || "smtp.gmail.com";
 const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
+const NETLIFY_INTERNAL_KEY = process.env.NETLIFY_INTERNAL_KEY || "";
+
+// Configurable company/bank details (override via Netlify env vars)
+const BANK_ACCOUNT_NO = process.env.BANK_ACCOUNT_NO || "41390200000521";
+const BANK_IFSC = process.env.BANK_IFSC || "BARB0MAKARB";
+const BANK_BRANCH = process.env.BANK_BRANCH || "Bank of Baroda, MAKARBA, GUJARAT";
+const COMPANY_GSTIN = process.env.COMPANY_GSTIN || "24AAACE1234F1Z5";
+const COMPANY_PHONE = process.env.COMPANY_PHONE || "9825346884";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -65,6 +73,16 @@ export async function handler(event) {
     return { statusCode: 405, headers: CORS_HEADERS, body: JSON.stringify({ error: "Method not allowed" }) };
   }
 
+  // Verify internal caller key — stops automated external abuse
+  const reqKey = event.headers["x-internal-key"] || "";
+  if (NETLIFY_INTERNAL_KEY && reqKey !== NETLIFY_INTERNAL_KEY) {
+    return { statusCode: 401, headers: CORS_HEADERS, body: JSON.stringify({ error: "Unauthorized" }) };
+  }
+
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ error: "Server configuration error" }) };
+  }
+
   let orderId = "";
   try {
     const body = JSON.parse(event.body || "{}");
@@ -109,7 +127,7 @@ export async function handler(event) {
     }
 
     if (!order) {
-      return { statusCode: 404, headers: CORS_HEADERS, body: JSON.stringify({ error: `Order not found: ${orderId}` }) };
+      return { statusCode: 404, headers: CORS_HEADERS, body: JSON.stringify({ error: "Order not found" }) };
     }
 
     // 2. Fetch Order Items
@@ -217,7 +235,7 @@ export async function handler(event) {
     sellerY -= 11;
     page.drawText("Ahmedabad, Gujarat, 382210., Ahmedabad, Gujarat, 382210", { x: leftMargin + 6, y: sellerY, size: 8, font, color: black });
     sellerY -= 12;
-    page.drawText("GSTIN: 24AAACE1234F1Z5  Mobile: 9825346884", { x: leftMargin + 6, y: sellerY, size: 8, font: fontBold, color: black });
+    page.drawText(`GSTIN: ${COMPANY_GSTIN}  Mobile: ${COMPANY_PHONE}`, { x: leftMargin + 6, y: sellerY, size: 8, font: fontBold, color: black });
 
     // Right Invoice Details
     page.drawText("Invoice No.", { x: 340, y: topBoxY - 18, size: 8.5, font: fontBold, color: black });
@@ -442,11 +460,11 @@ export async function handler(event) {
     bankY -= 12;
     page.drawText("Name: Earthora Farms & Foods Pvt. Ltd.", { x: leftMargin + 6, y: bankY, size: 7.5, font, color: black });
     bankY -= 11;
-    page.drawText("IFSC Code: BARB0MAKARB", { x: leftMargin + 6, y: bankY, size: 7.5, font, color: black });
+    page.drawText(`IFSC Code: ${BANK_IFSC}`, { x: leftMargin + 6, y: bankY, size: 7.5, font, color: black });
     bankY -= 11;
-    page.drawText("Account No: 41390200000521", { x: leftMargin + 6, y: bankY, size: 7.5, font, color: black });
+    page.drawText(`Account No: ${BANK_ACCOUNT_NO}`, { x: leftMargin + 6, y: bankY, size: 7.5, font, color: black });
     bankY -= 11;
-    page.drawText("Bank: Bank of Baroda, MAKARBA, GUJARAT", { x: leftMargin + 6, y: bankY, size: 7, font, color: black });
+    page.drawText(`Bank: ${BANK_BRANCH}`, { x: leftMargin + 6, y: bankY, size: 7, font, color: black });
 
     // Terms and Conditions
     let termsY = bottomBoxY - 12;
@@ -615,7 +633,7 @@ export async function handler(event) {
     return {
       statusCode: 500,
       headers: CORS_HEADERS,
-      body: JSON.stringify({ error: err.message || "Internal Server Error" }),
+      body: JSON.stringify({ error: "Internal server error" }),
     };
   }
 }
