@@ -73,7 +73,7 @@
   // always gets through while idle-room noise doesn't. The server still
   // receives the post-speech silence chunks it needs to trigger flush because
   // real speech residual decays through ~200 gradually, not a hard cut-off.
-  const MIN_TRANSMIT_RMS = 80;
+  const MIN_TRANSMIT_RMS = 30;
 
   function setStatus(text, cls) {
     statusEl.textContent = text;

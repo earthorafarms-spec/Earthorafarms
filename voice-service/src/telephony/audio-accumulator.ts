@@ -26,7 +26,7 @@ const BYTES_PER_SAMPLE = 2;
 // ignore a quiet hum. Raising this too high (e.g. 1000) breaks flush detection
 // because ambient noise never dips below the threshold — the accumulator then
 // waits for MAX_UTTERANCE_MS before giving up (feels like the agent is frozen).
-const SILENCE_RMS_THRESHOLD = 600;
+const SILENCE_RMS_THRESHOLD = 900;
 // Short enough to capture "yes", "okay", one-word answers. The client-side
 // MIN_TRANSMIT_RMS gate already filters near-silent non-speech before it
 // reaches the server, so a low MIN_SPEECH_MS is safe.
