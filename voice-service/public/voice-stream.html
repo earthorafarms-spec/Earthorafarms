@@ -119,6 +119,12 @@
       endCall();
     } else {
       setStatus('Listening…', 'listening');
+      // Signal server that audio playback is done — it will now start the
+      // inactivity timer. Without this the server has no way to know how long
+      // the client takes to play all the buffered audio.
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'audio_done' }));
+      }
     }
   }
 

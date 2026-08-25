@@ -132,6 +132,11 @@ export async function registerVoiceStreamRoutes(app: FastifyInstance): Promise<v
             return; // false trigger — nothing to respond to
           }
 
+          // Correct common STT misrecognitions of brand/product names.
+          transcription.text = transcription.text
+            .replace(/\barthora\s+farms?\b/gi, 'Earthora Farms')
+            .replace(/\barthora\b/gi, 'Earthora');
+
           send(socket, {
             type: 'user_transcript',
             text: transcription.text,
@@ -156,7 +161,10 @@ export async function registerVoiceStreamRoutes(app: FastifyInstance): Promise<v
           if (next) {
             void runTurn(next);
           } else {
-            resetInactivityTimer(); // resume idle watch after agent finishes
+            // Don't start the 7s timer yet — the client is still playing audio.
+            // audio_done from the client will call resetInactivityTimer() once
+            // playback finishes. Long fallback here covers dropped messages.
+            inactivityTimer = setTimeout(handleInactivity, INACTIVITY_WARN_MS + 30_000);
           }
         }
       }
@@ -184,7 +192,7 @@ export async function registerVoiceStreamRoutes(app: FastifyInstance): Promise<v
           sessionBusy = false;
           const next = pendingUtterances.shift();
           if (next) void runTurn(next);
-          else resetInactivityTimer();
+          else inactivityTimer = setTimeout(handleInactivity, INACTIVITY_WARN_MS + 30_000);
         }
       }
 
@@ -204,6 +212,8 @@ export async function registerVoiceStreamRoutes(app: FastifyInstance): Promise<v
           try {
             const parsed = JSON.parse(data.toString('utf8'));
             if (parsed.type === 'ping') send(socket, { type: 'pong' });
+            // Client finished playing all agent audio — safe to start inactivity watch.
+            else if (parsed.type === 'audio_done') resetInactivityTimer();
           } catch {
             // ignore malformed control messages
           }
