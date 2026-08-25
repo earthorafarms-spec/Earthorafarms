@@ -64,6 +64,7 @@
   let playCtx = null;
   let nextSoundStart = 0; // AudioContext timestamp when the next buffer should start
   let playingCount = 0;   // number of scheduled sources not yet ended
+  let pendingDecodes = 0; // number of decodeAudioData calls not yet resolved
   let audioTurnComplete = false; // true once server sends agent_audio_end
   let pendingCallEnd = false;    // true when call should end after audio drains
   // Client-side energy gate: filters only the absolute noise floor (DC bias,
@@ -102,6 +103,7 @@
       playCtx = null;
     }
     playingCount = 0;
+    pendingDecodes = 0;
     nextSoundStart = 0;
     audioTurnComplete = false;
     pendingCallEnd = false;
@@ -137,9 +139,16 @@
     try {
       audioBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
     } catch {
-      return; // invalid data or context closed during decode
+      // Decode failed — count it as done so the "all done" check still fires.
+      pendingDecodes = Math.max(0, pendingDecodes - 1);
+      if (playingCount === 0 && pendingDecodes === 0 && audioTurnComplete) onAllAudioDone();
+      return;
     }
-    if (ctx !== playCtx) return; // context was replaced (call ended mid-decode)
+    if (ctx !== playCtx) {
+      // Context replaced (call ended mid-decode) — drop the buffer.
+      pendingDecodes = Math.max(0, pendingDecodes - 1);
+      return;
+    }
 
     setStatus('Agent speaking…', 'speaking');
 
@@ -147,17 +156,18 @@
     source.buffer = audioBuffer;
     source.connect(ctx.destination);
 
-    // Schedule this buffer right after the previous one with a tiny 10ms
-    // overlap allowance so rapid-fire WAVs never leave an audible gap.
     const startAt = Math.max(ctx.currentTime + 0.01, nextSoundStart);
     source.start(startAt);
     nextSoundStart = startAt + audioBuffer.duration;
     playingCount++;
+    // Decrement AFTER playingCount++ so the "all done" guard never fires
+    // between the two — prevents a window where both counters are 0 mid-decode.
+    pendingDecodes = Math.max(0, pendingDecodes - 1);
 
     source.onended = () => {
-      if (ctx !== playCtx) return; // stale context — call already ended
+      if (ctx !== playCtx) return;
       playingCount = Math.max(0, playingCount - 1);
-      if (playingCount === 0 && audioTurnComplete) onAllAudioDone();
+      if (playingCount === 0 && pendingDecodes === 0 && audioTurnComplete) onAllAudioDone();
     };
   }
 
@@ -226,6 +236,7 @@
 
       ws.onmessage = (event) => {
         if (event.data instanceof ArrayBuffer) {
+          pendingDecodes++;
           playReplyAudio(event.data);
           return;
         }
@@ -240,19 +251,16 @@
           } else if (msg.type === 'agent_reply_text') {
             addMessage('assistant', msg.text, msg.language);
           } else if (msg.type === 'agent_audio_end') {
-            // Server has sent all WAVs for this turn. If audio already finished
-            // playing (playingCount === 0), release the mic immediately;
-            // otherwise source.onended will call onAllAudioDone when the last
-            // buffer drains.
+            // Server has sent all WAVs for this turn. Only call onAllAudioDone
+            // when both pendingDecodes AND playingCount are 0 — decodeAudioData
+            // is async so WAVs may still be decoding when this message arrives.
             audioTurnComplete = true;
             if (msg.endCall) pendingCallEnd = true;
-            if (playingCount === 0) onAllAudioDone();
+            if (playingCount === 0 && pendingDecodes === 0) onAllAudioDone();
           } else if (msg.type === 'call_end') {
-            // Server-initiated end (inactivity). Let any queued audio finish
-            // then hang up — onAllAudioDone handles it via pendingCallEnd.
             pendingCallEnd = true;
             audioTurnComplete = true;
-            if (playingCount === 0) onAllAudioDone();
+            if (playingCount === 0 && pendingDecodes === 0) onAllAudioDone();
           } else if (msg.type === 'error') {
             addMessage('system', 'Error: ' + msg.message);
             setStatus(msg.message, 'error');
