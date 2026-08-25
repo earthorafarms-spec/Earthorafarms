@@ -521,6 +521,7 @@ ALTER TABLE "Payments"                ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Order_history"           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "Admin_analytics"         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_settings            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE kacc_users                ENABLE ROW LEVEL SECURITY;
 ALTER TABLE otp_codes                 ENABLE ROW LEVEL SECURITY;
 ALTER TABLE coupon_details            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE festival_details          ENABLE ROW LEVEL SECURITY;
@@ -623,8 +624,15 @@ DROP POLICY IF EXISTS "Admin read orders"     ON orders;
 CREATE POLICY "Admin read orders"     ON orders FOR SELECT TO anon USING (true);
 DROP POLICY IF EXISTS "Users read own orders" ON orders;
 CREATE POLICY "Users read own orders" ON orders FOR SELECT TO authenticated USING (user_id = auth.email() OR user_id = (auth.jwt() ->> 'email'));
-DROP POLICY IF EXISTS "Admin manage orders"   ON orders;
-CREATE POLICY "Admin manage orders"   ON orders FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Admin manage orders"         ON orders;
+DROP POLICY IF EXISTS "Anon checkout insert orders" ON orders;
+CREATE POLICY "Anon checkout insert orders"
+  ON orders FOR INSERT TO anon WITH CHECK (true);
+DROP POLICY IF EXISTS "Auth checkout insert orders" ON orders;
+CREATE POLICY "Auth checkout insert orders"
+  ON orders FOR INSERT TO authenticated WITH CHECK (true);
+-- NOTE: SELECT TO anon is kept via "Admin read orders" for the admin portal.
+-- Long-term: route admin order reads through a service-role proxy.
 DROP POLICY IF EXISTS "Service manage orders" ON orders;
 CREATE POLICY "Service manage orders" ON orders FOR ALL TO service_role USING (true) WITH CHECK (true);
 
@@ -636,8 +644,23 @@ CREATE POLICY "Users read own order_items" ON order_items FOR SELECT TO authenti
   EXISTS (SELECT 1 FROM orders WHERE orders.id = order_items.order_id
     AND (orders.user_id = auth.email() OR orders.user_id = (auth.jwt() ->> 'email')))
 );
-DROP POLICY IF EXISTS "Admin manage order_items"   ON order_items;
-CREATE POLICY "Admin manage order_items"   ON order_items FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Admin manage order_items"          ON order_items;
+DROP POLICY IF EXISTS "Anon checkout insert order_items"  ON order_items;
+CREATE POLICY "Anon checkout insert order_items"
+  ON order_items FOR INSERT TO anon WITH CHECK (true);
+DROP POLICY IF EXISTS "Auth checkout insert order_items"  ON order_items;
+CREATE POLICY "Auth checkout insert order_items"
+  ON order_items FOR INSERT TO authenticated WITH CHECK (true);
+DROP POLICY IF EXISTS "Admin read order_items" ON order_items;
+CREATE POLICY "Admin read order_items"
+  ON order_items FOR SELECT TO anon USING (true);
+DROP POLICY IF EXISTS "Users read own order_items" ON order_items;
+CREATE POLICY "Users read own order_items"
+  ON order_items FOR SELECT TO authenticated
+  USING (order_id IN (
+    SELECT id FROM orders
+    WHERE user_id = auth.email() OR user_id = (auth.jwt() ->> 'email')
+  ));
 DROP POLICY IF EXISTS "Service manage order_items" ON order_items;
 CREATE POLICY "Service manage order_items" ON order_items FOR ALL TO service_role USING (true) WITH CHECK (true);
 
@@ -719,6 +742,30 @@ CREATE POLICY "Admin read sms_alert_logs"     ON sms_alert_logs FOR SELECT TO an
 DROP POLICY IF EXISTS "Service manage sms_alert_logs" ON sms_alert_logs;
 CREATE POLICY "Service manage sms_alert_logs" ON sms_alert_logs FOR ALL TO service_role USING (true) WITH CHECK (true);
 
+-- kacc_users
+DROP POLICY IF EXISTS "Service manage kacc_users" ON kacc_users;
+CREATE POLICY "Service manage kacc_users"
+  ON kacc_users FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Admin read kacc_users" ON kacc_users;
+CREATE POLICY "Admin read kacc_users"
+  ON kacc_users FOR SELECT TO anon, authenticated USING (true);
+
+-- admin_settings
+DROP POLICY IF EXISTS "Service manage admin_settings" ON admin_settings;
+CREATE POLICY "Service manage admin_settings"
+  ON admin_settings FOR ALL TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Admin read admin_settings" ON admin_settings;
+CREATE POLICY "Admin read admin_settings"
+  ON admin_settings FOR SELECT TO anon USING (true);
+DROP POLICY IF EXISTS "Admin update admin_settings" ON admin_settings;
+CREATE POLICY "Admin update admin_settings"
+  ON admin_settings FOR UPDATE TO anon USING (true) WITH CHECK (true);
+
+-- customer_restock_requests unique constraint (M-06)
+ALTER TABLE customer_restock_requests
+  ADD CONSTRAINT unique_restock_per_product_phone
+    UNIQUE (product_id, customer_phone);
+
 -- Storage
 DROP POLICY IF EXISTS "Public read product images"      ON storage.objects;
 CREATE POLICY "Public read product images"      ON storage.objects FOR SELECT TO anon, authenticated USING (bucket_id = 'product-images');
@@ -749,7 +796,7 @@ GRANT INSERT, UPDATE, DELETE ON festival_details    TO anon, authenticated;
 GRANT INSERT, DELETE         ON festival_deal_products TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON coupon_details TO anon, authenticated;
 GRANT INSERT, UPDATE, DELETE ON orders, order_items TO anon, authenticated;
-GRANT INSERT, UPDATE, DELETE ON kacc_users          TO anon, authenticated;
+-- kacc_users: RLS restricts writes to service_role only; no direct anon writes
 GRANT INSERT                 ON "Order_history"     TO anon;
 GRANT INSERT                 ON review_details, "Contact_details",
   customer_restock_requests, "Admin_analytics", analytics_events

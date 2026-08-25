@@ -192,9 +192,18 @@ END $$;
 -- ─────────────────────────────────────────────────────────────────────────
 -- M-06: Prevent duplicate restock requests per product/phone combination
 -- ─────────────────────────────────────────────────────────────────────────
-ALTER TABLE customer_restock_requests
-  ADD CONSTRAINT IF NOT EXISTS unique_restock_per_product_phone
-    UNIQUE (product_id, customer_phone);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE table_name = 'customer_restock_requests'
+      AND constraint_name = 'unique_restock_per_product_phone'
+  ) THEN
+    ALTER TABLE customer_restock_requests
+      ADD CONSTRAINT unique_restock_per_product_phone
+        UNIQUE (product_id, customer_phone);
+  END IF;
+END $$;
 
 
 -- ─────────────────────────────────────────────────────────────────────────
