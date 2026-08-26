@@ -96,3 +96,7 @@ async function main(): Promise<void> {
 }
 
 await main();
+// Sarvam's HTTP client keeps an idle connection alive for roughly 30 seconds.
+// This is a one-shot CLI probe, so exit after stdout has been emitted instead
+// of making deploy verification wait for that unrelated keep-alive timer.
+process.exit(0);
