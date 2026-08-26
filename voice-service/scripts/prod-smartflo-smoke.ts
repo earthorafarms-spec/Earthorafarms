@@ -7,6 +7,7 @@ import { mulaw8kToPcm16k } from '../src/telephony/mulaw.js';
 
 const socketUrl = process.env.SMOKE_WSS_URL ?? 'wss://earthorafarms.onrender.com/ws/voice/smartflo';
 const callerPhrase = 'What products are available at Earthora Farms?';
+const speakBeforeGreeting = process.env.SMOKE_EARLY_SPEECH === 'true';
 const callSid = `codex-smoke-${Date.now()}`;
 const streamSid = `codex-stream-${Date.now()}`;
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -47,26 +48,34 @@ async function main(): Promise<void> {
     throw new Error(`Timed out waiting for ${prefix} mark; events=${messages.map((m) => m.event).join(',')}`);
   };
 
+  let inboundChunk = 1;
+  const sendCallerAudio = async () => {
+    for (let offset = 0; offset < callerMulaw.length; offset += 800) {
+      const frame = callerMulaw.subarray(offset, Math.min(offset + 800, callerMulaw.length));
+      ws.send(JSON.stringify({
+        event: 'media', streamSid,
+        media: { payload: frame.toString('base64'), chunk: String(inboundChunk++), timestamp: String(offset / 8) },
+      }));
+      await sleep(100);
+    }
+    for (let i = 0; i < 7; i++) {
+      ws.send(JSON.stringify({
+        event: 'media', streamSid,
+        media: { payload: Buffer.alloc(800, 0xff).toString('base64'), chunk: String(inboundChunk++), timestamp: String(callerMulaw.length / 8 + i * 100) },
+      }));
+      await sleep(100);
+    }
+  };
+
+  if (speakBeforeGreeting) await sendCallerAudio();
   const greetingMark = await waitForMark('greeting-', 45_000);
+  const greetingAudioBytes = messages
+    .filter((message) => message.event === 'media' && message.media?.payload)
+    .reduce((sum, message) => sum + Buffer.from(message.media.payload, 'base64').length, 0);
   ws.send(JSON.stringify({ event: 'mark', streamSid, mark: { name: greetingMark.mark.name } }));
   messages.length = 0;
 
-  let inboundChunk = 1;
-  for (let offset = 0; offset < callerMulaw.length; offset += 800) {
-    const frame = callerMulaw.subarray(offset, Math.min(offset + 800, callerMulaw.length));
-    ws.send(JSON.stringify({
-      event: 'media', streamSid,
-      media: { payload: frame.toString('base64'), chunk: String(inboundChunk++), timestamp: String(offset / 8) },
-    }));
-    await sleep(100);
-  }
-  for (let i = 0; i < 7; i++) {
-    ws.send(JSON.stringify({
-      event: 'media', streamSid,
-      media: { payload: Buffer.alloc(800, 0xff).toString('base64'), chunk: String(inboundChunk++), timestamp: String(callerMulaw.length / 8 + i * 100) },
-    }));
-    await sleep(100);
-  }
+  if (!speakBeforeGreeting) await sendCallerAudio();
 
   const responseMark = await Promise.race([
     waitForMark('reply-', 60_000),
@@ -86,7 +95,7 @@ async function main(): Promise<void> {
     format: 'wav', languageHint: 'en',
   });
   console.log(JSON.stringify({
-    socketUrl, callSid, callerPhrase,
+    socketUrl, callSid, callerPhrase, speakBeforeGreeting, greetingAudioBytes,
     botMark: responseMark.mark.name,
     outboundAudioBytes: responseMulaw.length,
     botTranscript: botTranscript.text,
