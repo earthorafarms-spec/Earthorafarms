@@ -31,6 +31,8 @@ describe('normalizeVoiceTranscript', () => {
       .toEqual({ accepted: true, text: 'Products available at Earthora Farms?' });
     expect(normalizeVoiceTranscript({ text: 'Products available at Athora Farms?' }))
       .toEqual({ accepted: true, text: 'Products available at Earthora Farms?' });
+    expect(normalizeVoiceTranscript({ text: 'What is available at Ertora Farms?' }))
+      .toEqual({ accepted: true, text: 'What is available at Earthora Farms?' });
   });
 
   it('drops punctuation-only output', () => {

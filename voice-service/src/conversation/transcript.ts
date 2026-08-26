@@ -33,8 +33,8 @@ export function normalizeVoiceTranscript(result: TranscriptionResult): Transcrip
   if (!/[\p{L}\p{N}]/u.test(text)) return { accepted: false, reason: 'no_speech_content' };
 
   text = text
-    .replace(/\b(?:a(?:r)?thora|earth\s*aura)\s+(?:farms?|firms?)\b/gi, 'Earthora Farms')
-    .replace(/\ba(?:r)?thora\b/gi, 'Earthora')
+    .replace(/\b(?:a(?:r)?thora|ertora|earth\s*aura)\s+(?:farms?|firms?)\b/gi, 'Earthora Farms')
+    .replace(/\b(?:a(?:r)?thora|ertora)\b/gi, 'Earthora')
     .slice(0, MAX_TRANSCRIPT_CHARS)
     .trim();
 
