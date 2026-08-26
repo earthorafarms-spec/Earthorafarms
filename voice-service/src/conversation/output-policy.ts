@@ -62,6 +62,24 @@ const CURRENCY_PATTERN = /₹\s?[\d,]+(?:\.\d+)?/g;
 const PRODUCT_AVAILABILITY_CLAIM_PATTERN =
   /\b(in stock|out of stock|low stock|available|unavailable|don'?t have|do not have|doesn'?t have|does not have|no products?|not carry|don'?t (sell|carry)|we (have|sell|carry)|\d+\s+units?\s+(left|available))\b|उपलब्ध|मौजूद|स्टॉक\s*में|ઉપલબ્ધ|હાજર|સ્ટોકમાં/gi;
 
+const PRODUCT_HEALTH_CLAIM_PATTERN =
+  /\b(benefits?|dosage|ingredients?|contraindications?|side effects?|recommended dose|take\s+\d+|contains?|made from|treats?|cures?|prevents?|reduces?\s+(?:pain|sugar|weight|cholesterol)|supports?\s+(?:immunity|digestion|health|wellness))\b|खुराक|सामग्री|फायदे|लाभ|ચેતવણી|માત્રા|ઘટકો|ફાયદા/gi;
+
+const PRICE_GROUNDING_TOOLS = new Set([
+  'list_products', 'get_product_details', 'get_cart', 'add_cart_item',
+  'update_cart_item', 'remove_cart_item', 'create_verification_link',
+]);
+const AVAILABILITY_GROUNDING_TOOLS = new Set(['list_products', 'get_product_details']);
+
+function isSuccessfulFact(fact: TurnToolFact): boolean {
+  try {
+    const value = JSON.parse(fact.resultJson) as Record<string, unknown>;
+    return !value.error && value.ok !== false && value.found !== false;
+  } catch {
+    return false;
+  }
+}
+
 const ORDER_STATUS_DEFLECTION: Record<SupportedLanguage, string> = {
   en: 'your order status will be shown once payment is confirmed',
   hi: 'भुगतान की पुष्टि होने के बाद आपके ऑर्डर की स्थिति दिखाई जाएगी',
@@ -141,20 +159,31 @@ export function enforceOutputPolicy(
   // replacement for "the specific price/stock claim you just made" — the
   // best fix is a fresh, correctly-grounded answer from the model. ──
   const attributionViolations: string[] = [];
-  const factsBlob = turnFacts.map((f) => f.resultJson).join('\n');
+  const successfulFacts = turnFacts.filter(isSuccessfulFact);
+  const priceFactsBlob = successfulFacts
+    .filter((f) => PRICE_GROUNDING_TOOLS.has(f.toolName))
+    .map((f) => f.resultJson)
+    .join('\n');
 
   const currencyMatches = text.match(CURRENCY_PATTERN) ?? [];
   for (const match of currencyMatches) {
     const numeric = numberFromCurrencyMatch(match);
-    if (!factsBlob.includes(numeric)) {
+    if (!priceFactsBlob.includes(numeric)) {
       attributionViolations.push(`unattributed price claim: ${match}`);
     }
   }
 
   const availabilityMatches = text.match(PRODUCT_AVAILABILITY_CLAIM_PATTERN) ?? [];
-  const hasBadAvailabilityClaim = availabilityMatches.length > 0 && turnFacts.length === 0;
+  const hasAvailabilityGrounding = successfulFacts.some((f) => AVAILABILITY_GROUNDING_TOOLS.has(f.toolName));
+  const hasBadAvailabilityClaim = availabilityMatches.length > 0 && !hasAvailabilityGrounding;
   if (hasBadAvailabilityClaim) {
     attributionViolations.push('product/stock availability claim (positive or negative) made with no tool call this turn');
+  }
+
+  const healthClaimMatches = text.match(PRODUCT_HEALTH_CLAIM_PATTERN) ?? [];
+  const hasKnowledgeGrounding = successfulFacts.some((f) => f.toolName === 'get_product_knowledge');
+  if (healthClaimMatches.length > 0 && !hasKnowledgeGrounding) {
+    attributionViolations.push('product health/ingredients/dosage claim made without approved knowledge this turn');
   }
 
   if (attributionViolations.length === 0) {

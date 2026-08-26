@@ -5,6 +5,8 @@ import { buildStt, buildTtsForLanguage } from '../providers.js';
 import { processBrowserMessage } from '../adapters/browser.js';
 import { getCallSession, updateCallSessionState } from '../repositories/callSessions.repository.js';
 import { splitSentences } from '../adapters/wav-utils.js';
+import { normalizeVoiceTranscript } from '../conversation/transcript.js';
+import { config } from '../config.js';
 
 // Real-time voice over a continuous WebSocket stream — no push-to-talk.
 // Client streams raw PCM16 mono 16kHz audio the whole time the call is
@@ -147,36 +149,27 @@ export async function registerVoiceStreamRoutes(app: FastifyInstance): Promise<v
 
           const wav = pcm16ToWav(pcmUtterance);
           const stt = buildStt();
-          const transcription = await stt.transcribe(wav, { format: 'wav' });
-
-          if (!transcription.text.trim()) {
-            return; // false trigger — nothing to respond to
-          }
-
-          // Drop transcriptions in scripts we don't support (Kannada, Tamil,
-          // Telugu, Malayalam, Odia, …). Sarvam sometimes picks up background
-          // audio and transcribes it as a regional Indian language — those turns
-          // would confuse the LLM and should be silently discarded.
-          // Unicode ranges: Odia U+0B00-U+0B7F, Tamil U+0B80-U+0BFF,
-          // Telugu U+0C00-U+0C7F, Kannada U+0C80-U+0CFF, Malayalam U+0D00-U+0D7F.
-          // Devanagari (U+0900-U+097F) and Gujarati (U+0A80-U+0AFF) are supported.
-          if (/[଀-෿]/.test(transcription.text)) {
-            req.log.info({ text: transcription.text }, 'dropping turn — unsupported script');
+          const transcription = await stt.transcribe(wav, {
+            format: 'wav',
+            languageHint: session.conversationState.currentLanguage,
+          });
+          const decision = normalizeVoiceTranscript(transcription);
+          if (!decision.accepted) {
+            req.log.info({
+              reason: decision.reason,
+              detectedLanguageCode: transcription.detectedLanguageCode ?? null,
+              languageProbability: transcription.languageProbability ?? null,
+            }, 'dropping untrusted voice transcript');
             return;
           }
 
-          // Correct common STT misrecognitions of brand/product names.
-          transcription.text = transcription.text
-            .replace(/\barthora\s+farms?\b/gi, 'Earthora Farms')
-            .replace(/\barthora\b/gi, 'Earthora');
-
           send(socket, {
             type: 'user_transcript',
-            text: transcription.text,
+            text: decision.text,
             language: transcription.detectedLanguage,
           });
 
-          const result = await processBrowserMessage(sessionId, transcription.text);
+          const result = await processBrowserMessage(sessionId, decision.text);
           send(socket, { type: 'agent_reply_text', text: result.replyText, language: result.language });
 
           await streamTts(socket, result.replyText, result.language);
@@ -240,7 +233,7 @@ export async function registerVoiceStreamRoutes(app: FastifyInstance): Promise<v
         } else {
           void runTurn(utterance);
         }
-      });
+      }, { speechRmsThreshold: config.VOICE_SPEECH_RMS_THRESHOLD });
 
       void runGreeting();
 

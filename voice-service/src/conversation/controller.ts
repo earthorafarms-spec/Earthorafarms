@@ -80,12 +80,17 @@ export async function processTurn(
   // separate compaction.
   const turnCallCache = new Map<string, unknown>();
   let regenerateAttempts = 0;
+  let transientCorrection: ConversationMessage | null = null;
 
   for (let iteration = 0; iteration < MAX_TOOL_LOOP_ITERATIONS; iteration++) {
     // Per-turn provider selection — see providers.ts. In LLM_PROVIDER=auto,
     // this is what actually routes Hindi/Gujarati to Sarvam and English to
     // OpenAI (with a same-turn fallback to OpenAI if Sarvam errors).
-    const result = await chatWithRouting([systemMessage, ...state.messages], toolDefs, state.currentLanguage);
+    const result = await chatWithRouting(
+      [systemMessage, ...state.messages, ...(transientCorrection ? [transientCorrection] : [])],
+      toolDefs,
+      state.currentLanguage
+    );
 
     if (result.kind === 'tool_calls') {
       state.messages.push({
@@ -135,10 +140,9 @@ export async function processTurn(
       regenerateAttempts++;
       // eslint-disable-next-line no-console
       console.warn('[output-policy] regenerating turn:', policyResult.violations);
-      // The rejected candidate is never added to history. Instead push the
-      // corrective instruction as a system-role message and loop back to
-      // the model for a fresh attempt at THIS turn's final answer.
-      state.messages.push({ role: 'system', content: `[Correction] ${policyResult.instruction}` });
+      // Turn-local only: never persist a correction into future conversation
+      // history, where it can distort unrelated later turns.
+      transientCorrection = { role: 'system', content: `[Correction] ${policyResult.instruction}` };
       continue;
     }
 

@@ -24,7 +24,11 @@ function missingRequiredFields(fields: CheckoutFieldSnapshot): AllowedField[] {
 
 function normalizeAndValidate(field: AllowedField, rawValue: unknown): { value: unknown; error?: string } {
   if (field === 'marketingConsent') {
-    return { value: Boolean(rawValue) };
+    if (typeof rawValue === 'boolean') return { value: rawValue };
+    const normalized = String(rawValue).trim().toLowerCase();
+    if (normalized === 'true') return { value: true };
+    if (normalized === 'false') return { value: false };
+    return { value: false, error: 'Marketing consent must be true or false.' };
   }
   const value = String(rawValue ?? '').trim();
   if (field === 'email' && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {

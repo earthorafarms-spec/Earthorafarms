@@ -8,6 +8,8 @@ export interface BrowserMessageResult {
   language: SupportedLanguage;
   /** True when create_verification_link succeeded this turn — caller should end the call after audio finishes. */
   callShouldEnd: boolean;
+  /** Deterministic guard interventions applied to this reply. */
+  policyViolations: string[];
 }
 
 // The real, working transport: plain text in, plain text out, over HTTP
@@ -31,5 +33,10 @@ export async function processBrowserMessage(callSessionId: string, text: string)
     try { return (JSON.parse(f.resultJson) as { ok?: boolean })?.ok === true; } catch { return false; }
   });
 
-  return { replyText: outcome.replyText, language: outcome.state.currentLanguage, callShouldEnd };
+  return {
+    replyText: outcome.replyText,
+    language: outcome.state.currentLanguage,
+    callShouldEnd,
+    policyViolations: outcome.policyViolations,
+  };
 }

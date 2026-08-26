@@ -56,11 +56,18 @@ const optionalSchema = z.object({
   // sarvam-105b is the current default. Check Sarvam's dashboard/docs before
   // assuming this default is still current; their model lineup moves fast.
   SARVAM_MODEL: z.string().default('sarvam-105b'),
+  // Pin STT instead of inheriting a moving SDK/server default.
+  SARVAM_STT_MODEL: z.enum(['saaras:v3', 'saaras:v4']).default('saaras:v3'),
+  SARVAM_STT_MIN_LANGUAGE_PROBABILITY: z.coerce.number().min(0).max(1).default(0.6),
   // Voice name for Sarvam TTS (bulbul:v3). Defaults to "neha" rather than
   // Sarvam's own default ("shubh") — "neha" is the voice a reference project
   // (D:\Work\Sun\Agent) landed on after direct comparison; override here to
   // try another (e.g. "shubh", "priya", "rahul").
   SARVAM_TTS_SPEAKER: z.string().default('neha'),
+  VOICE_STT_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(15_000),
+  VOICE_LLM_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(30_000),
+  VOICE_TTS_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(15_000),
+  VOICE_SPEECH_RMS_THRESHOLD: z.coerce.number().int().min(50).max(5_000).default(600),
   // Public bot socket advertised to the voice platform's dynamic resolver.
   // Example: wss://voice.example.com/ws/voice/smartflo
   VOICE_STREAM_PUBLIC_WSS_URL: z.string().url().refine((url) => url.startsWith('wss://'), {

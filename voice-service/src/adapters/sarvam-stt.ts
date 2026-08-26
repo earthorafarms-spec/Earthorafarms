@@ -5,15 +5,20 @@ import type { SupportedLanguage } from '../conversation/language.js';
 
 // Verified against the installed `sarvamai` SDK's type definitions before
 // writing this (SpeechToTextTranscriptionRequest/-Response) — not guessed.
-// saarika:v2.5 (the default model) supports en-IN/hi-IN/gu-IN plus 9 other
-// Indian languages, and auto-detects when language_code is 'unknown' or
-// omitted — used here so a caller never has to pre-select a language before
-// speaking. WebM (the format browsers' MediaRecorder produces by default)
-// is in Sarvam's documented list of auto-detected container formats.
+// Saaras v3 is pinned in config instead of inheriting a moving provider
+// default. Auto-detection permits supported language switching. Unsupported
+// detections remain visible to the transcript guard and are rejected instead
+// of being relabelled by a forced-language retry. Low-confidence supported
+// detections are retried once using the conversation language.
 const BCP47_TO_SUPPORTED: Record<string, SupportedLanguage> = {
   'en-IN': 'en',
   'hi-IN': 'hi',
   'gu-IN': 'gu',
+};
+const SUPPORTED_TO_BCP47: Record<SupportedLanguage, 'en-IN' | 'hi-IN' | 'gu-IN'> = {
+  en: 'en-IN',
+  hi: 'hi-IN',
+  gu: 'gu-IN',
 };
 
 export class SarvamSttAdapter implements SttAdapter {
@@ -32,14 +37,41 @@ export class SarvamSttAdapter implements SttAdapter {
 
     const response = await this.client.speechToText.transcribe({
       file: { data: audio, filename: `utterance.${format}`, contentType },
-      // Always let Sarvam auto-detect rather than pin to languageHint — a
-      // caller switching languages mid-call must be picked up from their
-      // actual speech, not overridden by what the last turn happened to be.
+      model: config.SARVAM_STT_MODEL,
+      mode: 'transcribe',
       language_code: 'unknown',
-    });
+    }, { timeoutInSeconds: config.VOICE_STT_TIMEOUT_MS / 1_000 });
 
-    const detectedLanguage = response.language_code ? BCP47_TO_SUPPORTED[response.language_code] : undefined;
+    const autoCode = response.language_code;
+    const probability = response.language_probability;
+    const unsupportedLanguage = Boolean(autoCode && !BCP47_TO_SUPPORTED[autoCode]);
+    const lowConfidence = probability !== undefined && probability < config.SARVAM_STT_MIN_LANGUAGE_PROBABILITY;
 
-    return { text: response.transcript, detectedLanguage };
+    if (opts?.languageHint && !unsupportedLanguage && lowConfidence) {
+      const retry = await this.client.speechToText.transcribe({
+        file: { data: audio, filename: `utterance.${format}`, contentType },
+        model: config.SARVAM_STT_MODEL,
+        mode: 'transcribe',
+        language_code: SUPPORTED_TO_BCP47[opts.languageHint],
+      }, { timeoutInSeconds: config.VOICE_STT_TIMEOUT_MS / 1_000 });
+
+      return {
+        text: retry.transcript,
+        detectedLanguage: opts.languageHint,
+        detectedLanguageCode: SUPPORTED_TO_BCP47[opts.languageHint],
+        languageProbability: probability,
+        wasRetried: true,
+      };
+    }
+
+    const detectedLanguage = autoCode ? BCP47_TO_SUPPORTED[autoCode] : undefined;
+
+    return {
+      text: response.transcript,
+      detectedLanguage,
+      detectedLanguageCode: autoCode,
+      languageProbability: probability,
+      wasRetried: false,
+    };
   }
 }

@@ -5,11 +5,14 @@ const SAMPLE_RATE = 16_000;
 
 /** Builds a PCM16 mono chunk of `ms` milliseconds, either loud (speech-like) or silent. */
 function chunk(ms: number, loud: boolean): Buffer {
+  return amplitudeChunk(ms, loud ? 8000 : 0);
+}
+
+function amplitudeChunk(ms: number, amplitude: number): Buffer {
   const sampleCount = Math.round((ms / 1000) * SAMPLE_RATE);
   const buf = Buffer.alloc(sampleCount * 2);
   for (let i = 0; i < sampleCount; i++) {
-    // A loud sine-ish wave comfortably above the silence threshold; near-zero for silence.
-    const value = loud ? (i % 2 === 0 ? 8000 : -8000) : 0;
+    const value = i % 2 === 0 ? amplitude : -amplitude;
     buf.writeInt16LE(value, i * 2);
   }
   return buf;
@@ -37,6 +40,37 @@ describe('AudioAccumulator', () => {
 
     const flushedBuffer = onReady.mock.calls[0][0] as Buffer;
     expect(flushedBuffer.length).toBeGreaterThan(0);
+  });
+
+  it('accepts quiet telephone speech above the production gate', () => {
+    const onReady = vi.fn();
+    const acc = new AudioAccumulator(onReady);
+    for (let i = 0; i < 4; i++) acc.push(amplitudeChunk(100, 700));
+    for (let i = 0; i < 7; i++) acc.push(chunk(100, false));
+    expect(onReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps 200ms of pre-roll so quiet leading phonemes are not clipped', () => {
+    const onReady = vi.fn();
+    const acc = new AudioAccumulator(onReady);
+    acc.push(amplitudeChunk(100, 300));
+    acc.push(amplitudeChunk(100, 300));
+    for (let i = 0; i < 3; i++) acc.push(amplitudeChunk(100, 800));
+    for (let i = 0; i < 7; i++) acc.push(chunk(100, false));
+
+    const flushed = onReady.mock.calls[0][0] as Buffer;
+    expect(Math.abs(flushed.readInt16LE(0))).toBe(300);
+    expect(flushed.length).toBeGreaterThanOrEqual(1_200 * 32);
+  });
+
+  it('fires onSpeechStart once per utterance for barge-in handling', () => {
+    const onReady = vi.fn();
+    const onSpeechStart = vi.fn();
+    const acc = new AudioAccumulator(onReady, { onSpeechStart });
+    for (let i = 0; i < 4; i++) acc.push(chunk(100, true));
+    for (let i = 0; i < 7; i++) acc.push(chunk(100, false));
+    expect(onSpeechStart).toHaveBeenCalledTimes(1);
+    expect(onReady).toHaveBeenCalledTimes(1);
   });
 
   it('does NOT flush on a brief pause shorter than the silence threshold', () => {

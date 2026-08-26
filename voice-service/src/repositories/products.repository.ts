@@ -41,12 +41,12 @@ function mapRow(row: DbProductRow): ProductSummary {
   };
 }
 
-/** Only non-archived products — this is the entire universe of things the agent may ever offer. */
+/** Only active products — this is the entire universe of things the agent may ever offer. */
 export async function listActiveProducts(): Promise<ProductSummary[]> {
   const { data, error } = await supabase
     .from('products')
     .select('id, slug, name, mrp, price, status, tag, badge, description, highlights, inventory(total_stock, low_stock_threshold)')
-    .neq('status', 'archived')
+    .eq('status', 'active')
     .order('created_at', { ascending: true });
 
   if (error) throw error;
@@ -58,7 +58,7 @@ export async function getProductById(productId: string): Promise<ProductSummary 
     .from('products')
     .select('id, slug, name, mrp, price, status, tag, badge, description, highlights, inventory(total_stock, low_stock_threshold)')
     .eq('id', productId)
-    .neq('status', 'archived')
+    .eq('status', 'active')
     .maybeSingle();
 
   if (error) throw error;
@@ -71,7 +71,7 @@ export async function findProductByName(query: string): Promise<ProductSummary |
   const { data, error } = await supabase
     .from('products')
     .select('id, slug, name, mrp, price, status, tag, badge, description, highlights, inventory(total_stock, low_stock_threshold)')
-    .neq('status', 'archived')
+    .eq('status', 'active')
     .ilike('name', `%${query}%`)
     .limit(1)
     .maybeSingle();

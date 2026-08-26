@@ -4,6 +4,8 @@ import { createInitialState } from '../conversation/state.js';
 import { processBrowserMessage } from '../adapters/browser.js';
 import { sendMessageBodySchema } from '../schemas/voice.js';
 import { buildStt, buildTtsForLanguage } from '../providers.js';
+import { getCallSession } from '../repositories/callSessions.repository.js';
+import { normalizeVoiceTranscript } from '../conversation/transcript.js';
 
 // Fastify only auto-parses application/json and text/plain by default — a
 // browser-recorded audio blob (audio/webm, audio/ogg, etc.) needs an
@@ -52,20 +54,28 @@ export async function registerVoiceRoutes(app: FastifyInstance): Promise<void> {
       }
 
       try {
-        const stt = buildStt();
-        const transcription = await stt.transcribe(audio);
+        const session = await getCallSession(req.params.id);
+        if (!session) return reply.status(404).send({ error: 'unknown_session' });
 
-        if (!transcription.text.trim()) {
-          return reply.status(422).send({ error: 'empty_transcript' });
+        const stt = buildStt();
+        const format = String(req.headers['content-type'] ?? '').includes('wav') ? 'wav' : 'webm';
+        const transcription = await stt.transcribe(audio, {
+          format,
+          languageHint: session.conversationState.currentLanguage,
+        });
+        const decision = normalizeVoiceTranscript(transcription);
+
+        if (!decision.accepted) {
+          return reply.status(422).send({ error: 'untrusted_transcript', reason: decision.reason });
         }
 
-        const result = await processBrowserMessage(req.params.id, transcription.text);
+        const result = await processBrowserMessage(req.params.id, decision.text);
 
         const tts = buildTtsForLanguage(result.language);
         const audioReply = await tts.synthesize(result.replyText, result.language);
 
         return reply.send({
-          transcript: transcription.text,
+          transcript: decision.text,
           detectedLanguage: transcription.detectedLanguage ?? null,
           reply: result.replyText,
           replyLanguage: result.language,

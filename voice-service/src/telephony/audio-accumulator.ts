@@ -17,16 +17,10 @@
 const SAMPLE_RATE = 16_000; // 16-bit mono PCM, matches what the browser client captures and what Sarvam STT works best with
 const BYTES_PER_SAMPLE = 2;
 
-// Tunable thresholds — starting points, not measured against real calls yet
-// (see voice-service/README.md: same "provisional, verify in real use"
-// posture as the localized safety strings and the RESPELL-style lessons
-// pulled from the reference projects).
-// Energy below this = silence. 600 is a compromise: low enough that the room
-// naturally falls below it after speech ends (enabling flush), high enough to
-// ignore a quiet hum. Raising this too high (e.g. 1000) breaks flush detection
-// because ambient noise never dips below the threshold — the accumulator then
-// waits for MAX_UTTERANCE_MS before giving up (feels like the agent is frozen).
-const SILENCE_RMS_THRESHOLD = 900;
+// Telephone speech is substantially quieter than browser microphone PCM.
+// Keep the default conservative but configurable per deployment, and retain
+// a short pre-roll so leading consonants below the gate are not clipped.
+const DEFAULT_SPEECH_RMS_THRESHOLD = 600;
 // Short enough to capture "yes", "okay", one-word answers. The client-side
 // MIN_TRANSMIT_RMS gate already filters near-silent non-speech before it
 // reaches the server, so a low MIN_SPEECH_MS is safe.
@@ -38,6 +32,7 @@ const MIN_SPEECH_MS_BEFORE_FLUSH = 200;
 // aggressive — it was flushing mid-sentence pauses as if the turn had ended.
 const SILENCE_MS_TO_FLUSH = 700;
 const MAX_UTTERANCE_MS = 20_000; // safety cap — force-flush a runaway utterance rather than buffer forever
+const PRE_ROLL_MS = 200;
 
 function msToBytes(ms: number): number {
   return Math.round((ms / 1000) * SAMPLE_RATE * BYTES_PER_SAMPLE);
@@ -56,6 +51,11 @@ function rms(chunk: Buffer): number {
 
 export type UtteranceReadyCallback = (pcm16Mono16k: Buffer) => void;
 
+export interface AudioAccumulatorOptions {
+  speechRmsThreshold?: number;
+  onSpeechStart?: () => void;
+}
+
 /**
  * Feed raw PCM16 mono 16kHz chunks in via `push()` as they arrive from the
  * WebSocket. Calls `onUtteranceReady` with the accumulated speech buffer
@@ -64,20 +64,36 @@ export type UtteranceReadyCallback = (pcm16Mono16k: Buffer) => void;
  */
 export class AudioAccumulator {
   private speechBuffer: Buffer[] = [];
+  private preRollBuffer: Buffer[] = [];
+  private preRollMs = 0;
   private speechMs = 0;
   private silenceMs = 0;
   private hasSpeechStarted = false;
 
-  constructor(private readonly onUtteranceReady: UtteranceReadyCallback) {}
+  private readonly speechRmsThreshold: number;
+
+  constructor(
+    private readonly onUtteranceReady: UtteranceReadyCallback,
+    private readonly options: AudioAccumulatorOptions = {}
+  ) {
+    this.speechRmsThreshold = options.speechRmsThreshold ?? DEFAULT_SPEECH_RMS_THRESHOLD;
+  }
 
   push(chunk: Buffer): void {
     const chunkMs = (chunk.length / (SAMPLE_RATE * BYTES_PER_SAMPLE)) * 1000;
     const energy = rms(chunk);
-    const isSpeech = energy >= SILENCE_RMS_THRESHOLD;
+    const isSpeech = energy >= this.speechRmsThreshold;
 
     if (isSpeech) {
-      this.hasSpeechStarted = true;
-      this.speechBuffer.push(chunk);
+      if (!this.hasSpeechStarted) {
+        this.hasSpeechStarted = true;
+        this.speechBuffer.push(...this.preRollBuffer, chunk);
+        this.preRollBuffer = [];
+        this.preRollMs = 0;
+        this.options.onSpeechStart?.();
+      } else {
+        this.speechBuffer.push(chunk);
+      }
       this.speechMs += chunkMs;
       this.silenceMs = 0;
     } else if (this.hasSpeechStarted) {
@@ -85,8 +101,9 @@ export class AudioAccumulator {
       // cadence and Sarvam's STT should see it, not a hard cut mid-word.
       this.speechBuffer.push(chunk);
       this.silenceMs += chunkMs;
+    } else {
+      this.addPreRoll(chunk, chunkMs);
     }
-    // else: silence before any speech has started at all — discard, nothing to buffer yet.
 
     const enoughSpeech = this.speechMs >= MIN_SPEECH_MS_BEFORE_FLUSH;
     const longEnoughSilence = this.silenceMs >= SILENCE_MS_TO_FLUSH;
@@ -114,9 +131,21 @@ export class AudioAccumulator {
 
   private reset(): void {
     this.speechBuffer = [];
+    this.preRollBuffer = [];
+    this.preRollMs = 0;
     this.speechMs = 0;
     this.silenceMs = 0;
     this.hasSpeechStarted = false;
+  }
+
+  private addPreRoll(chunk: Buffer, chunkMs: number): void {
+    this.preRollBuffer.push(chunk);
+    this.preRollMs += chunkMs;
+    while (this.preRollMs > PRE_ROLL_MS && this.preRollBuffer.length > 1) {
+      const removed = this.preRollBuffer.shift();
+      if (!removed) break;
+      this.preRollMs -= (removed.length / (SAMPLE_RATE * BYTES_PER_SAMPLE)) * 1_000;
+    }
   }
 }
 

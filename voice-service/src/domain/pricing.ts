@@ -116,9 +116,13 @@ export async function priceCart(
   const byId = new Map(allProducts.map((p) => [p.id, p]));
 
   const pricedLines: PricedLine[] = [];
+  const unavailableProductIds: string[] = [];
   for (const line of lines) {
     const product = byId.get(line.productId);
-    if (!product) continue; // caller (tools/checkout.ts) is responsible for surfacing "product no longer available"
+    if (!product) {
+      unavailableProductIds.push(line.productId);
+      continue;
+    }
     const unitPrice = applyFestivalDealDiscount(product.price, product.id, deals);
     pricedLines.push({
       productId: product.id,
@@ -127,6 +131,10 @@ export async function priceCart(
       unitPrice,
       lineTotal: unitPrice * line.quantity,
     });
+  }
+
+  if (unavailableProductIds.length > 0) {
+    throw new Error(`Cart contains unavailable products: ${unavailableProductIds.join(', ')}`);
   }
 
   const subtotal = pricedLines.reduce((sum, l) => sum + l.lineTotal, 0);

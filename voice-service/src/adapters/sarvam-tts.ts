@@ -6,11 +6,8 @@ import { splitSentences, stitchWavs } from './wav-utils.js';
 
 // bulbul:v3 (default model) returns `audios: string[]` — base64-encoded WAV.
 //
-// NOTE ON THE `as` CAST BELOW: the `sarvamai` package's generated `.d.mts`
-// resolves `SarvamAI.TextToSpeechRequest` to a type missing several fields the
-// source file declares — including `target_language_code` (REQUIRED). This is
-// a TS resolution quirk in the SDK's `export *` chain, not a real API gap.
-// Casting past it rather than fighting a third-party SDK type-export bug.
+// Keep the request type derived from the installed SDK so model and codec
+// fields stay aligned with the version used in production.
 type TtsConvertParams = Parameters<SarvamAIClient['textToSpeech']['convert']>[0];
 
 const SUPPORTED_TO_BCP47: Record<SupportedLanguage, 'en-IN' | 'hi-IN' | 'gu-IN'> = {
@@ -45,13 +42,18 @@ export class SarvamTtsAdapter implements TtsAdapter {
   private async synthesizeOne(text: string, language: SupportedLanguage): Promise<Buffer> {
     const rawRequest = {
       text,
-      target_language_code: SUPPORTED_TO_BCP47[language],
+      language_code: SUPPORTED_TO_BCP47[language],
       model: 'bulbul:v3',
       speaker: config.SARVAM_TTS_SPEAKER,
       pace: PACE_BY_LANGUAGE[language],
       temperature: TTS_TEMPERATURE,
+      speech_sample_rate: 24000,
+      output_audio_codec: 'wav',
     };
-    const response = await this.client.textToSpeech.convert(rawRequest as unknown as TtsConvertParams);
+    const response = await this.client.textToSpeech.convert(
+      rawRequest as unknown as TtsConvertParams,
+      { timeoutInSeconds: config.VOICE_TTS_TIMEOUT_MS / 1_000 }
+    );
     const audioBase64 = response.audios[0];
     if (!audioBase64) throw new Error('Sarvam textToSpeech.convert returned no audio.');
     return Buffer.from(audioBase64, 'base64');
@@ -70,5 +72,32 @@ export class SarvamTtsAdapter implements TtsAdapter {
     // parallel calls cut total TTS time from (n × ~600ms) to ~600ms.
     const wavBuffers = await Promise.all(sentences.map((s) => this.synthesizeOne(s, language)));
     return stitchWavs(wavBuffers, SILENCE_GAP_MS);
+  }
+
+  async synthesizeMulaw8k(text: string, language: SupportedLanguage): Promise<Buffer> {
+    const clipped = text.length > 2500 ? text.slice(0, 2500) : text;
+    const sentences = splitSentences(clipped);
+    const chunks = await Promise.all(sentences.map(async (sentence) => {
+      const request = {
+        text: sentence,
+        language_code: SUPPORTED_TO_BCP47[language],
+        model: 'bulbul:v3',
+        speaker: config.SARVAM_TTS_SPEAKER,
+        pace: PACE_BY_LANGUAGE[language],
+        temperature: TTS_TEMPERATURE,
+        speech_sample_rate: 8000,
+        output_audio_codec: 'mulaw',
+      };
+      const response = await this.client.textToSpeech.convert(
+        request as unknown as TtsConvertParams,
+        { timeoutInSeconds: config.VOICE_TTS_TIMEOUT_MS / 1_000 }
+      );
+      const audioBase64 = response.audios[0];
+      if (!audioBase64) throw new Error('Sarvam textToSpeech.convert returned no mu-law audio.');
+      return Buffer.from(audioBase64, 'base64');
+    }));
+
+    const silence = Buffer.alloc(Math.round(8000 * SILENCE_GAP_MS / 1_000), 0xff);
+    return Buffer.concat(chunks.flatMap((chunk, index) => index === 0 ? [chunk] : [silence, chunk]));
   }
 }

@@ -5,12 +5,10 @@ import path from 'node:path';
 
 const srcToolsDir = path.dirname(fileURLToPath(new URL('../../src/tools/checkout.ts', import.meta.url)));
 
-// create_verification_link is the only tool allowed to trigger an email
-// (see src/tools/checkout.ts). This is a static module-boundary check: no
-// OTHER tool file may import notifications/resend.ts at all, so there is no
-// way for a future edit to a different tool to accidentally start sending
-// email outside that one code path.
-describe('email-sending boundary', () => {
+// Razorpay owns payment-link SMS/email delivery. Tool modules must not send
+// notifications directly; checkout.ts is the only tool allowed to create a
+// Razorpay link.
+describe('payment-link delivery boundary', () => {
   const otherToolFiles = ['products.ts', 'knowledge.ts', 'cart.ts'];
 
   for (const file of otherToolFiles) {
@@ -20,9 +18,10 @@ describe('email-sending boundary', () => {
     });
   }
 
-  it('checkout.ts (which legitimately sends email) does import notifications/resend', () => {
+  it('checkout.ts creates the Razorpay link without importing direct notification adapters', () => {
     const contents = readFileSync(path.join(srcToolsDir, 'checkout.ts'), 'utf8');
-    expect(contents).toMatch(/notifications\/resend/);
+    expect(contents).toMatch(/payments\/razorpay-links/);
+    expect(contents).not.toMatch(/notifications\/resend/);
   });
 
   it('create_verification_link never returns the raw token or URL to the caller', () => {

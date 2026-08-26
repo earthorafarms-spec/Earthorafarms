@@ -61,7 +61,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance): Promise<void
     if (!resolved.ok) return reply.status(404).send({ error: resolved.reason });
     const { session } = resolved;
 
-    if (['order_created', 'finalizing', 'payment_confirmed'].includes(session.status)) {
+    if (['payment_link_created', 'order_created', 'finalizing', 'payment_confirmed'].includes(session.status)) {
       return reply.status(409).send({ error: 'session_locked', message: 'This order can no longer be edited.' });
     }
 
@@ -114,6 +114,10 @@ export async function registerCheckoutRoutes(app: FastifyInstance): Promise<void
     const resolved = await resolveSession(req.params.token);
     if (!resolved.ok) return reply.status(404).send({ error: resolved.reason });
     const { session } = resolved;
+
+    if (['payment_link_created', 'order_created', 'finalizing', 'payment_confirmed'].includes(session.status)) {
+      return reply.status(409).send({ error: 'session_locked', message: 'This order can no longer be repriced.' });
+    }
 
     const items = await listCheckoutItems(session.id);
     if (items.length === 0) {

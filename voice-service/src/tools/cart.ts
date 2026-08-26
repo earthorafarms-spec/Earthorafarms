@@ -65,7 +65,8 @@ export const addCartItemTool: ToolModule = {
     }
 
     const existing = ctx.state.cart.find((l) => l.productId === productId);
-    const nextQty = Math.min(product.stockQty, (existing?.quantity ?? 0) + requestedQty);
+    const previousQty = existing?.quantity ?? 0;
+    const nextQty = Math.min(product.stockQty, previousQty + requestedQty);
 
     if (existing) {
       existing.quantity = nextQty;
@@ -74,7 +75,7 @@ export const addCartItemTool: ToolModule = {
       ctx.state.cart.push({ productId, productName: product.name, quantity: nextQty, unitPrice: price });
     }
 
-    const bounded = nextQty < (existing?.quantity ?? 0) + requestedQty;
+    const bounded = nextQty < previousQty + requestedQty;
     return { ok: true, boundedByStock: bounded, cart: cartSummary(ctx.state.cart) };
   },
 };
@@ -107,6 +108,9 @@ export const updateCartItemTool: ToolModule = {
       return { ok: false, reason: 'product_unavailable' };
     }
     const { price, product } = resolved;
+    if (product.stockQty <= 0 || product.stockLabel === 'Out of Stock') {
+      return { ok: false, reason: 'out_of_stock' };
+    }
     const boundedQty = Math.min(quantity, product.stockQty);
 
     const existing = ctx.state.cart.find((l) => l.productId === productId);

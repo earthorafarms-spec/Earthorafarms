@@ -33,6 +33,24 @@ services:
         sync: false
       - key: SARVAM_MODEL
         value: sarvam-105b
+      - key: STT_PROVIDER
+        value: sarvam
+      - key: TTS_PROVIDER
+        value: sarvam
+      - key: SARVAM_STT_MODEL
+        value: saaras:v3
+      - key: SARVAM_STT_MIN_LANGUAGE_PROBABILITY
+        value: "0.6"
+      - key: SARVAM_TTS_SPEAKER
+        value: neha
+      - key: VOICE_STT_TIMEOUT_MS
+        value: "15000"
+      - key: VOICE_LLM_TIMEOUT_MS
+        value: "30000"
+      - key: VOICE_TTS_TIMEOUT_MS
+        value: "15000"
+      - key: VOICE_SPEECH_RMS_THRESHOLD
+        value: "600"
       # Canonical public telephony socket, for example:
       # wss://earthora-voice-service.onrender.com/ws/voice/smartflo
       - key: VOICE_STREAM_PUBLIC_WSS_URL

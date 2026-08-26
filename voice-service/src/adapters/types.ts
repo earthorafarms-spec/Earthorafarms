@@ -26,6 +26,12 @@ export interface TranscriptionResult {
   text: string;
   /** Present only if the STT provider itself detects/reports a language (e.g. Sarvam's auto-detect). */
   detectedLanguage?: SupportedLanguage;
+  /** Raw BCP-47 provider result, retained so unsupported languages can be rejected safely. */
+  detectedLanguageCode?: string;
+  /** Provider language confidence when auto-detection is used. */
+  languageProbability?: number;
+  /** True when the adapter retried a low-confidence/unsupported auto-detection with a language hint. */
+  wasRetried?: boolean;
 }
 
 export interface SttAdapter {
@@ -45,6 +51,8 @@ export interface SttAdapter {
 export interface TtsAdapter {
   /** Synthesizes speech audio for one piece of text, in the given language. Returns raw audio bytes. */
   synthesize(text: string, language: SupportedLanguage): Promise<Buffer>;
+  /** Optional zero-transcode telephony output: raw G.711 mu-law, mono, 8 kHz. */
+  synthesizeMulaw8k?(text: string, language: SupportedLanguage): Promise<Buffer>;
 }
 
 export class AdapterNotConfiguredError extends Error {

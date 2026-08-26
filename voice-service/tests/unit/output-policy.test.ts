@@ -92,6 +92,33 @@ describe('enforceOutputPolicy', () => {
       expect(result.action).toBe('pass');
     });
 
+    it('does not accept an unrelated tool result as stock grounding', () => {
+      const facts: TurnToolFact[] = [{ toolName: 'set_checkout_field', resultJson: JSON.stringify({ ok: true }) }];
+      const result = enforceOutputPolicy('Yes, Alpha is in stock.', facts, 'test-session');
+      expect(result.action).toBe('regenerate');
+    });
+
+    it('does not accept a failed product lookup as stock grounding', () => {
+      const facts: TurnToolFact[] = [{ toolName: 'get_product_details', resultJson: JSON.stringify({ found: false }) }];
+      const result = enforceOutputPolicy('Yes, Alpha is available.', facts, 'test-session');
+      expect(result.action).toBe('regenerate');
+    });
+
+    it('requires approved knowledge before speaking dosage or benefit claims', () => {
+      const result = enforceOutputPolicy('The recommended dosage supports immunity.', [], 'test-session');
+      expect(result.action).toBe('regenerate');
+      expect(result.violations.some((v) => v.includes('approved knowledge'))).toBe(true);
+    });
+
+    it('allows a health claim grounded by approved knowledge this turn', () => {
+      const facts: TurnToolFact[] = [{
+        toolName: 'get_product_knowledge',
+        resultJson: JSON.stringify({ found: true, entries: [{ content: 'Supports immunity.' }] }),
+      }];
+      const result = enforceOutputPolicy('The approved benefits say it supports immunity.', facts, 'test-session');
+      expect(result.action).toBe('pass');
+    });
+
     it('strike counters are isolated per session', () => {
       enforceOutputPolicy('₹5000 for that.', [], 'session-a'); // strike 1 for session-a only
       const sessionB = enforceOutputPolicy('₹5000 for that.', [], 'session-b');
