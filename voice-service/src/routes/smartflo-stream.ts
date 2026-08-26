@@ -87,6 +87,15 @@ async function yieldForSocket(socket: WebSocket): Promise<void> {
 }
 
 export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promise<void> {
+  // Some Smartflo resolver checks send an empty form-encoded POST even though
+  // the response itself is JSON. Accept that harmless content type so the
+  // request reaches the resolver instead of Fastify rejecting it with 415.
+  if (!app.hasContentTypeParser('application/x-www-form-urlencoded')) {
+    app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => {
+      done(null, body);
+    });
+  }
+
   const resolver = async (req: FastifyRequest, reply: { send: (body: unknown) => unknown }) => {
     const wssUrl = config.VOICE_STREAM_PUBLIC_WSS_URL ?? `${requestOrigin(req)}/ws/voice/smartflo`;
     return reply.send({ success: true, wss_url: wssUrl });

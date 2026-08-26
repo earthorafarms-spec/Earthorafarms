@@ -141,6 +141,15 @@ describe('Smartflo WebSocket local integration', () => {
     const response = await app.inject({ method: 'GET', url: '/voice/stream/endpoint' });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ success: true, wss_url: expect.stringContaining('/ws/voice/smartflo') });
+
+    const formPost = await app.inject({
+      method: 'POST',
+      url: '/voice/stream/endpoint',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: '',
+    });
+    expect(formPost.statusCode).toBe(200);
+    expect(formPost.json()).toEqual({ success: true, wss_url: expect.stringContaining('/ws/voice/smartflo') });
   });
 
   it('persists callSid, emits aligned media, and closes the session lifecycle', async () => {
@@ -199,4 +208,3 @@ describe('Smartflo WebSocket local integration', () => {
     expect(collector.messages.some((m) => m.event === 'clear' && m.streamSid === 'stream-test')).toBe(true);
   });
 });
-
