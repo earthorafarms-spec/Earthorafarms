@@ -191,6 +191,24 @@ describe('Smartflo WebSocket local integration', () => {
     expect(mocks.processMessage).toHaveBeenCalledWith('session-test', 'What is available at Earthora Farms?');
   });
 
+  it('does not cancel the greeting when the caller speaks before TTS returns', async () => {
+    let resolveGreeting!: (audio: Buffer) => void;
+    mocks.ttsMulaw.mockReturnValueOnce(new Promise<Buffer>((resolve) => {
+      resolveGreeting = resolve;
+    }));
+    const { ws, collector } = await connect();
+    sendStart(ws);
+    await collector.waitFor(() => mocks.ttsMulaw.mock.calls.length === 1);
+
+    ws.send(JSON.stringify({ event: 'media', media: { payload: mulawFrame(4_000).toString('base64') } }));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    resolveGreeting(Buffer.alloc(1_600, 0x7f));
+
+    await collector.waitFor((messages) => messages.some((m) => m.event === 'mark' && m.mark?.name?.startsWith('greeting-')));
+    expect(collector.messages.some((m) => m.event === 'media')).toBe(true);
+    expect(collector.messages.some((m) => m.event === 'clear')).toBe(false);
+  });
+
   it('sends clear and stops queued playback when the caller barges in', async () => {
     mocks.ttsMulaw.mockResolvedValueOnce(Buffer.alloc(16_000, 0x7f));
     const { ws, collector } = await connect();

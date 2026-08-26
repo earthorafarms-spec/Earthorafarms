@@ -115,6 +115,7 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
     let inputEpoch = 0;
     let playbackEpoch = 0;
     let playbackActive = false;
+    let greetingPending = true;
     let activeMarkName: string | null = null;
     let activeMarkSentAt = 0;
     let outboundChunk = 1;
@@ -320,6 +321,15 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
       speechRmsThreshold: config.VOICE_SPEECH_RMS_THRESHOLD,
       onSpeechStart: () => {
         inputEpoch++;
+        // An eager caller often says "hello" before the first TTS request has
+        // returned. There is no audio to interrupt yet; bumping playbackEpoch
+        // here used to cancel the greeting before its first frame was sent.
+        // Preserve that initial greeting, then enable normal barge-in as soon
+        // as it has been queued for playback.
+        if (greetingPending && !playbackActive && activeMarkName === null) {
+          req.log.info({ ...logContext(), event: 'smartflo_early_caller_speech' }, 'Caller spoke while greeting was preparing');
+          return;
+        }
         interruptPlayback('caller_speech');
       },
     });
@@ -383,12 +393,16 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
               return;
             }
 
-            const greeting = "Hello! Welcome to Earthora Farms. I'm your voice ordering assistant. How can I help you today?";
+            const greeting = 'Hello! Welcome to Earthora Farms. How can I help?';
             if (!existing || session.conversationState.messages.length === 0) {
               session.conversationState.messages.push({ role: 'assistant', content: greeting });
               await updateCallSessionState(session.id, session.conversationState);
             }
-            await sendSpeech(greeting, 'en', `greeting-${Date.now()}`);
+            try {
+              await sendSpeech(greeting, 'en', `greeting-${Date.now()}`);
+            } finally {
+              greetingPending = false;
+            }
           })().catch(async (err) => {
             req.log.error({ err, ...logContext(), event: 'smartflo_start_failed' }, 'Smartflo call start failed');
             await finishSession('failed', 'start_failed');
