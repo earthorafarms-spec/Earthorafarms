@@ -13,9 +13,10 @@ import {
 import { createInitialState } from '../conversation/state.js';
 import { normalizeVoiceTranscript } from '../conversation/transcript.js';
 import { resetGuardState } from '../conversation/output-policy.js';
+import type { SupportedLanguage } from '../conversation/language.js';
+import { repeatPrompt } from '../conversation/voice-copy.js';
 import { AudioAccumulator, pcm16ToWav } from '../telephony/audio-accumulator.js';
 import { mulaw8kToPcm16k, wavToMulaw8k } from '../telephony/mulaw.js';
-import { splitSentences } from '../adapters/wav-utils.js';
 import { config } from '../config.js';
 
 interface PlatformEvent {
@@ -121,6 +122,7 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
     let outboundChunk = 1;
     let turnSequence = 0;
     let droppedTranscripts = 0;
+    let currentLanguage: SupportedLanguage = 'en';
     const queuedUtterances: QueuedUtterance[] = [];
 
     const logContext = () => ({ sessionId, callSid, streamSid });
@@ -171,31 +173,32 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
       if (!streamSid || closing || socket.readyState !== socket.OPEN) return false;
       const speechEpoch = ++playbackEpoch;
       const tts = buildTtsForLanguage(language);
-      const sentences = splitSentences(text);
+      // Give the adapter the full reply. Sarvam/OpenAI adapters synthesize
+      // sentences concurrently and assemble them in order. The previous
+      // outer per-sentence loop made three-sentence Hindi replies perform
+      // three sequential network calls; a timeout on sentence two or three
+      // left the caller hearing a reply stop halfway through.
+      const mulaw = await withTimeout(
+        tts.synthesizeMulaw8k
+          ? tts.synthesizeMulaw8k(text, language)
+          : tts.synthesize(text, language).then(wavToMulaw8k),
+        config.VOICE_TTS_TIMEOUT_MS,
+        'TTS'
+      );
+      if (closing || speechEpoch !== playbackEpoch || socket.readyState !== socket.OPEN) return false;
 
-      for (const sentence of sentences) {
-        const mulaw = await withTimeout(
-          tts.synthesizeMulaw8k
-            ? tts.synthesizeMulaw8k(sentence, language)
-            : tts.synthesize(sentence, language).then(wavToMulaw8k),
-          config.VOICE_TTS_TIMEOUT_MS,
-          'TTS'
-        );
+      playbackActive = true;
+      for (let offset = 0; offset < mulaw.length; offset += OUTBOUND_CHUNK_BYTES) {
         if (closing || speechEpoch !== playbackEpoch || socket.readyState !== socket.OPEN) return false;
-
-        playbackActive = true;
-        for (let offset = 0; offset < mulaw.length; offset += OUTBOUND_CHUNK_BYTES) {
-          if (closing || speechEpoch !== playbackEpoch || socket.readyState !== socket.OPEN) return false;
-          let frame = mulaw.subarray(offset, Math.min(offset + OUTBOUND_CHUNK_BYTES, mulaw.length));
-          const remainder = frame.length % 160;
-          if (remainder !== 0) frame = Buffer.concat([frame, Buffer.alloc(160 - remainder, 0xff)]);
-          sendJson(socket, {
-            event: 'media',
-            streamSid,
-            media: { payload: frame.toString('base64'), chunk: outboundChunk++ },
-          });
-          await yieldForSocket(socket);
-        }
+        let frame = mulaw.subarray(offset, Math.min(offset + OUTBOUND_CHUNK_BYTES, mulaw.length));
+        const remainder = frame.length % 160;
+        if (remainder !== 0) frame = Buffer.concat([frame, Buffer.alloc(160 - remainder, 0xff)]);
+        sendJson(socket, {
+          event: 'media',
+          streamSid,
+          media: { payload: frame.toString('base64'), chunk: outboundChunk++ },
+        });
+        await yieldForSocket(socket);
       }
 
       if (closing || speechEpoch !== playbackEpoch) return false;
@@ -208,8 +211,8 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
     async function sendRepeatPrompt(epoch: number): Promise<void> {
       if (closing || epoch !== inputEpoch) return;
       await sendSpeech(
-        "Sorry, I didn't catch that clearly. Please repeat.",
-        'en',
+        repeatPrompt(currentLanguage),
+        currentLanguage,
         `repeat-${Date.now()}`
       );
     }
@@ -228,6 +231,7 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
       try {
         const session = await getCallSession(sessionId);
         if (!session) throw new Error('Smartflo call session disappeared');
+        currentLanguage = session.conversationState.currentLanguage;
 
         const sttStartedAt = Date.now();
         const transcription = await withTimeout(
@@ -268,6 +272,7 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
           'LLM turn'
         );
         const llmMs = Date.now() - llmStartedAt;
+        currentLanguage = result.language;
 
         if (closing || utterance.inputEpoch !== inputEpoch) {
           req.log.info({ ...logContext(), event: 'smartflo_turn_superseded', turnId }, 'Smartflo turn superseded by caller speech');
@@ -379,6 +384,7 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
               { providerCallId: callSid ?? undefined, locale: 'en-IN' }
             );
             sessionId = session.id;
+            currentLanguage = session.conversationState.currentLanguage;
             if (existing) await updateCallSessionStatus(session.id, 'started');
 
             req.log.info({

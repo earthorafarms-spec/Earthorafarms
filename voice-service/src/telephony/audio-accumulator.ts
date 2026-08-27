@@ -69,6 +69,7 @@ export class AudioAccumulator {
   private speechMs = 0;
   private silenceMs = 0;
   private hasSpeechStarted = false;
+  private speechStartNotified = false;
 
   private readonly speechRmsThreshold: number;
 
@@ -90,12 +91,19 @@ export class AudioAccumulator {
         this.speechBuffer.push(...this.preRollBuffer, chunk);
         this.preRollBuffer = [];
         this.preRollMs = 0;
-        this.options.onSpeechStart?.();
       } else {
         this.speechBuffer.push(chunk);
       }
       this.speechMs += chunkMs;
       this.silenceMs = 0;
+      // Do not interrupt bot playback on the first loud packet. Telephone
+      // clicks and brief line noise were previously treated as barge-in and
+      // could clear a perfectly valid response halfway through. Confirm the
+      // same minimum amount of speech required for a real utterance first.
+      if (!this.speechStartNotified && this.speechMs >= MIN_SPEECH_MS_BEFORE_FLUSH) {
+        this.speechStartNotified = true;
+        this.options.onSpeechStart?.();
+      }
     } else if (this.hasSpeechStarted) {
       // Keep buffering brief silence too — it's part of natural speech
       // cadence and Sarvam's STT should see it, not a hard cut mid-word.
@@ -108,6 +116,13 @@ export class AudioAccumulator {
     const enoughSpeech = this.speechMs >= MIN_SPEECH_MS_BEFORE_FLUSH;
     const longEnoughSilence = this.silenceMs >= SILENCE_MS_TO_FLUSH;
     const tooLong = this.speechMs + this.silenceMs >= MAX_UTTERANCE_MS;
+
+    // Discard a short cough/click after a full silence window instead of
+    // carrying it forward and combining it with the caller's next sentence.
+    if (this.hasSpeechStarted && longEnoughSilence && !enoughSpeech) {
+      this.reset();
+      return;
+    }
 
     if (this.hasSpeechStarted && enoughSpeech && (longEnoughSilence || tooLong)) {
       this.flush();
@@ -136,6 +151,7 @@ export class AudioAccumulator {
     this.speechMs = 0;
     this.silenceMs = 0;
     this.hasSpeechStarted = false;
+    this.speechStartNotified = false;
   }
 
   private addPreRoll(chunk: Buffer, chunkMs: number): void {

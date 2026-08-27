@@ -110,6 +110,12 @@ describe('enforceOutputPolicy', () => {
       expect(result.violations.some((v) => v.includes('approved knowledge'))).toBe(true);
     });
 
+    it('does not allow an ungrounded claim that a product is safe for children', () => {
+      const result = enforceOutputPolicy('Beta is safe for children.', [], 'child-safety-session');
+      expect(result.action).toBe('regenerate');
+      expect(result.violations.some((v) => v.includes('approved knowledge'))).toBe(true);
+    });
+
     it('allows a health claim grounded by approved knowledge this turn', () => {
       const facts: TurnToolFact[] = [{
         toolName: 'get_product_knowledge',

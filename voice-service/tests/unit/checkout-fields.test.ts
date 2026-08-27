@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialState } from '../../src/conversation/state.js';
-import { setCheckoutFieldTool } from '../../src/tools/checkout.js';
+import { setCheckoutFieldTool, setDeliveryLocationTool } from '../../src/tools/checkout.js';
 
 describe('checkout field validation', () => {
   it('does not coerce the string "false" to true', async () => {
@@ -21,5 +21,15 @@ describe('checkout field validation', () => {
     );
     expect(result).toMatchObject({ ok: false, reason: 'invalid_value' });
   });
-});
 
+  it('stores city and state together and normalizes common spoken forms', async () => {
+    const state = createInitialState();
+    const result = await setDeliveryLocationTool.handler(
+      { city: 'अहमदाबाद', state: 'गुजरात' },
+      { callSessionId: 'session-1', state }
+    );
+
+    expect(result).toMatchObject({ ok: true, city: 'Ahmedabad', state: 'Gujarat' });
+    expect(state.checkoutFields).toMatchObject({ city: 'Ahmedabad', state: 'Gujarat' });
+  });
+});

@@ -73,6 +73,18 @@ describe('AudioAccumulator', () => {
     expect(onReady).toHaveBeenCalledTimes(1);
   });
 
+  it('does not treat a brief line-noise burst as barge-in', () => {
+    const onReady = vi.fn();
+    const onSpeechStart = vi.fn();
+    const acc = new AudioAccumulator(onReady, { onSpeechStart });
+
+    acc.push(chunk(100, true));
+    for (let i = 0; i < 7; i++) acc.push(chunk(100, false));
+
+    expect(onSpeechStart).not.toHaveBeenCalled();
+    expect(onReady).not.toHaveBeenCalled();
+  });
+
   it('does NOT flush on a brief pause shorter than the silence threshold', () => {
     const onReady = vi.fn();
     const acc = new AudioAccumulator(onReady);

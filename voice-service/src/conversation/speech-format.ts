@@ -36,7 +36,11 @@ export function toSpokenText(text: string): string {
   // line) collapse to just the last mark in the run.
   out = out.replace(/[ \t]+/g, ' ');
   out = out.replace(/[.,!?](?:\s*[.,!?])+/g, (m) => m.trim().slice(-1));
+  out = out.replace(/।\s*[.,]/g, '।');
+  out = out.replace(/[.,]\s*।/g, '।');
+  out = out.replace(/:\s*,/g, ': ');
   out = out.replace(/ ,/g, ',');
+  out = out.replace(/[ \t]+/g, ' ');
   out = out.trim();
 
   return out;

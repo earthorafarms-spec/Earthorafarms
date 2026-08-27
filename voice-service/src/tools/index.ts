@@ -2,7 +2,7 @@ import type { ToolModule } from './types.js';
 import { listProductsTool, getProductDetailsTool } from './products.js';
 import { getProductKnowledgeTool } from './knowledge.js';
 import { getCartTool, addCartItemTool, updateCartItemTool, removeCartItemTool } from './cart.js';
-import { setCheckoutFieldTool, createVerificationLinkTool } from './checkout.js';
+import { setCheckoutFieldTool, setDeliveryLocationTool, createVerificationLinkTool } from './checkout.js';
 
 export const allTools: ToolModule[] = [
   listProductsTool,
@@ -13,6 +13,7 @@ export const allTools: ToolModule[] = [
   updateCartItemTool,
   removeCartItemTool,
   setCheckoutFieldTool,
+  setDeliveryLocationTool,
   createVerificationLinkTool,
 ];
 

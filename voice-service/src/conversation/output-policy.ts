@@ -63,7 +63,7 @@ const PRODUCT_AVAILABILITY_CLAIM_PATTERN =
   /\b(in stock|out of stock|low stock|available|unavailable|don'?t have|do not have|doesn'?t have|does not have|no products?|not carry|don'?t (sell|carry)|we (have|sell|carry)|\d+\s+units?\s+(left|available))\b|उपलब्ध|मौजूद|स्टॉक\s*में|ઉપલબ્ધ|હાજર|સ્ટોકમાં/gi;
 
 const PRODUCT_HEALTH_CLAIM_PATTERN =
-  /\b(benefits?|dosage|ingredients?|contraindications?|side effects?|recommended dose|take\s+\d+|contains?|made from|treats?|cures?|prevents?|reduces?\s+(?:pain|sugar|weight|cholesterol)|supports?\s+(?:immunity|digestion|health|wellness))\b|खुराक|सामग्री|फायदे|लाभ|ચેતવણી|માત્રા|ઘટકો|ફાયદા/gi;
+  /\b(benefits?|dosage|ingredients?|contraindications?|side effects?|recommended dose|take\s+\d+|contains?|made from|treats?|cures?|prevents?|safe\s+for\s+(?:kids?|children)|reduces?\s+(?:pain|sugar|weight|cholesterol)|supports?\s+(?:immunity|digestion|health|wellness))\b|खुराक|सामग्री|फायदे|लाभ|बच्चों?\s+के\s+लिए\s+सुरक्षित|ચેતવણી|માત્રા|ઘટકો|ફાયદા/gi;
 
 const PRICE_GROUNDING_TOOLS = new Set([
   'list_products', 'get_product_details', 'get_cart', 'add_cart_item',

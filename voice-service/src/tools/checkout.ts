@@ -22,6 +22,39 @@ function missingRequiredFields(fields: CheckoutFieldSnapshot): AllowedField[] {
   return REQUIRED_FIELDS.filter((f) => !fields[f as keyof CheckoutFieldSnapshot]);
 }
 
+function normalizeSpokenPlace(field: 'city' | 'state', rawValue: unknown): string {
+  let value = String(rawValue ?? '').trim();
+  value = value
+    .replace(/^(?:my\s+)?(?:city|state)\s+(?:is\s+)?/i, '')
+    .replace(/^(?:i\s+(?:am|live)\s+in)\s+/i, '')
+    .replace(/^(?:मेरा|मेरी)\s+(?:शहर|राज्य)\s+/u, '')
+    .replace(/^(?:मैं|हम)\s+/u, '')
+    .replace(/\s+में\s*(?:रहता|रहती|हूँ|है)?\s*$/u, '')
+    .replace(/^(?:મારું|મારી)\s+(?:શહેર|રાજ્ય)\s+/u, '')
+    .replace(/[.,]+$/g, '')
+    .trim();
+
+  const key = value.toLocaleLowerCase('en-IN').replace(/[\s-]+/g, ' ');
+  if (field === 'state') {
+    const stateAliases: Record<string, string> = {
+      gujarat: 'Gujarat', gujrat: 'Gujarat', gujrath: 'Gujarat', 'गुजरात': 'Gujarat', 'ગુજરાત': 'Gujarat',
+      maharashtra: 'Maharashtra', 'महाराष्ट्र': 'Maharashtra', 'મહારાષ્ટ્ર': 'Maharashtra',
+      rajasthan: 'Rajasthan', 'राजस्थान': 'Rajasthan', 'રાજસ્થાન': 'Rajasthan',
+      'madhya pradesh': 'Madhya Pradesh', 'मध्य प्रदेश': 'Madhya Pradesh',
+      delhi: 'Delhi', 'दिल्ली': 'Delhi', 'દિલ્હી': 'Delhi',
+    };
+    return stateAliases[key] ?? value;
+  }
+
+  const cityAliases: Record<string, string> = {
+    ahmedabad: 'Ahmedabad', ahemdabad: 'Ahmedabad', ahmedbad: 'Ahmedabad', amdavad: 'Ahmedabad',
+    'अहमदाबाद': 'Ahmedabad', 'અમદાવાદ': 'Ahmedabad',
+    surat: 'Surat', 'सूरत': 'Surat', 'સુરત': 'Surat',
+    vadodara: 'Vadodara', baroda: 'Vadodara', 'वडोदरा': 'Vadodara', 'વડોદરા': 'Vadodara',
+  };
+  return cityAliases[key] ?? value;
+}
+
 function normalizeAndValidate(field: AllowedField, rawValue: unknown): { value: unknown; error?: string } {
   if (field === 'marketingConsent') {
     if (typeof rawValue === 'boolean') return { value: rawValue };
@@ -31,6 +64,9 @@ function normalizeAndValidate(field: AllowedField, rawValue: unknown): { value: 
     return { value: false, error: 'Marketing consent must be true or false.' };
   }
   const value = String(rawValue ?? '').trim();
+  if (field === 'city' || field === 'state') {
+    return { value: normalizeSpokenPlace(field, value) };
+  }
   if (field === 'email' && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
     return { value, error: "That doesn't look like a valid email address." };
   }
@@ -68,6 +104,38 @@ export const setCheckoutFieldTool: ToolModule = {
 
     return {
       ok: true,
+      missingRequiredFields: missingRequiredFields(ctx.state.checkoutFields),
+    };
+  },
+};
+
+export const setDeliveryLocationTool: ToolModule = {
+  definition: {
+    name: 'set_delivery_location',
+    description:
+      'Records city and state together. Use this whenever the caller provides both place values in one ' +
+      'reply, including Hindi, Gujarati, Romanized, or informal phrasing. Do not ask for them again after this succeeds.',
+    parameters: {
+      type: 'object',
+      properties: {
+        city: { type: 'string', description: 'The caller-spoken city.' },
+        state: { type: 'string', description: 'The caller-spoken Indian state.' },
+      },
+      required: ['city', 'state'],
+      additionalProperties: false,
+    },
+  },
+  handler: async (args, ctx: ToolContext) => {
+    const city = normalizeSpokenPlace('city', args.city);
+    const state = normalizeSpokenPlace('state', args.state);
+    if (!city || !state) return { ok: false, reason: 'missing_location_value' };
+
+    ctx.state.checkoutFields.city = city;
+    ctx.state.checkoutFields.state = state;
+    return {
+      ok: true,
+      city,
+      state,
       missingRequiredFields: missingRequiredFields(ctx.state.checkoutFields),
     };
   },

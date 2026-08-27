@@ -177,7 +177,20 @@ describe('Smartflo WebSocket local integration', () => {
     await collector.waitFor((messages) => messages.filter((m) => m.event === 'mark').length >= 2);
 
     expect(mocks.processMessage).not.toHaveBeenCalled();
-    expect(mocks.ttsMulaw).toHaveBeenCalledWith("Sorry, I didn't catch that clearly. Please repeat.", 'en');
+    expect(mocks.ttsMulaw).toHaveBeenCalledWith("Sorry, I didn't catch that clearly. Please say it again.", 'en');
+  });
+
+  it('asks for a repeat in the established Hindi conversation language', async () => {
+    session.currentLanguage = 'hi';
+    mocks.stt.mockResolvedValue({ text: 'ಅಕ್ಕ ಇರ್ತಾ ಇರೋದು', detectedLanguageCode: 'kn-IN', languageProbability: 0.99 });
+    const { ws, collector } = await connect();
+    sendStart(ws);
+    await collector.waitFor((messages) => messages.filter((m) => m.event === 'mark').length === 1);
+    sendUtterance(ws);
+    await collector.waitFor((messages) => messages.filter((m) => m.event === 'mark').length >= 2);
+
+    expect(mocks.processMessage).not.toHaveBeenCalled();
+    expect(mocks.ttsMulaw).toHaveBeenCalledWith('माफ कीजिए, बात साफ़ समझ नहीं आई। कृपया दोबारा बताइए।', 'hi');
   });
 
   it('normalizes a trusted transcript before invoking the LLM', async () => {
@@ -217,12 +230,47 @@ describe('Smartflo WebSocket local integration', () => {
       const message = JSON.parse(raw.toString());
       if (message.event === 'media' && !sentSpeech) {
         sentSpeech = true;
-        ws.send(JSON.stringify({ event: 'media', media: { payload: mulawFrame(4_000).toString('base64') } }));
+        for (let i = 0; i < 2; i++) {
+          ws.send(JSON.stringify({ event: 'media', media: { payload: mulawFrame(4_000).toString('base64') } }));
+        }
       }
     });
     sendStart(ws);
     await collector.waitFor((messages) => messages.some((m) => m.event === 'clear'));
 
     expect(collector.messages.some((m) => m.event === 'clear' && m.streamSid === 'stream-test')).toBe(true);
+  });
+
+  it('does not clear playback for a single brief noise packet', async () => {
+    mocks.ttsMulaw.mockResolvedValueOnce(Buffer.alloc(16_000, 0x7f));
+    const { ws, collector } = await connect();
+    let injectedNoise = false;
+    ws.on('message', (raw) => {
+      const message = JSON.parse(raw.toString());
+      if (message.event === 'media' && !injectedNoise) {
+        injectedNoise = true;
+        ws.send(JSON.stringify({ event: 'media', media: { payload: mulawFrame(4_000).toString('base64') } }));
+      }
+    });
+    sendStart(ws);
+    await collector.waitFor((messages) => messages.some((m) => m.event === 'mark'));
+
+    expect(collector.messages.some((m) => m.event === 'clear')).toBe(false);
+  });
+
+  it('synthesizes a multi-sentence reply as one complete TTS job', async () => {
+    mocks.stt.mockResolvedValue({ text: 'Tell me about Alpha', detectedLanguageCode: 'en-IN', languageProbability: 0.99 });
+    mocks.processMessage.mockResolvedValue({
+      replyText: 'First short sentence. Second short sentence.', language: 'en',
+      callShouldEnd: false, policyViolations: [],
+    });
+    const { ws, collector } = await connect();
+    sendStart(ws);
+    await collector.waitFor((messages) => messages.filter((m) => m.event === 'mark').length === 1);
+    sendUtterance(ws);
+    await collector.waitFor((messages) => messages.filter((m) => m.event === 'mark').length >= 2);
+
+    expect(mocks.ttsMulaw).toHaveBeenCalledWith('First short sentence. Second short sentence.', 'en');
+    expect(mocks.ttsMulaw.mock.calls.filter((call) => call[0] === 'First short sentence.').length).toBe(0);
   });
 });

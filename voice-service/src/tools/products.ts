@@ -2,6 +2,49 @@ import type { ToolModule } from './types.js';
 import { listActiveProducts, getProductById, listActiveFestivalDeals } from '../repositories/products.repository.js';
 import { applyFestivalDealDiscount } from '../domain/pricing.js';
 
+const PRODUCT_QUERY_STOP_WORDS = new Set([
+  'a', 'an', 'the', 'about', 'tell', 'me', 'this', 'that', 'product', 'products', 'item',
+  'please', 'details', 'info', 'information', 'ke', 'ki', 'ka', 'bare', 'mein', 'batao',
+  'प्रोडक्ट', 'प्रोडक्ट्स', 'उत्पाद', 'के', 'की', 'का', 'बारे', 'में', 'बताओ', 'बताइए',
+]);
+
+function normalizeProductPhrase(value: string): string {
+  return (value.normalize('NFKC').toLocaleLowerCase('en-IN').match(/[\p{L}\p{N}]+/gu) ?? [])
+    .filter((word) => !PRODUCT_QUERY_STOP_WORDS.has(word))
+    .join(' ')
+    .trim();
+}
+
+function editDistance(a: string, b: string): number {
+  const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i++) {
+    let diagonal = previous[0];
+    previous[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const above = previous[j];
+      previous[j] = Math.min(
+        previous[j] + 1,
+        previous[j - 1] + 1,
+        diagonal + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+      diagonal = above;
+    }
+  }
+  return previous[b.length];
+}
+
+export function spokenProductNameMatches(productName: string, spokenQuery: string): boolean {
+  const name = normalizeProductPhrase(productName);
+  const query = normalizeProductPhrase(spokenQuery);
+  if (!name || !query) return false;
+  if (name.includes(query) || query.includes(name)) return true;
+
+  const queryWords = query.split(' ');
+  if (queryWords.some((word) => word === name || name.includes(word) || word.includes(name))) return true;
+
+  return editDistance(name, query) <= Math.max(1, Math.floor(Math.max(name.length, query.length) * 0.4));
+}
+
 export const listProductsTool: ToolModule = {
   definition: {
     name: 'list_products',
@@ -26,11 +69,18 @@ export const listProductsTool: ToolModule = {
   handler: async (args) => {
     const products = await listActiveProducts();
     const deals = await listActiveFestivalDeals();
-    const query = typeof args.query === 'string' ? args.query.trim().toLowerCase() : '';
+    const query = typeof args.query === 'string' ? args.query.trim() : '';
 
-    const filtered = query ? products.filter((p) => p.name.toLowerCase().includes(query)) : products;
+    const matched = query ? products.filter((p) => spokenProductNameMatches(p.name, query)) : products;
+    // A speech-recognition spelling such as "Alfa", or extra words such as
+    // "Alpha product ke bare mein", must not turn a valid catalog into an
+    // empty result. Return the full live catalog as a safe recovery surface;
+    // the model can select the closest name or ask one concise confirmation.
+    const filtered = query && matched.length === 0 ? products : matched;
 
     return {
+      queryMatched: !query || matched.length > 0,
+      usedFullCatalogFallback: Boolean(query && matched.length === 0),
       products: filtered.map((p) => ({
         id: p.id,
         name: p.name,

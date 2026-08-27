@@ -18,7 +18,10 @@ const LANG_NAMES: Record<SupportedLanguage, string> = {
 
 const LANG_RULES: Record<SupportedLanguage, string> = {
   en: 'Reply entirely in English.',
-  hi: 'Reply entirely in Hindi, using Devanagari script. Keep brand/product names (e.g. Earthora, Morilife+) in their normal Roman spelling.',
+  hi:
+    'Reply in simple, everyday spoken Hindi using Devanagari script. Use familiar Hinglish words such as ' +
+    'प्रोडक्ट, ऑर्डर, प्राइस, सिटी, स्टेट, फोन, ईमेल, पेमेंट, और एड्रेस instead of formal or literary Hindi. ' +
+    'Keep brand/product names (e.g. Earthora, Morilife+) in their normal Roman spelling.',
   gu: 'Reply entirely in Gujarati, using Gujarati Unicode script. Keep brand/product names (e.g. Earthora, Morilife+) in their normal Roman spelling.',
 };
 
@@ -73,9 +76,8 @@ export function detectLanguage(text: string): SupportedLanguage | null {
 export function buildLanguageInstruction(lang: SupportedLanguage): string {
   return (
     `RESPONSE LANGUAGE FOR THIS REPLY: ${LANG_NAMES[lang]}.\n` +
-    `${LANG_RULES[lang]} This is a hard requirement, not a preference — every user-facing sentence of ` +
-    'your next reply must be in this language, with no English sentences mixed in (brand/product names ' +
-    'excepted). This only changes the language you speak in — every price, stock level, and product ' +
+    `${LANG_RULES[lang]} This is a hard requirement, not a preference. Keep every user-facing sentence ` +
+    'consistent with this language and speaking style. This only changes the language you speak in — every price, stock level, and product ' +
     "fact must still come only from this turn's tool results, same as always."
   );
 }

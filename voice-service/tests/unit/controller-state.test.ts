@@ -3,10 +3,16 @@ import { createInitialState } from '../../src/conversation/state.js';
 import { resetGuardState } from '../../src/conversation/output-policy.js';
 
 const chatMock = vi.fn();
+const productRepositoryMocks = vi.hoisted(() => ({
+  listActiveProducts: vi.fn(),
+  getProductById: vi.fn(),
+  listActiveFestivalDeals: vi.fn(),
+}));
 
 vi.mock('../../src/providers.js', () => ({
   chatWithRouting: (...args: unknown[]) => chatMock(...args),
 }));
+vi.mock('../../src/repositories/products.repository.js', () => productRepositoryMocks);
 
 import { processTurn } from '../../src/conversation/controller.js';
 
@@ -14,6 +20,14 @@ describe('processTurn persisted state', () => {
   beforeEach(() => {
     chatMock.mockReset();
     resetGuardState('controller-test');
+    productRepositoryMocks.listActiveProducts.mockResolvedValue([
+      {
+        id: 'alpha-id', slug: 'alpha', name: 'Alpha', mrp: 100, price: 90,
+        status: 'active', stockQty: 10, stockLabel: 'In Stock', tag: '120 caps', badge: '',
+        description: 'Alpha description', highlights: [],
+      },
+    ]);
+    productRepositoryMocks.listActiveFestivalDeals.mockResolvedValue([]);
   });
 
   it('keeps output-policy correction instructions turn-local', async () => {
@@ -29,5 +43,18 @@ describe('processTurn persisted state', () => {
     const secondMessages = chatMock.mock.calls[1][0] as { role: string; content: string }[];
     expect(secondMessages.some((m) => m.role === 'system' && m.content.includes('[Correction]'))).toBe(true);
   });
-});
 
+  it('preloads a fresh catalog for repeated product questions', async () => {
+    const state = createInitialState();
+    state.currentLanguage = 'hi';
+    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'Alpha प्रोडक्ट अभी उपलब्ध है।' });
+
+    const outcome = await processTurn('controller-test', state, 'आपके पास कौन से प्रोडक्ट्स उपलब्ध हैं?');
+
+    expect(outcome.replyText).toContain('Alpha');
+    expect(outcome.policyViolations).toEqual([]);
+    expect(productRepositoryMocks.listActiveProducts).toHaveBeenCalledTimes(1);
+    const messages = chatMock.mock.calls[0][0] as { role: string; content: string }[];
+    expect(messages.some((m) => m.role === 'system' && m.content.includes('LIVE PRODUCT CATALOG FOR THIS TURN'))).toBe(true);
+  });
+});

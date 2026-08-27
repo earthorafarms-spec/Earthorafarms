@@ -4,12 +4,18 @@ import { WHATSAPP_SYSTEM_PROMPT } from './whatsapp-prompt.js';
 import { enforceOutputPolicy } from './output-policy.js';
 import { toSpokenText } from './speech-format.js';
 import { detectLanguage, buildLanguageInstruction } from './language.js';
+import { turnFailurePrompt } from './voice-copy.js';
+import { buildCheckoutTurnInstruction } from './checkout-context.js';
 import { chatWithRouting } from '../providers.js';
 import { allTools, toolsByName } from '../tools/index.js';
 
 const MAX_TOOL_LOOP_ITERATIONS = 6;
 // guard.py-style two-strike system: 1 regenerate attempt, then fallback.
 const MAX_POLICY_REGENERATE_ATTEMPTS = 1;
+
+export function shouldPrefetchProductCatalog(text: string): boolean {
+  return /\b(products?|available|availability|stock|sell|selling|catalog(?:ue)?)\b|प्रोडक्ट|उत्पाद|अवेलेबल|उपलब्ध|स्टॉक|પ્રોડક્ટ|ઉપલબ્ધ|સ્ટોક/iu.test(text);
+}
 
 export interface TurnOutcome {
   state: ConversationState;
@@ -66,11 +72,45 @@ export async function processTurn(
   // words of other rules (primacy beat recency in testing against this
   // model for this prompt length).
   const basePrompt = channel === 'text' ? WHATSAPP_SYSTEM_PROMPT : SYSTEM_PROMPT;
+  const checkoutInstruction = buildCheckoutTurnInstruction(state);
   const systemMessage: ConversationMessage = {
     role: 'system',
-    content: `${buildLanguageInstruction(state.currentLanguage)}\n\n${basePrompt}`,
+    content:
+      `${buildLanguageInstruction(state.currentLanguage)}` +
+      (checkoutInstruction ? `\n\n${checkoutInstruction}` : '') +
+      `\n\n${basePrompt}`,
   };
   const toolDefs = allTools.map((t) => t.definition);
+
+  // Availability questions are common and safety-critical. Production calls
+  // showed that the model sometimes repeated a catalog answer from history
+  // without making the mandatory fresh list_products call; output-policy
+  // correctly blocked it, but the caller then heard an unhelpful deflection.
+  // Preload the live catalog deterministically for obvious product questions
+  // so both the answer and the safety policy have same-turn grounding.
+  const turnContextMessages: ConversationMessage[] = [];
+  const preloadedToolResults = new Map<string, unknown>();
+  if (shouldPrefetchProductCatalog(userText)) {
+    const listTool = toolsByName.list_products;
+    if (listTool) {
+      let productCatalog: unknown;
+      try {
+        productCatalog = await listTool.handler({ query: null }, { callSessionId, state });
+      } catch (err) {
+        productCatalog = { error: 'tool_execution_failed', message: (err as Error).message };
+      }
+      const resultJson = JSON.stringify(productCatalog);
+      state.currentTurnFacts.push({ toolName: 'list_products', resultJson });
+      preloadedToolResults.set('list_products:{"query":null}', productCatalog);
+      turnContextMessages.push({
+        role: 'system',
+        content:
+          `LIVE PRODUCT CATALOG FOR THIS TURN (already fetched with list_products): ${resultJson}. ` +
+          'Use it directly for catalog, availability, and product-name resolution. For benefits, dosage, ' +
+          'ingredients, directions, or warnings, still call get_product_knowledge with the matching product ID.',
+      });
+    }
+  }
 
   // Turn-scoped only (local, not persisted): if the model calls the same
   // tool with identical arguments twice within one turn's tool-loop, reuse
@@ -79,6 +119,7 @@ export async function processTurn(
   // already small/curated (see tools/*.ts), not raw DB rows that would need
   // separate compaction.
   const turnCallCache = new Map<string, unknown>();
+  for (const [key, value] of preloadedToolResults) turnCallCache.set(key, value);
   let regenerateAttempts = 0;
   let transientCorrection: ConversationMessage | null = null;
 
@@ -87,7 +128,7 @@ export async function processTurn(
     // this is what actually routes Hindi/Gujarati to Sarvam and English to
     // OpenAI (with a same-turn fallback to OpenAI if Sarvam errors).
     const result = await chatWithRouting(
-      [systemMessage, ...state.messages, ...(transientCorrection ? [transientCorrection] : [])],
+      [systemMessage, ...turnContextMessages, ...state.messages, ...(transientCorrection ? [transientCorrection] : [])],
       toolDefs,
       state.currentLanguage
     );
@@ -159,7 +200,7 @@ export async function processTurn(
     return { state, replyText: finalText, policyViolations: policyResult.violations };
   }
 
-  const fallback = "Sorry, I'm having trouble with that request — could you try rephrasing?";
+  const fallback = turnFailurePrompt(state.currentLanguage);
   state.messages.push({ role: 'assistant', content: fallback });
   return { state, replyText: fallback, policyViolations: ['tool_loop_guard_exceeded'] };
 }

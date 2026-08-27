@@ -32,4 +32,9 @@ describe('toSpokenText', () => {
   it('collapses a paragraph break into a sentence separator', () => {
     expect(toSpokenText('First part.\n\nSecond part.')).toBe('First part. Second part.');
   });
+
+  it('removes stray punctuation that creates unnatural Hindi TTS pauses', () => {
+    expect(toSpokenText('हमारे पास प्रोडक्ट्स हैं। . पहला Alpha है।')).toBe('हमारे पास प्रोडक्ट्स हैं। पहला Alpha है।');
+    expect(toSpokenText('तीन प्रोडक्ट्स हैं:, Alpha, Beta')).toBe('तीन प्रोडक्ट्स हैं: Alpha, Beta');
+  });
 });
