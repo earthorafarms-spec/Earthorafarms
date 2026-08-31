@@ -26,7 +26,7 @@ async function main(): Promise<void> {
   const callerMulaw = await tts.synthesizeMulaw8k(callerPhrase, 'en');
   const ws = new WebSocket(socketUrl);
   const messages: Array<Record<string, any>> = [];
-  ws.on('message', (raw) => messages.push(JSON.parse(raw.toString())));
+  ws.on('message', (raw) => messages.push({ ...JSON.parse(raw.toString()), receivedAt: Date.now() }));
   await waitForOpen(ws);
 
   ws.send(JSON.stringify({ event: 'connected' }));
@@ -49,6 +49,7 @@ async function main(): Promise<void> {
   };
 
   let inboundChunk = 1;
+  let callerAudioFinishedAt = 0;
   const sendCallerAudio = async () => {
     for (let offset = 0; offset < callerMulaw.length; offset += 800) {
       const frame = callerMulaw.subarray(offset, Math.min(offset + 800, callerMulaw.length));
@@ -65,6 +66,7 @@ async function main(): Promise<void> {
       }));
       await sleep(100);
     }
+    callerAudioFinishedAt = Date.now();
   };
 
   if (speakBeforeGreeting) await sendCallerAudio();
@@ -85,6 +87,7 @@ async function main(): Promise<void> {
     messages.filter((message) => message.event === 'media' && message.media?.payload)
       .map((message) => Buffer.from(message.media.payload, 'base64'))
   );
+  const firstResponseMediaAt = messages.find((message) => message.event === 'media' && message.media?.payload)?.receivedAt ?? null;
   ws.send(JSON.stringify({ event: 'mark', streamSid, mark: { name: responseMark.mark.name } }));
   ws.send(JSON.stringify({ event: 'stop', streamSid, stop: { callSid, reason: 'codex_production_smoke' } }));
   await sleep(300);
@@ -97,6 +100,9 @@ async function main(): Promise<void> {
   console.log(JSON.stringify({
     socketUrl, callSid, callerPhrase, speakBeforeGreeting, greetingAudioBytes,
     botMark: responseMark.mark.name,
+    responseFirstAudioMs: firstResponseMediaAt === null || callerAudioFinishedAt === 0
+      ? null
+      : firstResponseMediaAt - callerAudioFinishedAt,
     outboundAudioBytes: responseMulaw.length,
     botTranscript: botTranscript.text,
     detectedLanguageCode: botTranscript.detectedLanguageCode,

@@ -18,6 +18,8 @@ import { repeatPrompt } from '../conversation/voice-copy.js';
 import { AudioAccumulator, pcm16ToWav } from '../telephony/audio-accumulator.js';
 import { mulaw8kToPcm16k, wavToMulaw8k } from '../telephony/mulaw.js';
 import { config } from '../config.js';
+import { splitSentences } from '../adapters/wav-utils.js';
+import type { VoiceTurnMetric } from '../conversation/state.js';
 
 interface PlatformEvent {
   event?: 'connected' | 'start' | 'media' | 'stop' | 'dtmf' | 'mark';
@@ -42,11 +44,21 @@ interface QueuedUtterance {
   inputEpoch: number;
 }
 
+interface SpeechSendResult {
+  sent: boolean;
+  partial: boolean;
+  firstAudioAt: number | null;
+  sentenceCount: number;
+}
+
 const MAX_QUEUED_UTTERANCES = 2;
 const MAX_INBOUND_MEDIA_BYTES = 64 * 1024;
 const OUTBOUND_CHUNK_BYTES = 1_600; // 200 ms; multiple of the required 160 bytes
 const SOCKET_HIGH_WATER_BYTES = 512 * 1024;
 const SOCKET_BACKPRESSURE_TIMEOUT_MS = 2_000;
+const START_EVENT_TIMEOUT_MS = 15_000;
+const MAX_STORED_VOICE_METRICS = 100;
+const BETWEEN_SENTENCE_SILENCE = Buffer.alloc(640, 0xff); // 80 ms at 8 kHz mu-law
 
 function sendJson(socket: WebSocket, payload: unknown): boolean {
   if (socket.readyState !== socket.OPEN) return false;
@@ -124,12 +136,24 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
     let droppedTranscripts = 0;
     let currentLanguage: SupportedLanguage = 'en';
     const queuedUtterances: QueuedUtterance[] = [];
+    const startEventTimer = setTimeout(() => {
+      if (startPromise || closing) return;
+      req.log.warn({
+        ...logContext(),
+        event: 'smartflo_start_timeout',
+        connectedMs: Date.now() - connectedAt,
+      }, 'Smartflo socket closed because no start event arrived');
+      void finishSession('failed', 'start_timeout').finally(() => {
+        if (socket.readyState === socket.OPEN) socket.close(1008, 'start event required');
+      });
+    }, START_EVENT_TIMEOUT_MS);
 
     const logContext = () => ({ sessionId, callSid, streamSid });
 
     async function finishSession(status: CallSessionStatus, reason: string): Promise<void> {
       if (sessionFinished) return;
       sessionFinished = true;
+      clearTimeout(startEventTimer);
       closing = true;
       queuedUtterances.length = 0;
       playbackEpoch++;
@@ -169,52 +193,132 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
       text: string,
       language: 'en' | 'hi' | 'gu',
       markName: string
-    ): Promise<boolean> {
-      if (!streamSid || closing || socket.readyState !== socket.OPEN) return false;
+    ): Promise<SpeechSendResult> {
+      const unsent = (sentenceCount = 0): SpeechSendResult => ({
+        sent: false, partial: false, firstAudioAt: null, sentenceCount,
+      });
+      if (!streamSid || closing || socket.readyState !== socket.OPEN) return unsent();
       const speechEpoch = ++playbackEpoch;
       const tts = buildTtsForLanguage(language);
-      // Give the adapter the full reply. Sarvam/OpenAI adapters synthesize
-      // sentences concurrently and assemble them in order. The previous
-      // outer per-sentence loop made three-sentence Hindi replies perform
-      // three sequential network calls; a timeout on sentence two or three
-      // left the caller hearing a reply stop halfway through.
-      const mulaw = await withTimeout(
-        tts.synthesizeMulaw8k
-          ? tts.synthesizeMulaw8k(text, language)
-          : tts.synthesize(text, language).then(wavToMulaw8k),
-        config.VOICE_TTS_TIMEOUT_MS,
-        'TTS'
-      );
-      if (closing || speechEpoch !== playbackEpoch || socket.readyState !== socket.OPEN) return false;
+      const sentences = splitSentences(text);
+      type PreparedChunk = { audio: Buffer; error?: never } | { audio?: never; error: unknown };
+      // Start every sentence at once, but await/send them in order. This
+      // preserves natural speech order while making the first sentence
+      // audible as soon as its own TTS request completes instead of waiting
+      // for the slowest sentence in the whole reply.
+      const preparedChunks: Promise<PreparedChunk>[] = sentences.map((sentence, index) => {
+        const synthesis = tts.synthesizeMulaw8k
+          ? tts.synthesizeMulaw8k(sentence, language)
+          : tts.synthesize(sentence, language).then(wavToMulaw8k);
+        return withTimeout(synthesis, config.VOICE_TTS_TIMEOUT_MS, `TTS sentence ${index + 1}`)
+          .then((audio): PreparedChunk => ({ audio }))
+          .catch((error): PreparedChunk => ({ error }));
+      });
 
-      playbackActive = true;
-      for (let offset = 0; offset < mulaw.length; offset += OUTBOUND_CHUNK_BYTES) {
-        if (closing || speechEpoch !== playbackEpoch || socket.readyState !== socket.OPEN) return false;
-        let frame = mulaw.subarray(offset, Math.min(offset + OUTBOUND_CHUNK_BYTES, mulaw.length));
-        const remainder = frame.length % 160;
-        if (remainder !== 0) frame = Buffer.concat([frame, Buffer.alloc(160 - remainder, 0xff)]);
-        sendJson(socket, {
-          event: 'media',
-          streamSid,
-          media: { payload: frame.toString('base64'), chunk: outboundChunk++ },
-        });
-        await yieldForSocket(socket);
+      let firstAudioAt: number | null = null;
+      let sentSentenceCount = 0;
+      let partial = false;
+
+      const sendMulaw = async (mulaw: Buffer): Promise<boolean> => {
+        for (let offset = 0; offset < mulaw.length; offset += OUTBOUND_CHUNK_BYTES) {
+          if (closing || speechEpoch !== playbackEpoch || socket.readyState !== socket.OPEN) return false;
+          let frame = mulaw.subarray(offset, Math.min(offset + OUTBOUND_CHUNK_BYTES, mulaw.length));
+          const remainder = frame.length % 160;
+          if (remainder !== 0) frame = Buffer.concat([frame, Buffer.alloc(160 - remainder, 0xff)]);
+          if (!sendJson(socket, {
+            event: 'media',
+            streamSid,
+            media: { payload: frame.toString('base64'), chunk: outboundChunk++ },
+          })) return false;
+          if (firstAudioAt === null) firstAudioAt = Date.now();
+          await yieldForSocket(socket);
+        }
+        return true;
+      };
+
+      for (let index = 0; index < preparedChunks.length; index++) {
+        const prepared = await preparedChunks[index];
+        if ('error' in prepared) {
+          if (index === 0) throw prepared.error;
+          partial = true;
+          req.log.error({
+            err: prepared.error,
+            ...logContext(),
+            event: 'smartflo_tts_sentence_failed',
+            sentenceNumber: index + 1,
+            sentenceCount: sentences.length,
+          }, 'Smartflo stopped a reply after a later TTS sentence failed');
+          break;
+        }
+        if (closing || speechEpoch !== playbackEpoch || socket.readyState !== socket.OPEN) {
+          return { sent: false, partial, firstAudioAt, sentenceCount: sentences.length };
+        }
+        playbackActive = true;
+        if (index > 0 && !(await sendMulaw(BETWEEN_SENTENCE_SILENCE))) {
+          return { sent: false, partial, firstAudioAt, sentenceCount: sentences.length };
+        }
+        if (!(await sendMulaw(prepared.audio))) {
+          return { sent: false, partial, firstAudioAt, sentenceCount: sentences.length };
+        }
+        sentSentenceCount++;
       }
 
-      if (closing || speechEpoch !== playbackEpoch) return false;
+      if (closing || speechEpoch !== playbackEpoch || firstAudioAt === null) {
+        return { sent: false, partial, firstAudioAt, sentenceCount: sentences.length };
+      }
       activeMarkName = markName;
       activeMarkSentAt = Date.now();
       sendJson(socket, { event: 'mark', streamSid, mark: { name: markName } });
-      return true;
+      return {
+        sent: sentSentenceCount > 0,
+        partial: partial || sentSentenceCount < sentences.length,
+        firstAudioAt,
+        sentenceCount: sentences.length,
+      };
     }
 
-    async function sendRepeatPrompt(epoch: number): Promise<void> {
-      if (closing || epoch !== inputEpoch) return;
-      await sendSpeech(
+    async function sendRepeatPrompt(epoch: number): Promise<SpeechSendResult> {
+      if (closing || epoch !== inputEpoch) {
+        return { sent: false, partial: false, firstAudioAt: null, sentenceCount: 0 };
+      }
+      return sendSpeech(
         repeatPrompt(currentLanguage),
         currentLanguage,
         `repeat-${Date.now()}`
       );
+    }
+
+    async function storeVoiceMetric(metric: VoiceTurnMetric): Promise<void> {
+      if (!sessionId) return;
+      try {
+        const latest = await getCallSession(sessionId);
+        if (!latest) return;
+        const metrics = [...(latest.conversationState.voiceTurnMetrics ?? []), metric]
+          .slice(-MAX_STORED_VOICE_METRICS);
+        latest.conversationState.voiceTurnMetrics = metrics;
+        await updateCallSessionState(sessionId, latest.conversationState);
+      } catch (err) {
+        req.log.error({ err, ...logContext(), event: 'smartflo_metric_store_failed' }, 'Smartflo turn metric persistence failed');
+      }
+    }
+
+    async function markVoiceMetricPlaybackCompleted(markName: string, playbackMs: number | null): Promise<void> {
+      const turnMatch = /^reply-(\d+)-/.exec(markName);
+      if (!sessionId || !turnMatch) return;
+      const routeTurnId = Number(turnMatch[1]);
+      try {
+        const latest = await getCallSession(sessionId);
+        if (!latest) return;
+        const metric = [...(latest.conversationState.voiceTurnMetrics ?? [])]
+          .reverse()
+          .find((item) => item.routeTurnId === routeTurnId);
+        if (!metric) return;
+        metric.playbackCompletedAt = new Date().toISOString();
+        if (playbackMs !== null) metric.playbackMs = playbackMs;
+        await updateCallSessionState(sessionId, latest.conversationState);
+      } catch (err) {
+        req.log.error({ err, ...logContext(), event: 'smartflo_metric_store_failed' }, 'Smartflo playback metric persistence failed');
+      }
     }
 
     function runNextQueued(): void {
@@ -228,6 +332,9 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
       const turnId = ++turnSequence;
       const audioMs = Math.round((utterance.pcm.length / 2 / 16_000) * 1_000);
       const totalStartedAt = Date.now();
+      let sttMs: number | undefined;
+      let llmMs: number | undefined;
+      let ttsMs: number | undefined;
       try {
         const session = await getCallSession(sessionId);
         if (!session) throw new Error('Smartflo call session disappeared');
@@ -242,7 +349,7 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
           config.VOICE_STT_TIMEOUT_MS,
           'STT'
         );
-        const sttMs = Date.now() - sttStartedAt;
+        sttMs = Date.now() - sttStartedAt;
         const decision = normalizeVoiceTranscript(transcription);
 
         req.log.info({
@@ -261,7 +368,18 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
 
         if (!decision.accepted) {
           droppedTranscripts++;
-          await sendRepeatPrompt(utterance.inputEpoch);
+          const repeat = await sendRepeatPrompt(utterance.inputEpoch);
+          await storeVoiceMetric({
+            routeTurnId: turnId,
+            recordedAt: new Date().toISOString(),
+            status: 'transcript_rejected',
+            audioMs,
+            sttMs,
+            firstAudioMs: repeat.firstAudioAt === null ? undefined : repeat.firstAudioAt - totalStartedAt,
+            totalMs: Date.now() - totalStartedAt,
+            responseSent: repeat.sent,
+            reason: decision.reason,
+          });
           return;
         }
 
@@ -271,17 +389,37 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
           config.VOICE_LLM_TIMEOUT_MS,
           'LLM turn'
         );
-        const llmMs = Date.now() - llmStartedAt;
+        llmMs = Date.now() - llmStartedAt;
         currentLanguage = result.language;
 
         if (closing || utterance.inputEpoch !== inputEpoch) {
-          req.log.info({ ...logContext(), event: 'smartflo_turn_superseded', turnId }, 'Smartflo turn superseded by caller speech');
+          const totalMs = Date.now() - totalStartedAt;
+          req.log.info({
+            ...logContext(),
+            event: 'smartflo_turn_superseded',
+            turnId,
+            cancellationPhase: 'before_tts',
+            totalMs,
+          }, 'Smartflo turn superseded by caller speech');
+          await storeVoiceMetric({
+            routeTurnId: turnId,
+            recordedAt: new Date().toISOString(),
+            status: 'superseded',
+            audioMs,
+            sttMs,
+            llmMs,
+            totalMs,
+            responseSent: false,
+            reason: 'caller_speech_before_tts',
+          });
           return;
         }
 
         const ttsStartedAt = Date.now();
-        const sent = await sendSpeech(result.replyText, result.language, `reply-${turnId}-${Date.now()}`);
-        const ttsMs = Date.now() - ttsStartedAt;
+        const speech = await sendSpeech(result.replyText, result.language, `reply-${turnId}-${Date.now()}`);
+        ttsMs = Date.now() - ttsStartedAt;
+        const totalMs = Date.now() - totalStartedAt;
+        const firstAudioMs = speech.firstAudioAt === null ? undefined : speech.firstAudioAt - totalStartedAt;
 
         req.log.info({
           ...logContext(),
@@ -291,18 +429,52 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
           sttMs,
           llmMs,
           ttsMs,
-          totalMs: Date.now() - totalStartedAt,
-          responseSent: sent,
+          totalMs,
+          firstAudioMs,
+          responseSent: speech.sent,
+          partialResponse: speech.partial,
+          sentenceCount: speech.sentenceCount,
           policyViolations: result.policyViolations,
           callShouldEnd: result.callShouldEnd,
         }, 'Smartflo turn completed');
+        await storeVoiceMetric({
+          routeTurnId: turnId,
+          recordedAt: new Date().toISOString(),
+          status: speech.sent ? 'sent' : 'superseded',
+          audioMs,
+          sttMs,
+          llmMs,
+          ttsMs,
+          firstAudioMs,
+          totalMs,
+          responseSent: speech.sent,
+          reason: speech.partial
+            ? 'partial_tts'
+            : speech.sent ? undefined : 'caller_barge_in_during_tts_or_send',
+        });
       } catch (err) {
         req.log.error({ err, ...logContext(), event: 'smartflo_turn_failed', turnId, audioMs }, 'Smartflo voice turn failed');
+        let repeat: SpeechSendResult | null = null;
         try {
-          await sendRepeatPrompt(utterance.inputEpoch);
+          repeat = await sendRepeatPrompt(utterance.inputEpoch);
         } catch (fallbackErr) {
           req.log.error({ err: fallbackErr, ...logContext(), turnId }, 'Smartflo fallback speech failed');
         }
+        await storeVoiceMetric({
+          routeTurnId: turnId,
+          recordedAt: new Date().toISOString(),
+          status: 'failed',
+          audioMs,
+          sttMs,
+          llmMs,
+          ttsMs,
+          firstAudioMs: repeat?.firstAudioAt === null || repeat?.firstAudioAt === undefined
+            ? undefined
+            : repeat.firstAudioAt - totalStartedAt,
+          totalMs: Date.now() - totalStartedAt,
+          responseSent: repeat?.sent ?? false,
+          reason: err instanceof Error ? err.message.slice(0, 160) : 'unknown_error',
+        });
       } finally {
         busy = false;
         runNextQueued();
@@ -325,7 +497,6 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
     const accumulator = new AudioAccumulator(enqueueUtterance, {
       speechRmsThreshold: config.VOICE_SPEECH_RMS_THRESHOLD,
       onSpeechStart: () => {
-        inputEpoch++;
         // An eager caller often says "hello" before the first TTS request has
         // returned. There is no audio to interrupt yet; bumping playbackEpoch
         // here used to cancel the greeting before its first frame was sent.
@@ -335,7 +506,21 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
           req.log.info({ ...logContext(), event: 'smartflo_early_caller_speech' }, 'Caller spoke while greeting was preparing');
           return;
         }
-        interruptPlayback('caller_speech');
+        // If the bot is already audible, this is a real barge-in and should
+        // stop playback immediately. If it is only thinking/synthesizing,
+        // keep the pending answer and queue the new utterance. Previously a
+        // caller saying "hello" during a silent 5-8 second wait discarded the
+        // finished answer before a single audio byte was sent.
+        if (playbackActive || activeMarkName !== null) {
+          inputEpoch++;
+          interruptPlayback('caller_speech');
+        } else if (busy) {
+          req.log.info({
+            ...logContext(),
+            event: 'smartflo_caller_speech_while_thinking',
+            pendingTurn: turnSequence,
+          }, 'Caller speech queued while a response was preparing');
+        }
       },
     });
 
@@ -356,6 +541,7 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
 
         if (message.event === 'start') {
           if (startPromise) return;
+          clearTimeout(startEventTimer);
           const format = message.start?.mediaFormat;
           if (format?.encoding && format.encoding !== 'audio/x-mulaw') {
             req.log.warn({ encoding: format.encoding }, 'Unsupported Smartflo stream encoding');
@@ -434,14 +620,17 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
 
         if (message.event === 'mark') {
           if (message.mark?.name && message.mark.name === activeMarkName) {
+            const completedMarkName = activeMarkName;
+            const playbackMs = activeMarkSentAt ? Date.now() - activeMarkSentAt : null;
             req.log.info({
               ...logContext(),
               event: 'smartflo_playback_complete',
-              markName: activeMarkName,
-              playbackMs: activeMarkSentAt ? Date.now() - activeMarkSentAt : null,
+              markName: completedMarkName,
+              playbackMs,
             }, 'Smartflo playback completed');
             playbackActive = false;
             activeMarkName = null;
+            await markVoiceMetricPlaybackCompleted(completedMarkName, playbackMs);
           }
           return;
         }

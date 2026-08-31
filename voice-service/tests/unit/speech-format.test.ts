@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toSpokenText } from '../../src/conversation/speech-format.js';
+import { limitSpokenReply, MAX_SPOKEN_REPLY_CHARS, toSpokenText } from '../../src/conversation/speech-format.js';
 
 describe('toSpokenText', () => {
   it('strips bold markers', () => {
@@ -36,5 +36,16 @@ describe('toSpokenText', () => {
   it('removes stray punctuation that creates unnatural Hindi TTS pauses', () => {
     expect(toSpokenText('हमारे पास प्रोडक्ट्स हैं। . पहला Alpha है।')).toBe('हमारे पास प्रोडक्ट्स हैं। पहला Alpha है।');
     expect(toSpokenText('तीन प्रोडक्ट्स हैं:, Alpha, Beta')).toBe('तीन प्रोडक्ट्स हैं: Alpha, Beta');
+  });
+
+  it('keeps at most two sentences for a live phone reply', () => {
+    expect(limitSpokenReply('First answer. Second answer. Third answer.')).toBe('First answer. Second answer.');
+  });
+
+  it('applies a word-safe hard ceiling to an overlong reply', () => {
+    const result = limitSpokenReply(`This is ${'a useful detail '.repeat(30)}`);
+    expect(result.length).toBeLessThanOrEqual(MAX_SPOKEN_REPLY_CHARS);
+    expect(result.endsWith('.')).toBe(true);
+    expect(result.endsWith(' detai.')).toBe(false);
   });
 });

@@ -5,6 +5,8 @@
 // output-policy.ts (prompt instruction + mechanical enforcement). Without
 // this, Sarvam/OpenAI TTS reads literal asterisks and list markers aloud,
 // which is what made early responses sound unnaturally robotic.
+export const MAX_SPOKEN_REPLY_CHARS = 240;
+
 export function toSpokenText(text: string): string {
   let out = text;
 
@@ -44,4 +46,24 @@ export function toSpokenText(text: string): string {
   out = out.trim();
 
   return out;
+}
+
+/**
+ * A phone reply must be bounded even when the model ignores the prompt's
+ * brevity rule. Long catalog paragraphs are the dominant TTS latency source.
+ * Keep at most two sentences, then apply a word-safe character ceiling.
+ */
+export function limitSpokenReply(text: string, maxChars: number = MAX_SPOKEN_REPLY_CHARS): string {
+  const clean = text.trim();
+  if (!clean) return clean;
+
+  const sentenceMatches = clean.match(/[^.!?।]+[.!?।]?/gu) ?? [clean];
+  let bounded = sentenceMatches.slice(0, 2).map((part) => part.trim()).filter(Boolean).join(' ');
+  if (bounded.length <= maxChars) return bounded;
+
+  const candidate = bounded.slice(0, maxChars - 1).trimEnd();
+  const lastSpace = candidate.lastIndexOf(' ');
+  if (lastSpace >= Math.floor(maxChars * 0.6)) bounded = candidate.slice(0, lastSpace);
+  else bounded = candidate;
+  return `${bounded.replace(/[,:;.!?।\s]+$/u, '')}.`;
 }

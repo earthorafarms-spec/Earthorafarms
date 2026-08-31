@@ -87,6 +87,12 @@ function sendUtterance(ws: WebSocket): void {
   }
 }
 
+function acknowledgeLatestMark(ws: WebSocket, collector: Collector): void {
+  const mark = [...collector.messages].reverse().find((message) => message.event === 'mark');
+  if (!mark?.mark?.name) throw new Error('No mark available to acknowledge');
+  ws.send(JSON.stringify({ event: 'mark', streamSid: 'stream-test', mark: { name: mark.mark.name } }));
+}
+
 describe('Smartflo WebSocket local integration', () => {
   let app: ReturnType<typeof Fastify>;
   let client: WebSocket | null;
@@ -152,6 +158,22 @@ describe('Smartflo WebSocket local integration', () => {
     expect(formPost.json()).toEqual({ success: true, wss_url: expect.stringContaining('/ws/voice/smartflo') });
   });
 
+  it('closes a socket that never sends the required Smartflo start event', async () => {
+    vi.useFakeTimers();
+    try {
+      const { ws } = await connect();
+      const closed = new Promise<number>((resolve) => ws.once('close', (code) => resolve(code)));
+      ws.send(JSON.stringify({ event: 'connected' }));
+      await vi.advanceTimersByTimeAsync(15_001);
+      vi.useRealTimers();
+
+      await expect(closed).resolves.toBe(1008);
+      expect(mocks.createSession).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('persists callSid, emits aligned media, and closes the session lifecycle', async () => {
     const { ws, collector } = await connect();
     sendStart(ws);
@@ -202,6 +224,24 @@ describe('Smartflo WebSocket local integration', () => {
     await collector.waitFor(() => mocks.processMessage.mock.calls.length === 1);
 
     expect(mocks.processMessage).toHaveBeenCalledWith('session-test', 'What is available at Earthora Farms?');
+  });
+
+  it('persists first-audio and playback-completion evidence for each sent reply', async () => {
+    mocks.stt.mockResolvedValue({ text: 'Tell me about Alpha', detectedLanguageCode: 'en-IN', languageProbability: 0.99 });
+    const { ws, collector } = await connect();
+    sendStart(ws);
+    await collector.waitFor((messages) => messages.filter((m) => m.event === 'mark').length === 1);
+    acknowledgeLatestMark(ws, collector);
+    sendUtterance(ws);
+    await collector.waitFor((messages) => messages.some((m) => m.event === 'mark' && m.mark?.name?.startsWith('reply-1-')));
+    await collector.waitFor(() => Boolean(session.voiceTurnMetrics?.some((metric) => metric.status === 'sent')));
+
+    const sentMetric = session.voiceTurnMetrics?.find((metric) => metric.status === 'sent');
+    expect(sentMetric?.responseSent).toBe(true);
+    expect(sentMetric?.firstAudioMs).toEqual(expect.any(Number));
+    acknowledgeLatestMark(ws, collector);
+    await collector.waitFor(() => Boolean(sentMetric?.playbackCompletedAt));
+    expect(sentMetric?.playbackMs).toEqual(expect.any(Number));
   });
 
   it('does not cancel the greeting when the caller speaks before TTS returns', async () => {
@@ -258,10 +298,10 @@ describe('Smartflo WebSocket local integration', () => {
     expect(collector.messages.some((m) => m.event === 'clear')).toBe(false);
   });
 
-  it('synthesizes a multi-sentence reply as one complete TTS job', async () => {
+  it('starts all reply sentences concurrently and sends them in order', async () => {
     mocks.stt.mockResolvedValue({ text: 'Tell me about Alpha', detectedLanguageCode: 'en-IN', languageProbability: 0.99 });
     mocks.processMessage.mockResolvedValue({
-      replyText: 'First short sentence. Second short sentence.', language: 'en',
+      replyText: 'First sentence gives the caller the useful answer immediately. Second sentence asks one concise follow-up question.', language: 'en',
       callShouldEnd: false, policyViolations: [],
     });
     const { ws, collector } = await connect();
@@ -270,7 +310,57 @@ describe('Smartflo WebSocket local integration', () => {
     sendUtterance(ws);
     await collector.waitFor((messages) => messages.filter((m) => m.event === 'mark').length >= 2);
 
-    expect(mocks.ttsMulaw).toHaveBeenCalledWith('First short sentence. Second short sentence.', 'en');
-    expect(mocks.ttsMulaw.mock.calls.filter((call) => call[0] === 'First short sentence.').length).toBe(0);
+    expect(mocks.ttsMulaw).toHaveBeenCalledWith('First sentence gives the caller the useful answer immediately.', 'en');
+    expect(mocks.ttsMulaw).toHaveBeenCalledWith('Second sentence asks one concise follow-up question.', 'en');
+  });
+
+  it('sends first-sentence audio before a slower second sentence finishes', async () => {
+    mocks.stt.mockResolvedValue({ text: 'Tell me about Alpha', detectedLanguageCode: 'en-IN', languageProbability: 0.99 });
+    mocks.processMessage.mockResolvedValue({
+      replyText: 'First sentence gives the caller the useful answer immediately. Second sentence asks one concise follow-up question.',
+      language: 'en', callShouldEnd: false, policyViolations: [],
+    });
+    let resolveSecond!: (audio: Buffer) => void;
+    mocks.ttsMulaw
+      .mockResolvedValueOnce(Buffer.alloc(320, 0xff))
+      .mockResolvedValueOnce(Buffer.alloc(1_600, 0x71))
+      .mockReturnValueOnce(new Promise<Buffer>((resolve) => { resolveSecond = resolve; }));
+
+    const { ws, collector } = await connect();
+    sendStart(ws);
+    await collector.waitFor((messages) => messages.filter((m) => m.event === 'mark').length === 1);
+    acknowledgeLatestMark(ws, collector);
+    const mediaBeforeReply = collector.messages.filter((m) => m.event === 'media').length;
+    sendUtterance(ws);
+    await collector.waitFor((messages) => messages.filter((m) => m.event === 'media').length > mediaBeforeReply);
+
+    expect(collector.messages.filter((m) => m.event === 'mark').length).toBe(1);
+    resolveSecond(Buffer.alloc(1_600, 0x72));
+    await collector.waitFor((messages) => messages.filter((m) => m.event === 'mark').length === 2);
+  });
+
+  it('queues caller speech during thinking without discarding the pending answer', async () => {
+    mocks.stt
+      .mockResolvedValueOnce({ text: 'Tell me about Alpha', detectedLanguageCode: 'en-IN', languageProbability: 0.99 })
+      .mockResolvedValueOnce({ text: 'Hello', detectedLanguageCode: 'en-IN', languageProbability: 0.99 });
+    let resolveFirstTurn!: (value: any) => void;
+    mocks.processMessage
+      .mockReturnValueOnce(new Promise((resolve) => { resolveFirstTurn = resolve; }))
+      .mockResolvedValueOnce({ replyText: 'Hello again.', language: 'en', callShouldEnd: false, policyViolations: [] });
+
+    const { ws, collector } = await connect();
+    sendStart(ws);
+    await collector.waitFor((messages) => messages.filter((m) => m.event === 'mark').length === 1);
+    acknowledgeLatestMark(ws, collector);
+    sendUtterance(ws);
+    await collector.waitFor(() => mocks.processMessage.mock.calls.length === 1);
+
+    sendUtterance(ws);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    resolveFirstTurn({ replyText: 'Alpha is available.', language: 'en', callShouldEnd: false, policyViolations: [] });
+
+    await collector.waitFor((messages) => messages.some((m) => m.event === 'mark' && m.mark?.name?.startsWith('reply-1-')));
+    expect(mocks.processMessage.mock.calls[0][1]).toBe('Tell me about Alpha');
+    expect(collector.messages.some((m) => m.event === 'clear')).toBe(false);
   });
 });

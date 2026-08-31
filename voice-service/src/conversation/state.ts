@@ -51,6 +51,22 @@ export interface TurnToolFact {
   resultJson: string;
 }
 
+export interface VoiceTurnMetric {
+  routeTurnId: number;
+  recordedAt: string;
+  status: 'sent' | 'superseded' | 'transcript_rejected' | 'failed';
+  audioMs: number;
+  sttMs?: number;
+  llmMs?: number;
+  ttsMs?: number;
+  firstAudioMs?: number;
+  totalMs: number;
+  responseSent: boolean;
+  playbackCompletedAt?: string;
+  playbackMs?: number;
+  reason?: string;
+}
+
 export interface ConversationState {
   messages: ConversationMessage[];
   cart: CartSnapshotLine[];
@@ -64,6 +80,13 @@ export interface ConversationState {
    * in the language the caller has actually been using, not a default.
    */
   currentLanguage: SupportedLanguage;
+  /**
+   * Transport-level evidence for the most recent voice turns. This lives in
+   * the existing JSONB conversation state, so delivery/cancellation latency
+   * remains available after Render's short log-retention window without a
+   * schema migration. Older sessions simply omit the property.
+   */
+  voiceTurnMetrics?: VoiceTurnMetric[];
 }
 
 export function createInitialState(): ConversationState {
@@ -74,5 +97,6 @@ export function createInitialState(): ConversationState {
     turnCount: 0,
     currentTurnFacts: [],
     currentLanguage: 'en',
+    voiceTurnMetrics: [],
   };
 }

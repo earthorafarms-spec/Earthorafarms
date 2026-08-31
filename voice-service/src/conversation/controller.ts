@@ -2,7 +2,7 @@ import type { ConversationState, ConversationMessage } from './state.js';
 import { SYSTEM_PROMPT } from './prompt.js';
 import { WHATSAPP_SYSTEM_PROMPT } from './whatsapp-prompt.js';
 import { enforceOutputPolicy } from './output-policy.js';
-import { toSpokenText } from './speech-format.js';
+import { limitSpokenReply, toSpokenText } from './speech-format.js';
 import { detectLanguage, buildLanguageInstruction } from './language.js';
 import { turnFailurePrompt } from './voice-copy.js';
 import { buildCheckoutTurnInstruction } from './checkout-context.js';
@@ -195,7 +195,9 @@ export async function processTurn(
     // the voice experience — strip markdown artifacts before it ever leaves
     // this function. See speech-format.ts for why the prompt alone isn't
     // enough.
-    const finalText = channel === 'voice' ? toSpokenText(policyResult.text) : policyResult.text;
+    const finalText = channel === 'voice'
+      ? limitSpokenReply(toSpokenText(policyResult.text))
+      : policyResult.text;
     state.messages.push({ role: 'assistant', content: finalText });
     return { state, replyText: finalText, policyViolations: policyResult.violations };
   }
