@@ -17,6 +17,47 @@ export function shouldPrefetchProductCatalog(text: string): boolean {
   return /\b(products?|available|availability|stock|sell|selling|catalog(?:ue)?)\b|प्रोडक्ट|उत्पाद|अवेलेबल|उपलब्ध|स्टॉक|પ્રોડક્ટ|ઉપલબ્ધ|સ્ટોક/iu.test(text);
 }
 
+export function shouldAnswerCatalogDirectly(text: string): boolean {
+  if (!shouldPrefetchProductCatalog(text)) return false;
+  // Specific price, benefit, usage, and purchase questions still require
+  // the normal tool/LLM loop. A plain "what do you sell?" does not: the live
+  // list_products result is already the complete, grounded answer.
+  return !/\b(price|cost|how much|benefits?|uses?|dosage|dose|ingredients?|directions?|warnings?|buy|order|add|want|need)\b|कीमत|दाम|फायदे|लाभ|खुराक|सामग्री|इस्तेमाल|खरीद|ऑर्डर|જાણકારી|કિંમત|ફાયદા|ઉપયોગ|ખરીદ|ઓર્ડર/iu.test(text);
+}
+
+function buildDirectCatalogReply(
+  catalog: unknown,
+  language: ConversationState['currentLanguage']
+): string | null {
+  if (!catalog || typeof catalog !== 'object') return null;
+  const products = (catalog as { products?: unknown }).products;
+  if (!Array.isArray(products)) return null;
+
+  const names = products
+    .map((product) => product && typeof product === 'object' ? (product as { name?: unknown }).name : null)
+    .filter((name): name is string => typeof name === 'string' && name.trim().length > 0)
+    .map((name) => name.trim());
+
+  if (names.length === 0) {
+    if (language === 'hi') return 'अभी कोई प्रोडक्ट लिस्ट नहीं है। कृपया थोड़ी देर बाद फिर पूछें।';
+    if (language === 'gu') return 'હમણાં કોઈ પ્રોડક્ટ લિસ્ટમાં નથી. કૃપા કરીને થોડી વાર પછી ફરી પૂછો.';
+    return 'No products are listed right now. Please check again shortly.';
+  }
+
+  const spokenNames = names.slice(0, 4).join(', ');
+  const remainder = names.length - 4;
+  if (language === 'hi') {
+    const more = remainder > 0 ? ` और ${remainder} प्रोडक्ट` : '';
+    return `अभी हमारे प्रोडक्ट हैं: ${spokenNames}${more}। आप किस प्रोडक्ट की जानकारी चाहते हैं?`;
+  }
+  if (language === 'gu') {
+    const more = remainder > 0 ? ` અને બીજી ${remainder} પ્રોડક્ટ` : '';
+    return `હમણાં અમારી પ્રોડક્ટ છે: ${spokenNames}${more}. તમને કઈ પ્રોડક્ટની માહિતી જોઈએ છે?`;
+  }
+  const more = remainder > 0 ? `, plus ${remainder} more` : '';
+  return `Our current products are ${spokenNames}${more}. Which one would you like to know about?`;
+}
+
 export interface TurnOutcome {
   state: ConversationState;
   replyText: string;
@@ -102,6 +143,18 @@ export async function processTurn(
       const resultJson = JSON.stringify(productCatalog);
       state.currentTurnFacts.push({ toolName: 'list_products', resultJson });
       preloadedToolResults.set('list_products:{"query":null}', productCatalog);
+
+      if (shouldAnswerCatalogDirectly(userText)) {
+        const directReply = buildDirectCatalogReply(productCatalog, state.currentLanguage);
+        if (directReply) {
+          const finalText = channel === 'voice'
+            ? limitSpokenReply(toSpokenText(directReply))
+            : directReply;
+          state.messages.push({ role: 'assistant', content: finalText });
+          return { state, replyText: finalText, policyViolations: [] };
+        }
+      }
+
       turnContextMessages.push({
         role: 'system',
         content:

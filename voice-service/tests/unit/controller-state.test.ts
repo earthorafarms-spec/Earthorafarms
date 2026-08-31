@@ -20,6 +20,9 @@ describe('processTurn persisted state', () => {
   beforeEach(() => {
     chatMock.mockReset();
     resetGuardState('controller-test');
+    productRepositoryMocks.listActiveProducts.mockClear();
+    productRepositoryMocks.getProductById.mockClear();
+    productRepositoryMocks.listActiveFestivalDeals.mockClear();
     productRepositoryMocks.listActiveProducts.mockResolvedValue([
       {
         id: 'alpha-id', slug: 'alpha', name: 'Alpha', mrp: 100, price: 90,
@@ -44,16 +47,27 @@ describe('processTurn persisted state', () => {
     expect(secondMessages.some((m) => m.role === 'system' && m.content.includes('[Correction]'))).toBe(true);
   });
 
-  it('preloads a fresh catalog for repeated product questions', async () => {
+  it('answers a simple product-list question directly from the fresh catalog', async () => {
     const state = createInitialState();
     state.currentLanguage = 'hi';
-    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'Alpha प्रोडक्ट अभी उपलब्ध है।' });
 
     const outcome = await processTurn('controller-test', state, 'आपके पास कौन से प्रोडक्ट्स उपलब्ध हैं?');
 
     expect(outcome.replyText).toContain('Alpha');
+    expect(outcome.replyText).toContain('किस प्रोडक्ट');
     expect(outcome.policyViolations).toEqual([]);
     expect(productRepositoryMocks.listActiveProducts).toHaveBeenCalledTimes(1);
+    expect(chatMock).not.toHaveBeenCalled();
+    expect(outcome.state.currentTurnFacts[0]?.toolName).toBe('list_products');
+  });
+
+  it('keeps detailed product questions in the model and tool loop', async () => {
+    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'Which product price would you like me to check?' });
+
+    await processTurn('controller-test', createInitialState(), 'What is the price of your available products?');
+
+    expect(productRepositoryMocks.listActiveProducts).toHaveBeenCalledTimes(1);
+    expect(chatMock).toHaveBeenCalledTimes(1);
     const messages = chatMock.mock.calls[0][0] as { role: string; content: string }[];
     expect(messages.some((m) => m.role === 'system' && m.content.includes('LIVE PRODUCT CATALOG FOR THIS TURN'))).toBe(true);
   });
