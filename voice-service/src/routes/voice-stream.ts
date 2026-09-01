@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { WebSocket, RawData } from 'ws';
 import { AudioAccumulator, pcm16ToWav } from '../telephony/audio-accumulator.js';
 import { buildStt, buildTtsForLanguage } from '../providers.js';
-import { processBrowserMessage } from '../adapters/browser.js';
+import { processTurn } from '../conversation/controller.js';
 import { getCallSession, updateCallSessionState } from '../repositories/callSessions.repository.js';
 import { splitSentences } from '../adapters/wav-utils.js';
 import { normalizeVoiceTranscript } from '../conversation/transcript.js';
@@ -141,18 +141,22 @@ export async function registerVoiceStreamRoutes(app: FastifyInstance): Promise<v
         sessionBusy = true;
         clearTimers(); // user is actively talking — cancel any inactivity sequence
         try {
-          const session = await getCallSession(sessionId);
+          // STT and session load are independent — run them in parallel so the
+          // slower one (STT, ~600ms) sets the total rather than summing both.
+          const stt = buildStt();
+          const [session, transcription] = await Promise.all([
+            getCallSession(sessionId),
+            stt.transcribe(pcm16ToWav(pcmUtterance), {
+              format: 'wav',
+              languageHint: undefined, // no hint — auto-detect is more accurate
+            }),
+          ]);
+
           if (!session) {
             send(socket, { type: 'error', message: 'unknown_session' });
             return;
           }
 
-          const wav = pcm16ToWav(pcmUtterance);
-          const stt = buildStt();
-          const transcription = await stt.transcribe(wav, {
-            format: 'wav',
-            languageHint: session.conversationState.currentLanguage,
-          });
           const decision = normalizeVoiceTranscript(transcription);
           if (!decision.accepted) {
             req.log.info({
@@ -169,15 +173,24 @@ export async function registerVoiceStreamRoutes(app: FastifyInstance): Promise<v
             language: transcription.detectedLanguage,
           });
 
-          const result = await processBrowserMessage(sessionId, decision.text);
-          send(socket, { type: 'agent_reply_text', text: result.replyText, language: result.language });
+          // Run the full conversation turn (tool loop + LLM).
+          const outcome = await processTurn(sessionId, session.conversationState, decision.text);
+          const language = outcome.state.currentLanguage;
+          const callShouldEnd = outcome.state.currentTurnFacts.some((f) => {
+            if (f.toolName !== 'create_verification_link') return false;
+            try { return (JSON.parse(f.resultJson) as { ok?: boolean })?.ok === true; } catch { return false; }
+          });
 
-          await streamTts(socket, result.replyText, result.language);
+          send(socket, { type: 'agent_reply_text', text: outcome.replyText, language });
 
-          // agent_audio_end tells the client to exit speaking mode.
-          // If the payment link was just sent, also signal end-of-call so the
-          // client closes the connection after the audio drains.
-          send(socket, { type: 'agent_audio_end', endCall: result.callShouldEnd });
+          // Persist conversation state and synthesize audio in parallel — the
+          // DB write is independent of TTS, so both can fly simultaneously.
+          await Promise.all([
+            updateCallSessionState(sessionId, outcome.state),
+            streamTts(socket, outcome.replyText, language),
+          ]);
+
+          send(socket, { type: 'agent_audio_end', endCall: callShouldEnd });
         } catch (err) {
           req.log.error(err, 'voice stream turn failed');
           send(socket, { type: 'error', message: (err as Error).message });
@@ -208,10 +221,15 @@ export async function registerVoiceStreamRoutes(app: FastifyInstance): Promise<v
 
           const state = session.conversationState;
           state.messages.push({ role: 'assistant', content: greetingText });
-          await updateCallSessionState(sessionId, state);
 
           send(socket, { type: 'agent_reply_text', text: greetingText, language: 'en' });
-          await streamTts(socket, greetingText, 'en');
+
+          // Persist greeting to history and synthesize audio in parallel.
+          await Promise.all([
+            updateCallSessionState(sessionId, state),
+            streamTts(socket, greetingText, 'en'),
+          ]);
+
           send(socket, { type: 'agent_audio_end', endCall: false });
         } catch (err) {
           req.log.error(err, 'greeting failed — caller will need to speak first');

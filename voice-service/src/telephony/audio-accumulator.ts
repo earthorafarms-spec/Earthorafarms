@@ -30,7 +30,7 @@ const MIN_SPEECH_MS_BEFORE_FLUSH = 200;
 // 700ms avoids splitting one thought into two turns while still feeling
 // responsive after the user actually finishes speaking. 300ms was too
 // aggressive — it was flushing mid-sentence pauses as if the turn had ended.
-const SILENCE_MS_TO_FLUSH = 700;
+const SILENCE_MS_TO_FLUSH = 500;
 const MAX_UTTERANCE_MS = 20_000; // safety cap — force-flush a runaway utterance rather than buffer forever
 const PRE_ROLL_MS = 200;
 

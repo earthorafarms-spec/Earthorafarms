@@ -57,7 +57,7 @@ const optionalSchema = z.object({
   // assuming this default is still current; their model lineup moves fast.
   SARVAM_MODEL: z.string().default('sarvam-105b'),
   // Pin STT instead of inheriting a moving SDK/server default.
-  SARVAM_STT_MODEL: z.enum(['saaras:v3', 'saaras:v4']).default('saaras:v3'),
+  SARVAM_STT_MODEL: z.enum(['saaras:v3', 'saaras:v4']).default('saaras:v4'),
   SARVAM_STT_MIN_LANGUAGE_PROBABILITY: z.coerce.number().min(0).max(1).default(0.6),
   // Voice name for Sarvam TTS (bulbul:v3). Defaults to "neha" rather than
   // Sarvam's own default ("shubh") — "neha" is the voice a reference project

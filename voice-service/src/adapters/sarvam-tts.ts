@@ -20,8 +20,8 @@ const SUPPORTED_TO_BCP47: Record<SupportedLanguage, 'en-IN' | 'hi-IN' | 'gu-IN'>
 // D:\Work\Sun\Agent after direct comparison against the default (1.0).
 const PACE_BY_LANGUAGE: Record<SupportedLanguage, number> = {
   en: 1.15,
-  hi: 1.05,
-  gu: 1.0,
+  hi: 1.2,
+  gu: 1.15,
 };
 
 // Lower temperature = more stable/consistent output, fewer word-mixing
