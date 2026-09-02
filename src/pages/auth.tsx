@@ -55,7 +55,6 @@ export default function Auth() {
             {
               user_email: email.trim(),
               user_name: fullName.trim(),
-              user_password: password
             },
             { onConflict: "user_email" }
           );

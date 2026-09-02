@@ -25,25 +25,26 @@ export default defineConfig({
     outDir: path.resolve(import.meta.dirname, 'dist'),
     emptyOutDir: true,
     sourcemap: false,
-    cssCodeSplit: false,
+    cssCodeSplit: true,
     modulePreload: {
       resolveDependencies: () => [],
     },
     rollupOptions: {
       output: {
-        manualChunks: {
-          react: ['react', 'react-dom'],
-          framer: ['framer-motion'],
-          supabase: ['@supabase/supabase-js'],
-          query: ['@tanstack/react-query'],
-          ui: [
-            'lucide-react',
-            'react-icons',
-            'recharts',
-            'cmdk',
-            'vaul',
-            'embla-carousel-react',
-          ],
+        manualChunks: (id) => {
+          // Stable vendor chunks — cached across deploys
+          if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/')) return 'react';
+          if (id.includes('node_modules/framer-motion')) return 'framer';
+          if (id.includes('node_modules/@supabase')) return 'supabase';
+          if (id.includes('node_modules/@tanstack')) return 'query';
+          if (
+            id.includes('node_modules/lucide-react') ||
+            id.includes('node_modules/react-icons') ||
+            id.includes('node_modules/recharts') ||
+            id.includes('node_modules/cmdk') ||
+            id.includes('node_modules/vaul') ||
+            id.includes('node_modules/embla-carousel')
+          ) return 'ui';
         },
       },
     },

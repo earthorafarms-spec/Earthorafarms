@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Filter, ChevronRight, Clock, RefreshCw, PackageOpen, Plus, User, MapPin, Phone, Mail, Package, X, Check, ShoppingCart, Building } from "lucide-react";
+import { Search, Filter, ChevronRight, Clock, RefreshCw, PackageOpen, Plus, User, Package, X, Check, Minus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
@@ -34,6 +34,12 @@ interface ProductItem {
   price: number;
 }
 
+interface OrderLineItem {
+  productId: string;
+  quantity: number;
+  unitPrice: number;
+}
+
 export default function AdminOrders() {
   const [orders, setOrders] = useState<any[]>([]);
   const [filtered, setFiltered] = useState<any[]>([]);
@@ -58,12 +64,10 @@ export default function AdminOrders() {
     zip: "",
     country: "India",
     gstNumber: "",
-    productId: "",
-    quantity: "1",
-    unitPrice: "",
     paymentStatus: "completed",
     orderStatus: "delivered",
   });
+  const [orderItems, setOrderItems] = useState<OrderLineItem[]>([]);
 
   useEscapeKey(() => setSelectedOrder(null), !!selectedOrder);
   useEscapeKey(() => setShowAddModal(false), showAddModal);
@@ -72,7 +76,7 @@ export default function AdminOrders() {
   // Fetch available products for manual creation
   const fetchAvailableProducts = async () => {
     try {
-      const { data } = await supabase.from("products").select("id, name, price");
+      const { data } = await supabase.from("products").select("id, name, price").neq("status", "archived");
       if (data) {
         setAvailableProducts(data.map((p: any) => ({ id: p.id, name: p.name, price: Number(p.price || 0) })));
       }
@@ -238,17 +242,14 @@ export default function AdminOrders() {
 
   const handleCreateOfflineOrder = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!manualForm.customerName || !manualForm.productId) {
-      toast({ title: "Missing fields", description: "Customer name and product selection are required.", variant: "destructive" });
+    if (!manualForm.customerName || orderItems.length === 0) {
+      toast({ title: "Missing fields", description: "Customer name and at least one product are required.", variant: "destructive" });
       return;
     }
 
     setCreatingOrder(true);
     try {
-      const selectedProd = availableProducts.find((p) => p.id === manualForm.productId);
-      const qty = parseInt(manualForm.quantity) || 1;
-      const unitPrice = parseFloat(manualForm.unitPrice) || selectedProd?.price || 0;
-      const totalAmount = unitPrice * qty;
+      const totalAmount = orderItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
       const orderId = `OFFLINE-${Date.now().toString().slice(-6)}`;
       const customerEmail = manualForm.customerEmail || `offline_${Date.now()}@earthorafarms.com`;
 
@@ -264,7 +265,7 @@ export default function AdminOrders() {
         gst: manualForm.gstNumber || "",
       };
 
-      // 1. Update/Insert User_details (same as checkout page)
+      // 1. Update/Insert User_details
       await (supabase.from("User_details") as any).upsert({
         user_email: customerEmail,
         user_name: manualForm.customerName,
@@ -277,7 +278,7 @@ export default function AdminOrders() {
         user_gst: manualForm.gstNumber || "",
       }, { onConflict: "user_email" });
 
-      // 2. Insert normalized order row for admin dashboard
+      // 2. Insert normalized order row
       const { error: orderErr } = await (supabase.from("orders") as any).insert({
         id: orderId,
         order_number: orderId,
@@ -298,16 +299,18 @@ export default function AdminOrders() {
 
       if (orderErr) throw orderErr;
 
-      // 4. Insert order_items row
-      await (supabase.from("order_items") as any).insert({
-        order_id: orderId,
-        product_id: manualForm.productId,
-        quantity: qty,
-        unit_price: unitPrice,
-        total_price: totalAmount,
-      });
+      // 3. Insert all order_items rows
+      await (supabase.from("order_items") as any).insert(
+        orderItems.map((item) => ({
+          order_id: orderId,
+          product_id: item.productId,
+          quantity: item.quantity,
+          unit_price: item.unitPrice,
+          total_price: item.unitPrice * item.quantity,
+        }))
+      );
 
-      // 5. Insert payment record (same as checkout page)
+      // 4. Insert payment record
       await (supabase.from("Payments") as any).insert({
         payment_order_id: orderId,
         payment_amount: String(totalAmount),
@@ -316,7 +319,7 @@ export default function AdminOrders() {
         payment_transaction_id: `POS-${Date.now()}`,
       });
 
-      // 6. Insert order history record (same as checkout page)
+      // 5. Insert order history record
       await (supabase.from("Order_history") as any).insert({
         order_id: orderId,
         order_status: manualForm.orderStatus || "delivered",
@@ -324,6 +327,7 @@ export default function AdminOrders() {
 
       toast({ title: "Offline order created!", description: `Order #${orderId} saved to database.` });
       setShowAddModal(false);
+      setOrderItems([]);
       setManualForm({
         customerName: "",
         customerEmail: "",
@@ -334,9 +338,6 @@ export default function AdminOrders() {
         zip: "",
         country: "India",
         gstNumber: "",
-        productId: "",
-        quantity: "1",
-        unitPrice: "",
         paymentStatus: "completed",
         orderStatus: "delivered",
       });
@@ -549,7 +550,7 @@ export default function AdminOrders() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setShowAddModal(false)}
+              onClick={() => { setShowAddModal(false); setOrderItems([]); }}
               className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
             />
             <motion.div
@@ -579,8 +580,8 @@ export default function AdminOrders() {
                 </button>
               </div>
 
-              {/* Form Content — Compact 2-Column Grid (NO SCROLLBAR) */}
-              <form onSubmit={handleCreateOfflineOrder} className="p-5 flex flex-col gap-4">
+              {/* Form Content — Compact 2-Column Grid */}
+              <form onSubmit={handleCreateOfflineOrder} className="p-5 flex flex-col gap-4 overflow-y-auto">
                 
                 {/* Section 1: Customer & Address Information (Checkout Fields) */}
                 <div className="space-y-2">
@@ -690,65 +691,79 @@ export default function AdminOrders() {
                 {/* Section 2: Product & Order Setup */}
                 <div className="space-y-2 pt-2 border-t border-border/20">
                   <span className="text-[10px] uppercase tracking-wider font-bold text-foreground/50 flex items-center gap-1">
-                    <Package className="w-3 h-3 text-primary" /> Product & Payment Setup
+                    <Package className="w-3 h-3 text-primary" /> Products ({orderItems.length} selected)
                   </span>
 
-                  {/* Horizontal Compact Product Pills */}
-                  <div className="grid grid-cols-3 gap-2">
+                  {/* Multi-select Product Pills */}
+                  <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto pr-1">
                     {availableProducts.map((p) => {
-                      const isSelected = manualForm.productId === p.id;
+                      const lineItem = orderItems.find((i) => i.productId === p.id);
+                      const isSelected = !!lineItem;
                       return (
-                        <button
+                        <div
                           key={p.id}
-                          type="button"
-                          onClick={() => {
-                            setManualForm({
-                              ...manualForm,
-                              productId: p.id,
-                              unitPrice: String(p.price),
-                            });
-                          }}
-                          className={`p-2.5 rounded-xl border text-left transition-all flex items-center justify-between ${
+                          className={`p-2.5 rounded-xl border text-left transition-all ${
                             isSelected
                               ? "bg-primary/10 border-primary shadow-xs ring-1 ring-primary/30"
                               : "bg-white border-border/30 hover:border-primary/30 hover:bg-muted/20"
                           }`}
                         >
-                          <div className="min-w-0 pr-1">
-                            <p className={`text-xs font-bold truncate ${isSelected ? "text-primary" : "text-foreground"}`}>
-                              {p.name}
-                            </p>
-                            <span className="text-[10px] text-foreground/50 font-medium">₹{p.price.toLocaleString("en-IN")}</span>
-                          </div>
-                          {isSelected && <Check className="w-3.5 h-3.5 text-primary shrink-0" strokeWidth={3} />}
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                setOrderItems((prev) => prev.filter((i) => i.productId !== p.id));
+                              } else {
+                                setOrderItems((prev) => [...prev, { productId: p.id, quantity: 1, unitPrice: p.price }]);
+                              }
+                            }}
+                            className="w-full flex items-center justify-between mb-1"
+                          >
+                            <div className="min-w-0 pr-1 text-left">
+                              <p className={`text-xs font-bold truncate ${isSelected ? "text-primary" : "text-foreground"}`}>
+                                {p.name}
+                              </p>
+                              <span className="text-[10px] text-foreground/50 font-medium">₹{p.price.toLocaleString("en-IN")}</span>
+                            </div>
+                            {isSelected
+                              ? <Check className="w-3.5 h-3.5 text-primary shrink-0" strokeWidth={3} />
+                              : <Plus className="w-3.5 h-3.5 text-foreground/30 shrink-0" strokeWidth={2} />
+                            }
+                          </button>
+                          {isSelected && (
+                            <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-primary/20">
+                              <button
+                                type="button"
+                                onClick={() => setOrderItems((prev) => prev.map((i) => i.productId === p.id ? { ...i, quantity: Math.max(1, i.quantity - 1) } : i))}
+                                className="w-6 h-6 rounded-lg bg-primary/15 text-primary flex items-center justify-center hover:bg-primary/25 transition-colors"
+                              >
+                                <Minus className="w-3 h-3" strokeWidth={2.5} />
+                              </button>
+                              <input
+                                type="number"
+                                min="1"
+                                value={lineItem.quantity}
+                                onChange={(e) => {
+                                  const qty = Math.max(1, parseInt(e.target.value) || 1);
+                                  setOrderItems((prev) => prev.map((i) => i.productId === p.id ? { ...i, quantity: qty } : i));
+                                }}
+                                className="flex-1 h-6 text-center text-xs font-bold text-primary bg-primary/5 rounded-lg border border-primary/20 outline-none w-0"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setOrderItems((prev) => prev.map((i) => i.productId === p.id ? { ...i, quantity: i.quantity + 1 } : i))}
+                                className="w-6 h-6 rounded-lg bg-primary/15 text-primary flex items-center justify-center hover:bg-primary/25 transition-colors"
+                              >
+                                <Plus className="w-3 h-3" strokeWidth={2.5} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       );
                     })}
                   </div>
 
-                  <div className="grid grid-cols-4 gap-2 pt-1">
-                    <div>
-                      <label className="block text-foreground/60 font-semibold text-[10px] mb-1">Quantity</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={manualForm.quantity}
-                        onChange={(e) => setManualForm({ ...manualForm, quantity: e.target.value })}
-                        className="w-full h-9 px-3 rounded-xl border border-border/50 bg-[#fafaf8] outline-none focus:border-primary/50 text-foreground text-xs"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-foreground/60 font-semibold text-[10px] mb-1">Unit Price (₹)</label>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={manualForm.unitPrice}
-                        onChange={(e) => setManualForm({ ...manualForm, unitPrice: e.target.value })}
-                        className="w-full h-9 px-3 rounded-xl border border-border/50 bg-[#fafaf8] outline-none focus:border-primary/50 text-foreground text-xs"
-                      />
-                    </div>
-
+                  <div className="grid grid-cols-2 gap-2 pt-1">
                     <div>
                       <label className="block text-foreground/60 font-semibold text-[10px] mb-1">Payment Status</label>
                       <select
@@ -781,16 +796,18 @@ export default function AdminOrders() {
                 {/* Total & Action Bar */}
                 <div className="pt-3 border-t border-border/30 flex items-center justify-between shrink-0">
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-foreground/40 block">Total Order Value</span>
+                    <span className="text-[10px] uppercase font-bold text-foreground/40 block">
+                      Total · {orderItems.reduce((s, i) => s + i.quantity, 0)} item{orderItems.reduce((s, i) => s + i.quantity, 0) !== 1 ? "s" : ""}
+                    </span>
                     <span className="text-lg font-black text-primary">
-                      ₹{((parseFloat(manualForm.unitPrice) || 0) * (parseInt(manualForm.quantity) || 1)).toLocaleString("en-IN")}
+                      ₹{orderItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0).toLocaleString("en-IN")}
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setShowAddModal(false)}
+                      onClick={() => { setShowAddModal(false); setOrderItems([]); }}
                       className="px-4 py-2 rounded-xl border border-border/50 text-xs font-semibold text-foreground/60 hover:bg-muted transition-colors"
                     >
                       Cancel

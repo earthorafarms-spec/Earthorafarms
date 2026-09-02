@@ -3,22 +3,112 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5" />
-    <title>Earthora Farms</title>
-    <meta name="description" content="Earthora Farms — Premium moringa-based wellness products" />
-    <meta name="robots" content="index, follow" />
-    <meta property="og:title" content="Earthora Farms" />
-    <meta property="og:description" content="Earthora Farms — Premium moringa-based wellness products" />
-    <meta property="og:type" content="website" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Earthora Farms" />
-    <meta name="twitter:description" content="Earthora Farms — Premium moringa-based wellness products" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2" />
-    <link rel="shortcut icon" type="image/svg+xml" href="/favicon.svg?v=2" />
+
+    <!-- ── Primary SEO ─────────────────────────────────────────────────────────── -->
+    <title>Earthora Farms | Premium Moringa &amp; Ayurvedic Wellness Products</title>
+    <meta name="description" content="Earthora Farms offers certified organic moringa powder, capsules, and ayurvedic wellness supplements sourced directly from our farm. Free shipping across India." />
+    <meta name="keywords" content="moringa powder, moringa capsules, organic moringa, ayurvedic supplements, moringa wellness, superfood India, Earthora Farms" />
+    <meta name="author" content="Earthora Farms" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+    <link rel="canonical" href="https://www.earthorafarms.com/" />
+
+    <!-- ── Open Graph (Facebook / WhatsApp / LinkedIn) ────────────────────────── -->
+    <meta property="og:type"        content="website" />
+    <meta property="og:site_name"   content="Earthora Farms" />
+    <meta property="og:locale"      content="en_IN" />
+    <meta property="og:url"         content="https://www.earthorafarms.com/" />
+    <meta property="og:title"       content="Earthora Farms | Premium Moringa &amp; Ayurvedic Wellness" />
+    <meta property="og:description" content="Certified organic moringa powder, capsules, and ayurvedic wellness supplements — sourced directly from our farm and shipped across India." />
+    <meta property="og:image"       content="https://www.earthorafarms.com/og-image.jpg" />
+    <meta property="og:image:width"  content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt"   content="Earthora Farms premium organic moringa products" />
+
+    <!-- ── Twitter / X Card ───────────────────────────────────────────────────── -->
+    <meta name="twitter:card"        content="summary_large_image" />
+    <meta name="twitter:site"        content="@earthorafarms" />
+    <meta name="twitter:title"       content="Earthora Farms | Premium Moringa &amp; Ayurvedic Wellness" />
+    <meta name="twitter:description" content="Certified organic moringa powder, capsules, and ayurvedic supplements. Free shipping across India." />
+    <meta name="twitter:image"       content="https://www.earthorafarms.com/og-image.jpg" />
+    <meta name="twitter:image:alt"   content="Earthora Farms premium organic moringa products" />
+
+    <!-- ── PWA / Browser chrome ───────────────────────────────────────────────── -->
+    <meta name="theme-color" content="#3d6b4f" />
+    <meta name="application-name" content="Earthora Farms" />
+    <meta name="apple-mobile-web-app-title" content="Earthora Farms" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+
+    <!-- ── Favicons ────────────────────────────────────────────────────────────── -->
+    <link rel="icon"             type="image/svg+xml" href="/favicon.svg?v=2" />
+    <link rel="shortcut icon"    type="image/svg+xml" href="/favicon.svg?v=2" />
     <link rel="apple-touch-icon" href="/favicon.svg?v=2" />
 
+    <!-- ── Structured Data (JSON-LD) ──────────────────────────────────────────── -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://www.earthorafarms.com/#organization",
+          "name": "Earthora Farms",
+          "url": "https://www.earthorafarms.com/",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://www.earthorafarms.com/favicon.svg",
+            "width": 512,
+            "height": 512
+          },
+          "description": "Certified organic moringa and ayurvedic wellness products sourced directly from farm to consumer.",
+          "contactPoint": {
+            "@type": "ContactPoint",
+            "contactType": "customer service",
+            "availableLanguage": ["English", "Hindi", "Gujarati"]
+          },
+          "sameAs": [
+            "https://www.instagram.com/earthorafarms",
+            "https://www.facebook.com/earthorafarms"
+          ]
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://www.earthorafarms.com/#website",
+          "url": "https://www.earthorafarms.com/",
+          "name": "Earthora Farms",
+          "publisher": { "@id": "https://www.earthorafarms.com/#organization" },
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": {
+              "@type": "EntryPoint",
+              "urlTemplate": "https://www.earthorafarms.com/products?q={search_term_string}"
+            },
+            "query-input": "required name=search_term_string"
+          }
+        },
+        {
+          "@type": "Store",
+          "@id": "https://www.earthorafarms.com/#store",
+          "name": "Earthora Farms",
+          "url": "https://www.earthorafarms.com/",
+          "image": "https://www.earthorafarms.com/og-image.jpg",
+          "description": "Premium organic moringa powder, capsules, and ayurvedic wellness products.",
+          "currenciesAccepted": "INR",
+          "paymentAccepted": "Credit Card, Debit Card, UPI, Net Banking",
+          "priceRange": "₹₹",
+          "hasMap": "https://maps.google.com/?q=Earthora+Farms"
+        }
+      ]
+    }
+    </script>
+
+    <!-- ── Fonts ───────────────────────────────────────────────────────────────── -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&family=Inter:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400&display=swap" />
+    <!-- Non-blocking: fonts load after paint -->
+    <link rel="preload" as="style"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&family=Inter:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+      onload="this.onload=null;this.rel='stylesheet'" />
     <noscript>
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,700;1,9..40,400&family=Inter:wght@400;500;600;700&family=Outfit:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400&display=swap" />
     </noscript>
@@ -32,8 +122,7 @@
       <input name="bot-field" />
     </form>
     <div id="root"></div>
-    <!-- Razorpay Standard Checkout — loaded before app bundle -->
-    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <!-- Razorpay loaded dynamically by the checkout page — not needed globally -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

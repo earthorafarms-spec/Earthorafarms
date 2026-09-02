@@ -75,7 +75,7 @@ export function Hero() {
       <div className="block lg:hidden relative z-0 animate-scale-in delay-800 mt-4 sm:mt-8 px-4 flex justify-end">
         <img
           src={PRODUCT_BOTTLE_URL}
-          alt="TerraElix Supplement Bottle"
+          alt="Earthora Farms Moringa Product"
           className="w-[85%] max-w-[340px] sm:max-w-[480px] object-contain drop-shadow-2xl translate-x-4"
         />
       </div>
@@ -83,7 +83,7 @@ export function Hero() {
       {/* ── Desktop Floating Product Image (lg+ absolute) ── */}
       <img
         src={PRODUCT_BOTTLE_URL}
-        alt="TerraElix Supplement Bottle Floating"
+        alt="Earthora Farms Moringa Product"
         className="hidden lg:block absolute z-0 animate-scale-in delay-700 pointer-events-none drop-shadow-2xl"
         style={{
           width: "clamp(500px, 60vw, 1100px)",

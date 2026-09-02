@@ -22,9 +22,8 @@ function mapProduct(p: DbProduct, dbDeals: FestiveDeal[], dbReviews: DbReview[],
   const rawPrimary = images.find((i) => i.is_primary)?.url || images[0]?.url;
   const rawSecondary = images.find((i) => !i.is_primary)?.url;
 
-  const isPowder = p.slug === 'powder' || (p.name || '').toLowerCase().includes('powder');
-  const primaryImg = isPowder ? powderImg : ((rawPrimary && !rawPrimary.includes('undefined')) ? rawPrimary : fallback.main);
-  const secondaryImg = isPowder ? powderImg2 : ((rawSecondary && !rawSecondary.includes('undefined')) ? rawSecondary : (fallback.hover || primaryImg));
+  const primaryImg = (rawPrimary && !rawPrimary.includes('undefined')) ? rawPrimary : fallback.main;
+  const secondaryImg = (rawSecondary && !rawSecondary.includes('undefined')) ? rawSecondary : primaryImg;
 
   const stockQty = inv?.total_stock ?? 0;
   const mrp = Number(p.mrp);
@@ -63,6 +62,11 @@ function mapProduct(p: DbProduct, dbDeals: FestiveDeal[], dbReviews: DbReview[],
     tag: p.tag || '',
     imageMain: primaryImg,
     imageHover: secondaryImg,
+    allImages: (() => {
+      const urls = images.map((i) => i.url).filter((u) => u && !u.includes('undefined'));
+      if (urls.length > 0) return urls;
+      return secondaryImg !== primaryImg ? [primaryImg, secondaryImg] : [primaryImg];
+    })(),
     badge,
     stock: stockQty > 15 ? 'In Stock' : stockQty > 0 ? 'Low Stock' : 'Out of Stock',
     highlights: Array.isArray(p.highlights) ? p.highlights : [],

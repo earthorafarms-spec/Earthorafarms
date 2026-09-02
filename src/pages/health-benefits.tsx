@@ -150,7 +150,7 @@ export default function HealthBenefits() {
                 key={benefit.num}
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
+                viewport={{ once: true, amount: 0.05 }}
                 transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
                 className={`rounded-3xl border border-black/8 p-8 sm:p-12 lg:p-14 ${benefit.accentBg} shadow-sm hover:shadow-xl transition-all duration-500`}
               >

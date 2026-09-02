@@ -57,6 +57,7 @@ export default function AdminProducts() {
   const [images, setImages] = useState<string[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Restock modal state
   const [restockModal, setRestockModal] = useState<{
@@ -450,12 +451,22 @@ export default function AdminProducts() {
           <div className="flex items-center gap-3">
             <div className="relative">
               <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-foreground/30" strokeWidth={1.5} />
-              <input type="text" placeholder="Search products..." className="h-11 pl-10 pr-4 text-sm bg-white border border-border/40 rounded-xl outline-none focus:border-primary/30 focus:ring-2 focus:ring-primary/5 transition-all w-60 placeholder:text-foreground/30" />
+              <input
+                type="text"
+                placeholder="Search products..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-11 pl-10 pr-4 text-sm bg-white border border-border/40 rounded-xl outline-none focus:border-primary/30 focus:ring-2 focus:ring-primary/5 transition-all w-60 placeholder:text-foreground/30"
+              />
             </div>
             <button className="h-11 px-3.5 rounded-xl border border-border/40 bg-white text-foreground/50 hover:text-foreground hover:border-border/60 hover:bg-muted/10 transition-all">
               <Filter className="w-4 h-4" strokeWidth={1.5} />
             </button>
-            <span className="text-xs text-foreground/30 ml-2">{products.length} products total</span>
+            <span className="text-xs text-foreground/30 ml-2">
+              {searchQuery.trim()
+                ? `${products.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.tag?.toLowerCase().includes(searchQuery.toLowerCase())).length} of ${products.length} products`
+                : `${products.length} products total`}
+            </span>
           </div>
           <Button className="gap-1.5 h-11 px-5 shadow-md" onClick={openForm}>
             <Plus className="w-4 h-4" strokeWidth={2} />
@@ -474,7 +485,12 @@ export default function AdminProducts() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {products.map((p, i) => (
+              {products
+                .filter(p => !searchQuery.trim() ||
+                  p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  (p.tag || "").toLowerCase().includes(searchQuery.toLowerCase())
+                )
+                .map((p, i) => (
                 <motion.div
                   key={p.id}
                   initial={{ opacity: 0, y: 16 }}
@@ -595,8 +611,8 @@ export default function AdminProducts() {
                               toast({ title: "Files skipped", description: "Some files exceeded the 5MB size limit.", variant: "destructive" });
                             }
                             const newImages = validFiles.map((f) => URL.createObjectURL(f));
-                            setImages((prev) => [...prev, ...newImages]);
-                            setSelectedFiles((prev) => [...prev, ...validFiles]);
+                            setImages(newImages);
+                            setSelectedFiles(validFiles);
                           }
                         }}
                         className="rounded-2xl border-2 border-dashed border-border/50 bg-white flex flex-col items-center justify-center cursor-pointer hover:border-primary/40 hover:bg-primary/[0.02] transition-all group relative overflow-hidden h-[380px]"
@@ -634,8 +650,8 @@ export default function AdminProducts() {
                                 toast({ title: "Files skipped", description: "Some files exceeded the 5MB size limit.", variant: "destructive" });
                               }
                               const newImages = validFiles.map((f) => URL.createObjectURL(f));
-                              setImages((prev) => [...prev, ...newImages]);
-                              setSelectedFiles((prev) => [...prev, ...validFiles]);
+                              setImages(newImages);
+                              setSelectedFiles(validFiles);
                             }
                           }}
                         />

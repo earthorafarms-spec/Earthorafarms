@@ -225,11 +225,7 @@ export function UserDashboardModal({ isOpen, onClose }: UserDashboardModalProps)
       const { error: authError } = await supabase.auth.updateUser({ password: password.new });
       if (authError) throw authError;
 
-      const { error: dbError } = await (supabase.from('User_details') as any)
-        .update({ user_password: password.new })
-        .eq('user_email', userEmail);
-
-      if (dbError) throw dbError;
+      // Password is managed exclusively through Supabase Auth — never stored in User_details
 
       toast({ title: 'Password changed', description: 'Your password was updated successfully.' });
       setPassword({ current: '', new: '', confirm: '' });

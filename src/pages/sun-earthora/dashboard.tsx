@@ -2,12 +2,20 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import {
-  TrendingUp, ShoppingCart, Package, MessageSquare, ChevronRight, Clock
+  TrendingUp, ShoppingCart, Package, ChevronRight, Clock
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 
-type MarketData = { name: string; pct: number; growth: string; visitors: number };
+type MarketData = { name: string; pct: number; growth: string; visitors: number; iso: string };
+
+const COUNTRY_ISO: Record<string, string> = {
+  "India": "in", "United States": "us", "United Kingdom": "gb", "Germany": "de",
+  "Canada": "ca", "Australia": "au", "France": "fr", "China": "cn",
+  "Japan": "jp", "Brazil": "br", "Netherlands": "nl", "Singapore": "sg",
+  "United Arab Emirates": "ae", "Italy": "it", "Spain": "es", "Russia": "ru",
+  "South Korea": "kr", "Mexico": "mx", "South Africa": "za", "Sweden": "se",
+};
 
 function StatCard({ label, value, icon: Icon, trend, subtitle, delay }: { label: string; value: string; icon: React.ElementType; trend: string; subtitle: string; delay?: number }) {
   const isPositive = !trend.startsWith("-") && trend !== "0%";
@@ -41,7 +49,7 @@ function StatCard({ label, value, icon: Icon, trend, subtitle, delay }: { label:
 export default function AdminDashboard() {
   const [, setLocation] = useLocation();
   const [orders, setOrders] = useState<any[]>([]);
-  const [activeMarket, setActiveMarket] = useState<string | null>(null);
+  const [activeMarketIso, setActiveMarketIso] = useState<string | null>(null);
   const [liveVisitors, setLiveVisitors] = useState(0);
   const [markets, setMarkets] = useState<MarketData[]>([]);
   const [mapSvg, setMapSvg] = useState<string>("");
@@ -49,7 +57,9 @@ export default function AdminDashboard() {
     revenue: 0,
     ordersTotal: 0,
     productsTotal: 0,
-    pendingReviews: 0,
+    lowStockCount: 0,
+    revenueTrend: "—",
+    ordersTrend: "—",
   });
   const { toast } = useToast();
 
@@ -98,14 +108,33 @@ export default function AdminDashboard() {
 
       setOrders(mappedOrders);
 
-      const totalRevenue = dbOrders
-        .reduce((sum: number, o: any) => sum + Number(o.total_amount || 0), 0);
+      const now = new Date();
+      const cutoff30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      const cutoff60 = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+
+      const recentOrders = dbOrders.filter((o: any) => new Date(o.created_at) >= cutoff30);
+      const prevOrders = dbOrders.filter((o: any) => {
+        const d = new Date(o.created_at);
+        return d >= cutoff60 && d < cutoff30;
+      });
+
+      const totalRevenue = dbOrders.reduce((s: number, o: any) => s + Number(o.total_amount || 0), 0);
+      const recentRevenue = recentOrders.reduce((s: number, o: any) => s + Number(o.total_amount || 0), 0);
+      const prevRevenue = prevOrders.reduce((s: number, o: any) => s + Number(o.total_amount || 0), 0);
+
+      const calcTrend = (current: number, previous: number) => {
+        if (previous === 0) return current > 0 ? "+100%" : "0%";
+        const pct = (current - previous) / previous * 100;
+        return `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
+      };
 
       setStats({
         revenue: totalRevenue,
         ordersTotal: dbOrders.length,
         productsTotal: dbProducts.length,
-        pendingReviews: lowStockCount, // display low stock products count in review spot or alert
+        lowStockCount,
+        revenueTrend: calcTrend(recentRevenue, prevRevenue),
+        ordersTrend: calcTrend(recentOrders.length, prevOrders.length),
       });
 
     } catch (err: any) {
@@ -166,9 +195,11 @@ export default function AdminDashboard() {
       combined.sort((a, b) => (b.orders !== a.orders ? b.orders - a.orders : b.traffic - a.traffic));
       const top = combined.slice(0, 6);
 
+      const nameToIso = (name: string) => COUNTRY_ISO[name] || name.toLowerCase().slice(0, 2);
+
       if (top.length === 0) {
         setMarkets([
-          { name: "India", pct: 100, growth: "No orders yet", visitors: totalTraffic || 0 },
+          { name: "India", pct: 100, growth: "No orders yet", visitors: totalTraffic || 0, iso: "in" },
         ]);
         setLiveVisitors(0);
         return;
@@ -181,6 +212,7 @@ export default function AdminDashboard() {
           pct: Math.round((m.traffic / maxTraffic) * 100),
           growth: m.orders > 0 ? `+${m.orders} orders` : "No orders",
           visitors: m.traffic,
+          iso: nameToIso(m.name),
         }))
       );
 
@@ -222,10 +254,10 @@ export default function AdminDashboard() {
       transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <StatCard label="Total Revenue" value={`₹${stats.revenue.toLocaleString()}`} icon={TrendingUp} trend="+12.5%" subtitle="vs last month" delay={0} />
-        <StatCard label="Orders" value={String(stats.ordersTotal)} icon={ShoppingCart} trend="+8.2%" subtitle="6 new this week" delay={0.05} />
-        <StatCard label="Products" value={String(stats.productsTotal)} icon={Package} trend="0%" subtitle="All active" delay={0.1} />
-        <StatCard label="Pending Reviews" value={String(stats.pendingReviews)} icon={MessageSquare} trend={stats.pendingReviews > 0 ? `+${stats.pendingReviews}` : "0"} subtitle="Needs moderation" delay={0.15} />
+        <StatCard label="Total Revenue" value={`₹${stats.revenue.toLocaleString()}`} icon={TrendingUp} trend={stats.revenueTrend} subtitle="vs last 30 days" delay={0} />
+        <StatCard label="Orders" value={String(stats.ordersTotal)} icon={ShoppingCart} trend={stats.ordersTrend} subtitle="vs last 30 days" delay={0.05} />
+        <StatCard label="Active Products" value={String(stats.productsTotal)} icon={Package} trend="—" subtitle="Live listings" delay={0.1} />
+        <StatCard label="Low Stock Items" value={String(stats.lowStockCount)} icon={Package} trend={stats.lowStockCount > 0 ? `${stats.lowStockCount} items` : "All good"} subtitle="Below threshold" delay={0.15} />
       </div>
 
       <div className="grid lg:grid-cols-3 gap-6">
@@ -251,13 +283,11 @@ export default function AdminDashboard() {
                     const target = e.target as SVGElement;
                     const path = target.closest("path");
                     if (!path) return;
-                    const id = path.id || path.parentElement?.id;
-                    if (id === "in") setActiveMarket("India");
-                    else if (id === "us") setActiveMarket("United States");
-                    else if (id === "gb") setActiveMarket("United Kingdom");
-                    else if (id === "de") setActiveMarket("Germany");
+                    const iso = path.id || (path.parentElement instanceof SVGElement ? path.parentElement.id : "");
+                    if (!iso || iso.startsWith("_")) return;
+                    setActiveMarketIso(iso);
                   }}
-                  onMouseOut={() => setActiveMarket(null)}
+                  onMouseOut={() => setActiveMarketIso(null)}
                 />
               ) : (
                 <div className="text-xs text-foreground/30 animate-pulse font-serif">Loading Map...</div>
@@ -276,16 +306,17 @@ export default function AdminDashboard() {
                   pointer-events: auto;
                   cursor: pointer;
                 }
-                #world-map g {
-                  fill: #d2d6d2 !important;
-                }
-                #world-map g path {
-                  fill: #d2d6d2 !important;
-                }
-                ${activeMarket === "India" ? "#world-map #in, #world-map path#in { fill: var(--accent) !important; opacity: 1 !important; filter: drop-shadow(0 2px 8px rgba(217,163,83,0.3)); }" : ""}
-                ${activeMarket === "United States" ? "#world-map #us path, #world-map path#us, #world-map #us { fill: var(--primary) !important; opacity: 1 !important; filter: drop-shadow(0 2px 8px rgba(27,67,50,0.3)); }" : ""}
-                ${activeMarket === "United Kingdom" ? "#world-map #gb path, #world-map path#gb, #world-map #gb { fill: var(--primary) !important; opacity: 1 !important; filter: drop-shadow(0 2px 8px rgba(27,67,50,0.3)); }" : ""}
-                ${activeMarket === "Germany" ? "#world-map #de, #world-map path#de { fill: var(--primary) !important; opacity: 1 !important; filter: drop-shadow(0 2px 8px rgba(27,67,50,0.3)); }" : ""}
+                #world-map g { fill: #d2d6d2 !important; }
+                #world-map g path { fill: #d2d6d2 !important; }
+                ${activeMarketIso ? `
+                  #world-map #${activeMarketIso},
+                  #world-map #${activeMarketIso} path,
+                  #world-map path#${activeMarketIso} {
+                    fill: ${activeMarketIso === "in" ? "var(--accent)" : "var(--primary)"} !important;
+                    opacity: 1 !important;
+                    filter: drop-shadow(0 2px 8px ${activeMarketIso === "in" ? "rgba(217,163,83,0.3)" : "rgba(27,67,50,0.3)"});
+                  }
+                ` : ""}
               `}</style>
             </div>
 
@@ -298,15 +329,15 @@ export default function AdminDashboard() {
                     <p className="text-[10px] mt-1">Page views will appear here once tracked</p>
                   </div>
                 ) : markets.map((market) => {
-                  const isSelected = activeMarket === market.name;
+                  const isSelected = activeMarketIso === market.iso;
                   return (
                     <div
                       key={market.name}
                       className={`space-y-1.5 p-2 rounded-xl transition-all duration-300 border border-transparent ${
                         isSelected ? "bg-primary/[0.04] border-primary/10 shadow-[0_2px_12px_rgba(0,0,0,0.01)] scale-[1.02]" : "hover:bg-primary/[0.01]"
                       }`}
-                      onMouseEnter={() => setActiveMarket(market.name)}
-                      onMouseLeave={() => setActiveMarket(null)}
+                      onMouseEnter={() => setActiveMarketIso(market.iso)}
+                      onMouseLeave={() => setActiveMarketIso(null)}
                     >
                       <div className="flex justify-between items-center text-xs font-semibold">
                         <span className={`transition-colors duration-300 ${isSelected ? "text-primary" : "text-foreground/80"}`}>{market.name}</span>
@@ -319,7 +350,7 @@ export default function AdminDashboard() {
                       </div>
                       <div className="w-full h-1.5 rounded-full bg-border/40 overflow-hidden">
                           <div
-                            className={`h-full rounded-full transition-all duration-500 ${market.name === "India" ? "bg-accent" : "bg-primary"} ${
+                            className={`h-full rounded-full transition-all duration-500 ${market.iso === "in" ? "bg-accent" : "bg-primary"} ${
                               isSelected ? "brightness-95 scale-y-110 shadow-sm" : ""
                             }`}
                             style={{ width: `${market.pct}%` }}

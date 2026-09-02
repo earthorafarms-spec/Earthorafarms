@@ -201,33 +201,40 @@ export default function Products() {
               </motion.p>
             </div>
 
-            {/* Right Product Spotlight Feature Box */}
-            <div className="lg:col-span-5 hidden lg:block">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
-                className="bg-[#FEFDF9] rounded-3xl border border-black/10 p-8 shadow-xl relative overflow-hidden flex items-center gap-6"
-              >
-                <div className="w-40 h-40 rounded-2xl bg-[#ECEDEC] overflow-hidden shrink-0 flex items-center justify-center p-4">
-                  <img src={powderImg} alt="Spotlight Product" className="w-full h-full object-contain" />
+            {/* Right Product Spotlight Feature Box — shows first available product */}
+            {(() => {
+              const featured = rawProducts.find(p => p.badge) || rawProducts[0];
+              if (!featured) return null;
+              return (
+                <div className="lg:col-span-5 hidden lg:block">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
+                    onClick={() => { setSelectedProduct(featured); setModalImage(featured.imageMain); }}
+                    className="bg-[#FEFDF9] rounded-3xl border border-black/10 p-8 shadow-xl relative overflow-hidden flex items-center gap-6 cursor-pointer hover:shadow-2xl hover:border-black/20 transition-all duration-300"
+                  >
+                    <div className="w-40 h-40 rounded-2xl bg-[#ECEDEC] overflow-hidden shrink-0 flex items-center justify-center p-4">
+                      <img src={featured.imageMain || powderImg} alt={featured.name} className="w-full h-full object-contain" />
+                    </div>
+                    <div>
+                      <span className="px-3 py-1 rounded-full bg-emerald-800 text-white font-inter text-xs font-medium uppercase tracking-wider block w-fit mb-2">
+                        {featured.badge || 'Farm Favorite'}
+                      </span>
+                      <h3 className="font-dm text-2xl text-black font-normal tracking-[-0.03em] mb-1">
+                        {featured.name}
+                      </h3>
+                      <p className="font-inter text-xs text-black/50 mb-3 line-clamp-2">
+                        {featured.description || featured.tag}
+                      </p>
+                      <span className="font-dm text-xl font-normal text-black block">
+                        ₹{featured.price.toFixed(0)}
+                      </span>
+                    </div>
+                  </motion.div>
                 </div>
-                <div>
-                  <span className="px-3 py-1 rounded-full bg-emerald-800 text-white font-inter text-xs font-medium uppercase tracking-wider block w-fit mb-2">
-                    Farm Favorite
-                  </span>
-                  <h3 className="font-dm text-2xl text-black font-normal tracking-[-0.03em] mb-1">
-                    Morilife+ Moringa Capsules
-                  </h3>
-                  <p className="font-inter text-xs text-black/50 mb-3">
-                    90+ bioavailable nutrients in every scoop.
-                  </p>
-                  <span className="font-dm text-xl font-normal text-black block">
-                    ₹799
-                  </span>
-                </div>
-              </motion.div>
-            </div>
+              );
+            })()}
           </div>
         </div>
       </section>

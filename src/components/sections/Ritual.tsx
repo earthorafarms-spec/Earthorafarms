@@ -61,7 +61,7 @@ export function Ritual() {
             </h2>
 
             <p className="font-inter font-normal text-base sm:text-lg text-black/70 leading-[1.6] tracking-[-0.02em] mb-8">
-              Replace the jittery caffeine crash with the smooth, sustained vitality of raw plant nutrition. TerraElix grounds your morning routine in nature's purest energy.
+              Replace the jittery caffeine crash with the smooth, sustained vitality of raw plant nutrition. Earthora Farms grounds your morning routine in nature's purest energy.
             </p>
 
             <ul className="space-y-4 mb-10 font-inter text-base text-black/80">

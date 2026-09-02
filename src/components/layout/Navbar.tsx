@@ -59,9 +59,10 @@ export function Navbar() {
       return;
     }
     (supabase.from("favorite_details") as any)
-      .select("id", { count: "exact", head: true })
+      .select("product_id, products!inner(status)")
       .eq("user_email", email)
-      .then(({ count }: { count: number | null }) => setFavoritesCount(count || 0));
+      .neq("products.status", "archived")
+      .then(({ data }: { data: unknown[] | null }) => setFavoritesCount(data?.length || 0));
   }, [user]);
 
   // Listen for optimistic wishlist changes from product cards

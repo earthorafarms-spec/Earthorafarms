@@ -17,6 +17,7 @@ export interface Product {
   tag: string;
   imageMain: string;
   imageHover: string;
+  allImages: string[];
   badge: string;
   stock: string;
   highlights: string[];

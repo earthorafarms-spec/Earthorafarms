@@ -89,6 +89,7 @@ export default function Contact() {
           contact_phone: cleanPhone,
           contact_topic: cleanTopic,
           contact_message: cleanMessage,
+          contact_marketing_consent: allowMarketing,
         });
 
       if (dbErr) throw dbErr;

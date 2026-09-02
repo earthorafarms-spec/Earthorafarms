@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, X, Leaf, Search, Tag, Percent, Calendar, Users, Copy, Check, Trash2 } from "lucide-react";
+import { Plus, X, Leaf, Search, Tag, Percent, Calendar, Users, Copy, Check, Trash2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
@@ -26,10 +26,12 @@ export default function AdminCoupons() {
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const { toast } = useToast();
 
-  useEscapeKey(() => setShowForm(false), showForm);
+  useEscapeKey(() => { setShowForm(false); setEditingId(null); }, showForm);
 
   const [form, setForm] = useState({
     code: "", type: "percentage" as "percentage" | "fixed", value: "", minOrder: "", maxUses: "", expiryDate: "", description: "",
@@ -73,7 +75,22 @@ export default function AdminCoupons() {
   }, []);
 
   const openForm = () => {
+    setEditingId(null);
     setForm({ code: "", type: "percentage", value: "", minOrder: "", maxUses: "", expiryDate: "", description: "" });
+    setShowForm(true);
+  };
+
+  const openEdit = (coupon: Coupon) => {
+    setEditingId(coupon.id);
+    setForm({
+      code: coupon.code,
+      type: coupon.type,
+      value: String(coupon.value),
+      minOrder: String(coupon.minOrder),
+      maxUses: coupon.maxUses !== null ? String(coupon.maxUses) : "",
+      expiryDate: coupon.expiryDate || "",
+      description: coupon.description !== "-" ? coupon.description : "",
+    });
     setShowForm(true);
   };
 
@@ -123,43 +140,62 @@ export default function AdminCoupons() {
       const codeUpper = form.code.trim().toUpperCase();
       const formattedDate = form.expiryDate.trim() || null;
 
-      // Primary insert into coupon_details table
-      const payload: Record<string, any> = {
-        coupon_code: codeUpper,
-        coupon_discount_type: form.type,
-        coupon_discount_amount: val,
-        coupon_discount_value: val,
-        coupon_min_order: parseFloat(form.minOrder) || 0,
-        coupon_status: "active",
-        coupon_description: form.description || "-",
-      };
-      if (form.maxUses) payload.coupon_max_uses = parseInt(form.maxUses);
-      if (formattedDate) payload.coupon_expiry_date = formattedDate;
+      if (editingId) {
+        // Update existing coupon
+        const updatePayload: Record<string, any> = {
+          coupon_discount_type: form.type,
+          coupon_discount_amount: val,
+          coupon_discount_value: val,
+          coupon_min_order: parseFloat(form.minOrder) || 0,
+          coupon_description: form.description || "-",
+          coupon_expiry_date: formattedDate,
+        };
+        if (form.maxUses) updatePayload.coupon_max_uses = parseInt(form.maxUses);
 
-      const { error: errDetails } = await (supabase.from("coupon_details") as any)
-        .insert(payload);
+        const { error } = await (supabase.from("coupon_details") as any)
+          .update(updatePayload)
+          .eq("id", parseInt(editingId));
 
-      if (errDetails) {
-        console.warn("coupon_details insert failed, trying simpler payload:", errDetails.message);
-        // Fallback with minimal required fields
-        const { error: errFallback } = await (supabase.from("coupon_details") as any)
-          .insert({
-            coupon_code: codeUpper,
-            coupon_discount_type: form.type,
-            coupon_discount_amount: val,
-            coupon_discount_value: val,
-            coupon_description: form.description || "-",
-          });
+        if (error) throw error;
+        toast({ title: "Coupon updated", description: `Coupon "${codeUpper}" has been updated.` });
+      } else {
+        // Create new coupon
+        const payload: Record<string, any> = {
+          coupon_code: codeUpper,
+          coupon_discount_type: form.type,
+          coupon_discount_amount: val,
+          coupon_discount_value: val,
+          coupon_min_order: parseFloat(form.minOrder) || 0,
+          coupon_status: "active",
+          coupon_description: form.description || "-",
+        };
+        if (form.maxUses) payload.coupon_max_uses = parseInt(form.maxUses);
+        if (formattedDate) payload.coupon_expiry_date = formattedDate;
 
-        if (errFallback) throw errDetails || errFallback;
+        const { error: errDetails } = await (supabase.from("coupon_details") as any)
+          .insert(payload);
+
+        if (errDetails) {
+          const { error: errFallback } = await (supabase.from("coupon_details") as any)
+            .insert({
+              coupon_code: codeUpper,
+              coupon_discount_type: form.type,
+              coupon_discount_amount: val,
+              coupon_discount_value: val,
+              coupon_description: form.description || "-",
+            });
+          if (errFallback) throw errDetails || errFallback;
+        }
+
+        toast({ title: "Coupon created", description: `Coupon "${codeUpper}" is now active.` });
       }
 
-      toast({ title: "Coupon created", description: `Coupon "${codeUpper}" is now active.` });
       fetchCoupons();
       setShowForm(false);
+      setEditingId(null);
     } catch (err: any) {
-      console.error("Coupon creation error:", err);
-      toast({ title: "Creation failed", description: err.message || "Invalid coupon parameters.", variant: "destructive" });
+      console.error("Coupon save error:", err);
+      toast({ title: editingId ? "Update failed" : "Creation failed", description: err.message || "Invalid coupon parameters.", variant: "destructive" });
     }
   };
 
@@ -176,9 +212,19 @@ export default function AdminCoupons() {
           <div className="flex items-center gap-3">
             <div className="relative">
               <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-foreground/30" strokeWidth={1.5} />
-              <input type="text" placeholder="Search coupons..." className="h-11 pl-10 pr-4 text-sm bg-white border border-border/40 rounded-xl outline-none focus:border-primary/30 focus:ring-2 focus:ring-primary/5 transition-all w-60 placeholder:text-foreground/30" />
+              <input
+                type="text"
+                placeholder="Search coupons..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-11 pl-10 pr-4 text-sm bg-white border border-border/40 rounded-xl outline-none focus:border-primary/30 focus:ring-2 focus:ring-primary/5 transition-all w-60 placeholder:text-foreground/30"
+              />
             </div>
-            <span className="text-xs text-foreground/30 ml-2">{coupons.length} coupons</span>
+            <span className="text-xs text-foreground/30 ml-2">
+              {searchQuery.trim()
+                ? `${coupons.filter(c => c.code.toLowerCase().includes(searchQuery.toLowerCase()) || c.description?.toLowerCase().includes(searchQuery.toLowerCase())).length} of ${coupons.length} coupons`
+                : `${coupons.length} coupons`}
+            </span>
           </div>
           <Button className="gap-1.5 h-11 px-5 shadow-md" onClick={openForm}>
             <Plus className="w-4 h-4" strokeWidth={2} />
@@ -196,7 +242,12 @@ export default function AdminCoupons() {
               No coupons yet — create your first one.
             </div>
           ) : (
-            coupons.map((coupon, i) => (
+            coupons
+              .filter(c => !searchQuery.trim() ||
+                c.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (c.description || "").toLowerCase().includes(searchQuery.toLowerCase())
+              )
+              .map((coupon, i) => (
               <motion.div
                 key={coupon.id}
                 initial={{ opacity: 0, y: 12 }}
@@ -272,6 +323,13 @@ export default function AdminCoupons() {
                         {coupon.status}
                       </button>
                       <button
+                        onClick={() => openEdit(coupon)}
+                        className="p-2 rounded-lg text-foreground/30 hover:text-primary hover:bg-primary/5 transition-colors"
+                        title="Edit coupon"
+                      >
+                        <Pencil className="w-4 h-4" strokeWidth={1.5} />
+                      </button>
+                      <button
                         onClick={() => handleDelete(coupon.id)}
                         className="p-2 rounded-lg text-foreground/30 hover:text-red-500 hover:bg-red-50 transition-colors"
                         title="Delete coupon"
@@ -301,26 +359,31 @@ export default function AdminCoupons() {
             >
               <div className="flex items-center justify-between px-6 md:px-8 h-16 border-b border-border/30 shrink-0">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center"><Tag className="w-4 h-4 text-primary" strokeWidth={1.5} /></div>
-                  <h2 className="text-sm font-serif font-bold text-foreground">Create Coupon</h2>
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                    {editingId ? <Pencil className="w-4 h-4 text-primary" strokeWidth={1.5} /> : <Tag className="w-4 h-4 text-primary" strokeWidth={1.5} />}
+                  </div>
+                  <h2 className="text-sm font-serif font-bold text-foreground">{editingId ? "Edit Coupon" : "Create Coupon"}</h2>
                 </div>
-                <button onClick={() => setShowForm(false)} className="p-2 rounded-full hover:bg-muted transition-colors"><X className="w-5 h-5 text-foreground/60" /></button>
+                <button onClick={() => { setShowForm(false); setEditingId(null); }} className="p-2 rounded-full hover:bg-muted transition-colors"><X className="w-5 h-5 text-foreground/60" /></button>
               </div>
 
               <div className="flex-1 overflow-y-auto p-6 md:p-8">
                 <div className="max-w-lg mx-auto space-y-5">
                   <div>
-                    <label className="text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5 block">Coupon Code *</label>
+                    <label className="text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5 block">
+                      Coupon Code *{editingId && <span className="normal-case font-normal ml-1 text-foreground/40">(cannot be changed)</span>}
+                    </label>
                     <div className="relative">
                       <input
                         type="text"
                         value={form.code}
-                        onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
+                        onChange={(e) => !editingId && setForm({ ...form, code: e.target.value.toUpperCase() })}
+                        readOnly={!!editingId}
                         placeholder="e.g. SUMMER25"
-                        className="w-full h-12 px-4 text-sm font-mono font-bold tracking-widest bg-white border border-border/40 rounded-xl outline-none focus:border-primary/30 focus:ring-2 focus:ring-primary/5 transition-all placeholder:text-foreground/25 uppercase"
+                        className={`w-full h-12 px-4 text-sm font-mono font-bold tracking-widest border border-border/40 rounded-xl outline-none transition-all placeholder:text-foreground/25 uppercase ${editingId ? "bg-muted/40 text-foreground/50 cursor-not-allowed" : "bg-white focus:border-primary/30 focus:ring-2 focus:ring-primary/5"}`}
                         maxLength={15}
                       />
-                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] text-foreground/25 font-mono">{form.code.length}/15</span>
+                      {!editingId && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] text-foreground/25 font-mono">{form.code.length}/15</span>}
                     </div>
                   </div>
 
@@ -408,10 +471,10 @@ export default function AdminCoupons() {
                   </div>
 
                   <div className="flex items-center justify-end gap-3 pt-5 border-t border-border/20">
-                    <Button variant="outline" onClick={() => setShowForm(false)} className="h-11 px-6">Cancel</Button>
+                    <Button variant="outline" onClick={() => { setShowForm(false); setEditingId(null); }} className="h-11 px-6">Cancel</Button>
                     <Button onClick={handleSubmit} className="h-11 px-8 gap-2 shadow-md">
-                      <Leaf className="w-4 h-4" strokeWidth={1.5} />
-                      Create Coupon
+                      {editingId ? <Pencil className="w-4 h-4" strokeWidth={1.5} /> : <Leaf className="w-4 h-4" strokeWidth={1.5} />}
+                      {editingId ? "Save Changes" : "Create Coupon"}
                     </Button>
                   </div>
                 </div>

@@ -74,13 +74,20 @@ export const ProductCard = memo(function ProductCard({
         {/* Rating row */}
         <div className="flex items-center gap-2 mb-3">
           <div className="flex items-center gap-1">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <Star
-                key={i}
-                className={`w-3.5 h-3.5 ${i < Math.round(p.rating) ? 'fill-amber-400 text-amber-400' : 'text-black/15'}`}
-                strokeWidth={1}
-              />
-            ))}
+            {Array.from({ length: 5 }).map((_, i) => {
+              const filled = i + 1 <= p.rating;
+              const half = !filled && i < p.rating;
+              return (
+                <span key={i} className="relative inline-block w-3.5 h-3.5">
+                  <Star className="w-3.5 h-3.5 text-black/15 absolute inset-0" strokeWidth={1} />
+                  {(filled || half) && (
+                    <span className="absolute inset-0 overflow-hidden" style={{ width: filled ? '100%' : '50%' }}>
+                      <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" strokeWidth={1} />
+                    </span>
+                  )}
+                </span>
+              );
+            })}
           </div>
           <span className="font-inter text-xs text-black/40">
             {p.rating} {p.reviewCount > 0 && `(${p.reviewCount})`}

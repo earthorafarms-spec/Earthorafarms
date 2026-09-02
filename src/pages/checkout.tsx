@@ -9,7 +9,7 @@ import { useCart } from "@/contexts/cart-context";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
-import { openRazorpayModal } from "@/lib/razorpay";
+import { openRazorpayModal, loadRazorpayScript } from "@/lib/razorpay";
 import type { RazorpaySuccessResponse } from "@/lib/razorpay";
 
 const RAZORPAY_KEY_ID = import.meta.env.VITE_RAZORPAY_KEY_ID as string;
@@ -150,6 +150,9 @@ export default function Checkout() {
     }
   }, [appliedCoupon, subtotal]);
 
+  // Preload Razorpay SDK as soon as checkout mounts — it'll be ready by pay-time
+  useEffect(() => { loadRazorpayScript().catch(() => {}); }, []);
+
   // Auth gate & prefill user data
   useEffect(() => {
     if (authLoading) return;
@@ -287,15 +290,50 @@ export default function Checkout() {
         return;
       }
 
-      // Check expiry date
-      if (data.coupon_expiry_date && new Date(data.coupon_expiry_date) < new Date()) {
-        setCouponError("This coupon has expired.");
+      // Check expiry date — coupon is valid through end of the expiry day
+      if (data.coupon_expiry_date) {
+        const expiry = new Date(data.coupon_expiry_date);
+        expiry.setHours(23, 59, 59, 999);
+        if (expiry < new Date()) {
+          setCouponError("This coupon has expired.");
+          setAppliedCoupon(null);
+          return;
+        }
+      }
+
+      // Check global max uses
+      if (data.coupon_max_uses !== null && data.coupon_max_uses !== undefined &&
+          (data.coupon_used_count || 0) >= data.coupon_max_uses) {
+        setCouponError("This coupon has reached its maximum usage limit.");
         setAppliedCoupon(null);
         return;
       }
 
+      // Check per-user: each coupon can only be used once per account
+      if (user?.email) {
+        const { data: usageLog } = await (supabase
+          .from("coupon_usage_log") as any)
+          .select("id")
+          .eq("coupon_id", data.id)
+          .eq("user_email", user.email)
+          .limit(1);
+        if (usageLog && usageLog.length > 0) {
+          setCouponError("You have already used this coupon.");
+          setAppliedCoupon(null);
+          return;
+        }
+      }
+
+      const actualDiscount = data.coupon_discount_type === "percentage"
+        ? (subtotal * data.coupon_discount_value) / 100
+        : Math.min(subtotal, data.coupon_discount_value);
       setAppliedCoupon(data);
-      toast({ title: "Coupon Applied!", description: `Discount of ₹${data.coupon_discount_value} applied.` });
+      toast({
+        title: "Coupon Applied!",
+        description: data.coupon_discount_type === "percentage"
+          ? `${data.coupon_discount_value}% off — ₹${actualDiscount.toFixed(0)} saved.`
+          : `₹${actualDiscount.toFixed(0)} flat discount applied.`,
+      });
     } catch (e: any) {
       setCouponError(e.message || "Failed to validate coupon.");
     } finally {
@@ -306,7 +344,7 @@ export default function Checkout() {
   // ── Helpers ──────────────────────────────────────────────────────────────────
 
   /** Save order rows to Supabase and return the created order's ID */
-  const saveOrderToDatabase = async (status: string, txnId: string) => {
+  const saveOrderToDatabase = async (status: string, txnId: string, verifiedAmount?: number) => {
     // 1. Update/insert user shipping details
     const customerEmail = (email || user?.email || "").trim();
     if (customerEmail) {
@@ -349,7 +387,7 @@ export default function Checkout() {
       order_number: orderNumber,
       user_id: customerEmail,
       status: "pending",
-      total_amount: totalAmount,
+      total_amount: verifiedAmount ?? totalAmount,
       shipping_address: shippingAddressPayload,
       // Flat columns for easy reading in KACC portal
       customer_name: name,
@@ -361,6 +399,8 @@ export default function Checkout() {
       customer_zip: postalCode,
       customer_country: country,
       customer_gst: gst || "",
+      coupon_code: appliedCoupon?.coupon_code ?? null,
+      discount_amount: discountAmount || 0,
     });
 
     if (orderErr) throw orderErr;
@@ -408,7 +448,7 @@ export default function Checkout() {
     // 5. Insert payment record
     await (supabase.from("Payments") as any).insert({
       payment_order_id: orderId,
-      payment_amount: String(totalAmount),
+      payment_amount: String(verifiedAmount ?? totalAmount),
       payment_status: status,
       payment_method: "RAZORPAY",
       payment_transaction_id: txnId,
@@ -432,16 +472,18 @@ export default function Checkout() {
       return;
     }
 
-    // Step 1: Attempt to create Razorpay order via serverless function (optional)
+    // Step 1: Create Razorpay order via serverless function — server computes authoritative total
     let order_id = "";
     let key_id = RAZORPAY_KEY_ID || "rzp_test_1DP5mmOlF5G5ag";
+    let serverAmount = amountPaise; // overwritten with server-verified total when available
 
     try {
       const createRes = await fetch("/.netlify/functions/create-razorpay-order", {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Internal-Key": import.meta.env.VITE_NETLIFY_KEY || "" },
         body: JSON.stringify({
-          amount: amountPaise,
+          cartItems: items.map(i => ({ productId: i.id, quantity: i.quantity })),
+          couponCode: appliedCoupon?.coupon_code ?? undefined,
           currency: "INR",
           receipt: `rcpt_${Date.now()}`,
         }),
@@ -451,16 +493,17 @@ export default function Checkout() {
         const orderData = await createRes.json();
         order_id = orderData.order_id || orderData.id || "";
         key_id = orderData.key_id || key_id;
+        serverAmount = orderData.amount || serverAmount; // trust server-computed total
       }
     } catch (_err) {
       console.warn("[Razorpay] Serverless endpoint unavailable. Using direct checkout.");
     }
 
-    // Step 2: Open Razorpay modal
+    // Step 2: Open Razorpay modal with server-verified amount
     return new Promise<void>((resolve, reject) => {
       openRazorpayModal({
         orderId: order_id,
-        amount: amountPaise,
+        amount: serverAmount,
         currency: "INR",
         keyId: key_id,
         prefill: { name, email, contact: phone },
@@ -498,9 +541,18 @@ export default function Checkout() {
               throw new Error("Payment signature mismatch. Please contact support.");
             }
 
-            // Step 4: Save verified order to DB
+            // Step 4: Save verified order to DB using server-verified amount
             const txnId = response.razorpay_payment_id || `PAY-${Date.now()}`;
-            const orderReferenceId = await saveOrderToDatabase("completed", txnId);
+            const orderReferenceId = await saveOrderToDatabase("completed", txnId, serverAmount / 100);
+
+            // Atomically increment coupon usage and record per-user redemption
+            if (appliedCoupon && user?.email) {
+              await (supabase.rpc as any)("increment_coupon_usage", {
+                coupon_id: appliedCoupon.id,
+                user_email: user.email,
+              });
+            }
+
             setOrderSuccess({ order_number: orderReferenceId, method: "razorpay", total: totalAmount });
 
             // Trigger invoice email sending asynchronously via Netlify Serverless Function

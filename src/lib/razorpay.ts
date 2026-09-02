@@ -2,6 +2,23 @@
 // Frontend helper — opens the Razorpay Standard Checkout modal.
 // KEY_SECRET is NEVER used here. Only the public KEY_ID is referenced.
 
+let _rzpScriptPromise: Promise<void> | null = null;
+
+/** Dynamically injects the Razorpay checkout.js once, returning a promise that resolves when ready. */
+export function loadRazorpayScript(): Promise<void> {
+  if (window.Razorpay) return Promise.resolve();
+  if (_rzpScriptPromise) return _rzpScriptPromise;
+  _rzpScriptPromise = new Promise<void>((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Razorpay SDK failed to load.'));
+    document.head.appendChild(s);
+  });
+  return _rzpScriptPromise;
+}
+
 declare global {
   interface Window {
     Razorpay: new (options: RazorpayOptions) => RazorpayInstance;

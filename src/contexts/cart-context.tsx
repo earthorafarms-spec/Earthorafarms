@@ -81,6 +81,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
             .or(`id.eq.${row.cart_product_id},slug.eq.${row.cart_product_id}`)
             .maybeSingle();
 
+          if (!prod) {
+            // Product was deleted — remove from Cart_details silently
+            (supabase.from('Cart_details') as any)
+              .delete()
+              .eq('cart_user_id', email)
+              .eq('cart_product_id', String(row.cart_product_id))
+              .then(() => {});
+            continue;
+          }
+
           const basePrice = Number(prod?.price || row.cart_product_price);
           const images = (prod?.images as Record<string, unknown>[]) || [];
           const discounted = getDiscountedPrice(
@@ -107,6 +117,24 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
     return () => abort.abort();
   }, [user, deals]);
+
+  // Validate cart against live product list — removes items for deleted products
+  useEffect(() => {
+    if (items.length === 0) return;
+    (supabase.from('products') as any)
+      .select('id, slug')
+      .neq('status', 'archived')
+      .then(({ data }: { data: Record<string, unknown>[] | null }) => {
+        if (!data) return;
+        const valid = new Set(data.flatMap((p: any) => [p.id, p.slug].filter(Boolean)));
+        setItems((prev) => {
+          const filtered = prev.filter((item) => valid.has(item.id) || valid.has(item.name));
+          return filtered.length !== prev.length ? filtered : prev;
+        });
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (items.length === 0 || deals.length === 0) return;

@@ -90,13 +90,23 @@ export const ReviewSection = memo(function ReviewSection({
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium text-foreground">{r.name}</span>
-                          <span className="px-2 py-0.5 text-[10px] font-medium text-green-700 bg-green-50 rounded-full">Verified Purchase</span>
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
                           <div className="flex gap-0.5">
-                            {Array.from({ length: 5 }).map((_, si) => (
-                              <Star key={si} className={`w-3 h-3 ${si < r.rating ? 'fill-accent text-accent' : 'text-border'}`} strokeWidth={1.5} />
-                            ))}
+                            {Array.from({ length: 5 }).map((_, si) => {
+                              const filled = si + 1 <= r.rating;
+                              const half = !filled && si < r.rating;
+                              return (
+                                <span key={si} className="relative inline-block w-3 h-3">
+                                  <Star className="w-3 h-3 text-border absolute inset-0" strokeWidth={1.5} />
+                                  {(filled || half) && (
+                                    <span className="absolute inset-0 overflow-hidden" style={{ width: filled ? '100%' : '50%' }}>
+                                      <Star className="w-3 h-3 fill-accent text-accent" strokeWidth={1.5} />
+                                    </span>
+                                  )}
+                                </span>
+                              );
+                            })}
                           </div>
                           <span className="text-xs text-foreground/30">{r.date}</span>
                         </div>

@@ -68,8 +68,8 @@ export const ProductModal = memo(function ProductModal({
                       className="w-full h-full object-contain drop-shadow-sm"
                     />
                   </div>
-                  <div className="flex gap-3 mt-6">
-                    {[product.imageMain, product.imageHover].filter(Boolean).map((src, i) => (
+                  <div className="flex gap-3 mt-6 flex-wrap justify-center">
+                    {(product.allImages?.length > 0 ? product.allImages : [product.imageMain, product.imageHover]).filter(Boolean).map((src, i) => (
                       <button
                         key={i}
                         onClick={() => onSetImage(src)}
@@ -95,9 +95,20 @@ export const ProductModal = memo(function ProductModal({
                       <div className="flex items-center gap-1.5">
                         <span className="text-sm font-bold text-foreground bg-accent/20 px-2 py-0.5 rounded-md">{product.rating}</span>
                         <div className="flex gap-0.5">
-                          {Array.from({ length: 5 }).map((_, i) => (
-                            <Star key={i} className={`w-4 h-4 ${i < Math.round(product.rating) ? 'fill-accent text-accent' : 'text-border'}`} strokeWidth={1.5} />
-                          ))}
+                          {Array.from({ length: 5 }).map((_, i) => {
+                            const filled = i + 1 <= product.rating;
+                            const half = !filled && i < product.rating;
+                            return (
+                              <span key={i} className="relative inline-block w-4 h-4">
+                                <Star className="w-4 h-4 text-border absolute inset-0" strokeWidth={1.5} />
+                                {(filled || half) && (
+                                  <span className="absolute inset-0 overflow-hidden" style={{ width: filled ? '100%' : '50%' }}>
+                                    <Star className="w-4 h-4 fill-accent text-accent" strokeWidth={1.5} />
+                                  </span>
+                                )}
+                              </span>
+                            );
+                          })}
                         </div>
                       </div>
                       {product.reviewCount > 0 && <span className="text-sm text-foreground/40">{product.reviewCount} ratings</span>}
@@ -165,9 +176,20 @@ export const ProductModal = memo(function ProductModal({
                             <h4 className="text-xs font-medium text-foreground leading-snug mb-1.5 line-clamp-2">{similar.name}</h4>
                             <div className="flex items-center gap-1 mb-1.5">
                               <div className="flex gap-[1px]">
-                                {Array.from({ length: 5 }).map((_, i) => (
-                                  <Star key={i} className={`w-2.5 h-2.5 ${i < Math.round(similar.rating) ? 'fill-accent text-accent' : 'text-border'}`} strokeWidth={1.5} />
-                                ))}
+                                {Array.from({ length: 5 }).map((_, i) => {
+                                  const filled = i + 1 <= similar.rating;
+                                  const half = !filled && i < similar.rating;
+                                  return (
+                                    <span key={i} className="relative inline-block w-2.5 h-2.5">
+                                      <Star className="w-2.5 h-2.5 text-border absolute inset-0" strokeWidth={1.5} />
+                                      {(filled || half) && (
+                                        <span className="absolute inset-0 overflow-hidden" style={{ width: filled ? '100%' : '50%' }}>
+                                          <Star className="w-2.5 h-2.5 fill-accent text-accent" strokeWidth={1.5} />
+                                        </span>
+                                      )}
+                                    </span>
+                                  );
+                                })}
                               </div>
                             </div>
                             <div className="flex items-baseline gap-1.5">

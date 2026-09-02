@@ -8,27 +8,12 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Gate } from '@/components/Gate';
 import ScrollToTop from '@/components/ScrollToTop';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
+// Home is eager — it's the LCP page for most visitors
+import Home from './pages/home';
+import { KaccGate } from '@/components/KaccGate';
+import NotFound from './pages/not-found';
 
 const PageLoader = () => <PageSkeleton />;
-
-import Home from './pages/home';
-import Recipes from './pages/recipes';
-import Contact from './pages/contact';
-import HealthBenefits from './pages/health-benefits';
-import Gallery from './pages/gallery';
-import Auth from './pages/auth';
-import Products from './pages/products';
-import Cart from './pages/cart';
-import Favorites from './pages/favorites';
-import Checkout from './pages/checkout';
-import VoiceCheckout from './pages/voice-checkout';
-import ShippingPolicy from './pages/shipping-policy';
-import FAQ from './pages/faq';
-import PrivacyPolicy from './pages/privacy-policy';
-import TermsOfUse from './pages/terms-of-use';
-import CookieSettings from './pages/cookie-settings';
-import OurStory from './pages/our-story';
-import ReviewOrder from '@/pages/review-order';
 
 function lazyWithRetry<T extends React.ComponentType<any>>(
   componentImport: () => Promise<{ default: T }>
@@ -53,28 +38,46 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
   });
 }
 
-const AdminLayout = lazyWithRetry(() => import('./pages/sun-earthora/layout'));
-const AdminDashboard = lazyWithRetry(() => import('./pages/sun-earthora/dashboard'));
-const AdminProducts = lazyWithRetry(() => import('./pages/sun-earthora/products'));
-const AdminOrders = lazyWithRetry(() => import('./pages/sun-earthora/orders'));
-const AdminAnalytics = lazyWithRetry(() => import('./pages/sun-earthora/analytics'));
-const AdminCoupons = lazyWithRetry(() => import('./pages/sun-earthora/coupons'));
-const AdminFestive = lazyWithRetry(() => import('./pages/sun-earthora/festive'));
+// Public routes — lazy-loaded to keep the initial bundle small
+const OurStory       = lazyWithRetry(() => import('./pages/our-story'));
+const Recipes        = lazyWithRetry(() => import('./pages/recipes'));
+const Contact        = lazyWithRetry(() => import('./pages/contact'));
+const HealthBenefits = lazyWithRetry(() => import('./pages/health-benefits'));
+const Gallery        = lazyWithRetry(() => import('./pages/gallery'));
+const Auth           = lazyWithRetry(() => import('./pages/auth'));
+const Products       = lazyWithRetry(() => import('./pages/products'));
+const Cart           = lazyWithRetry(() => import('./pages/cart'));
+const Favorites      = lazyWithRetry(() => import('./pages/favorites'));
+const Checkout       = lazyWithRetry(() => import('./pages/checkout'));
+const VoiceCheckout  = lazyWithRetry(() => import('./pages/voice-checkout'));
+const ReviewOrder    = lazyWithRetry(() => import('./pages/review-order'));
+const ShippingPolicy = lazyWithRetry(() => import('./pages/shipping-policy'));
+const FAQ            = lazyWithRetry(() => import('./pages/faq'));
+const PrivacyPolicy  = lazyWithRetry(() => import('./pages/privacy-policy'));
+const TermsOfUse     = lazyWithRetry(() => import('./pages/terms-of-use'));
+const CookieSettings = lazyWithRetry(() => import('./pages/cookie-settings'));
+
+// Admin routes
+const AdminLayout         = lazyWithRetry(() => import('./pages/sun-earthora/layout'));
+const AdminDashboard      = lazyWithRetry(() => import('./pages/sun-earthora/dashboard'));
+const AdminProducts       = lazyWithRetry(() => import('./pages/sun-earthora/products'));
+const AdminOrders         = lazyWithRetry(() => import('./pages/sun-earthora/orders'));
+const AdminAnalytics      = lazyWithRetry(() => import('./pages/sun-earthora/analytics'));
+const AdminCoupons        = lazyWithRetry(() => import('./pages/sun-earthora/coupons'));
+const AdminFestive        = lazyWithRetry(() => import('./pages/sun-earthora/festive'));
 const AdminVoiceKnowledge = lazyWithRetry(() => import('./pages/sun-earthora/voice-knowledge'));
-const AdminSettings = lazyWithRetry(() => import('./pages/sun-earthora/settings'));
-const DeveloperLayout = lazyWithRetry(() => import('./pages/developer/layout'));
-const DeveloperDashboard = lazyWithRetry(() => import('./pages/developer/dashboard'));
-const DeveloperWebsite = lazyWithRetry(() => import('./pages/developer/website'));
-const DeveloperPasswords = lazyWithRetry(() => import('./pages/developer/passwords'));
+const AdminSettings       = lazyWithRetry(() => import('./pages/sun-earthora/settings'));
+const DeveloperLayout     = lazyWithRetry(() => import('./pages/developer/layout'));
+const DeveloperDashboard  = lazyWithRetry(() => import('./pages/developer/dashboard'));
+const DeveloperWebsite    = lazyWithRetry(() => import('./pages/developer/website'));
+const DeveloperPasswords  = lazyWithRetry(() => import('./pages/developer/passwords'));
 
-import { KaccGate } from '@/components/KaccGate';
-const KaccLayout = lazyWithRetry(() => import('./pages/kacc/layout'));
+// KACC routes
+const KaccLayout    = lazyWithRetry(() => import('./pages/kacc/layout'));
 const KaccDashboard = lazyWithRetry(() => import('./pages/kacc/dashboard'));
-const KaccB2BGst = lazyWithRetry(() => import('./pages/kacc/b2b-gst'));
+const KaccB2BGst    = lazyWithRetry(() => import('./pages/kacc/b2b-gst'));
 const KaccB2CNonGst = lazyWithRetry(() => import('./pages/kacc/b2c-nongst'));
-const KaccProducts = lazyWithRetry(() => import('./pages/kacc/products'));
-
-import NotFound from './pages/not-found';
+const KaccProducts  = lazyWithRetry(() => import('./pages/kacc/products'));
 
 function Fallback() {
   return <NotFound />;

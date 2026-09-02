@@ -78,9 +78,11 @@ function BenefitCard({
   const p2 = Math.max(0, Math.min(1, (index + 0.7) * step));
   const p3 = Math.max(0, Math.min(1, (index + 1) * step));
 
-  const opacity = useTransform(scrollYProgress, [p0, p1, p2, p3], [0, 1, 1, index === total - 1 ? 1 : 0]);
-  const scale = useTransform(scrollYProgress, [p0, p1, p2, p3], [0.94, 1, 1, index === total - 1 ? 1 : 0.96]);
-  const y = useTransform(scrollYProgress, [p0, p1, p2, p3], [40, 0, 0, index === total - 1 ? 0 : -30]);
+  const isFirst = index === 0;
+  const isLast  = index === total - 1;
+  const opacity = useTransform(scrollYProgress, [p0, p1, p2, p3], [isFirst ? 1 : 0, 1, 1, isLast ? 1 : 0]);
+  const scale   = useTransform(scrollYProgress, [p0, p1, p2, p3], [isFirst ? 1 : 0.94, 1, 1, isLast ? 1 : 0.96]);
+  const y       = useTransform(scrollYProgress, [p0, p1, p2, p3], [isFirst ? 0 : 40, 0, 0, isLast ? 0 : -30]);
 
   const Icon = benefit.icon;
 

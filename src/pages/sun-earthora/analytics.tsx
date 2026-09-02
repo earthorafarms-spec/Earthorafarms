@@ -173,8 +173,7 @@ export default function AdminAnalytics() {
       if (sourceRaw) {
         const sourceMap: Record<string, number> = {};
         for (const ev of sourceRaw as any[]) {
-          // Fallback hierarchy for interesting grouping: device (Desktop/Mobile) or specific browser
-          const source = ev.visitor_device || ev.visitor_browser || "Direct";
+          const source = ev.visitor_browser || ev.visitor_device || "Unknown";
           sourceMap[source] = (sourceMap[source] || 0) + 1;
         }
         const total = Object.values(sourceMap).reduce((a, b) => a + b, 0);
@@ -300,7 +299,7 @@ export default function AdminAnalytics() {
         <div className="bg-white rounded-2xl border border-border/40 p-6 shadow-sm">
           <div className="flex items-center gap-2.5 mb-5">
             <div className="w-2.5 h-2.5 rounded-full bg-accent" />
-            <h2 className="text-sm font-serif font-bold text-foreground">Traffic Sources</h2>
+            <h2 className="text-sm font-serif font-bold text-foreground">Browser Breakdown</h2>
           </div>
           {loading ? (
             <div className="h-48 flex items-center justify-center">
@@ -309,7 +308,7 @@ export default function AdminAnalytics() {
           ) : trafficSources.length === 0 ? (
             <div className="h-48 flex flex-col items-center justify-center text-foreground/30 gap-2">
               <Globe className="w-8 h-8" strokeWidth={1} />
-              <p className="text-xs font-medium">No traffic data yet</p>
+              <p className="text-xs font-medium">No visitor data yet</p>
             </div>
           ) : (
             <div className="space-y-5">

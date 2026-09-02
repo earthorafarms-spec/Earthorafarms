@@ -111,9 +111,11 @@ export function Products() {
                     <span className="font-inter font-medium text-sm text-black">
                       {product.rating || "4.8"}
                     </span>
-                    <span className="font-inter text-xs text-black/40">
-                      ({product.reviewCount || "120"} reviews)
-                    </span>
+                    {product.reviewCount > 0 && (
+                      <span className="font-inter text-xs text-black/40">
+                        ({product.reviewCount} reviews)
+                      </span>
+                    )}
                   </div>
 
                   {/* Title & Subtitle */}
