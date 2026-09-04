@@ -10,7 +10,7 @@ import {
 import { listActiveProducts } from '../repositories/products.repository.js';
 import { priceCart } from '../domain/pricing.js';
 import { createPaymentLink } from '../payments/razorpay-links.js';
-import { patchCheckoutBodySchema } from '../schemas/checkout.js';
+import { createPaymentLinkBodySchema, patchCheckoutBodySchema } from '../schemas/checkout.js';
 import { config } from '../config.js';
 
 async function resolveSession(rawToken: string): Promise<
@@ -119,6 +119,13 @@ export async function registerCheckoutRoutes(app: FastifyInstance): Promise<void
       return reply.status(409).send({ error: 'session_locked', message: 'This order can no longer be repriced.' });
     }
 
+    if (session.status !== 'opened') {
+      return reply.status(409).send({
+        error: 'review_required',
+        message: 'Save the reviewed form before calculating the final price.',
+      });
+    }
+
     const items = await listCheckoutItems(session.id);
     if (items.length === 0) {
       return reply.status(400).send({ error: 'empty_cart' });
@@ -154,6 +161,15 @@ export async function registerCheckoutRoutes(app: FastifyInstance): Promise<void
       });
     }
 
+
+    const confirmation = createPaymentLinkBodySchema.safeParse(req.body);
+    if (!confirmation.success) {
+      return reply.status(400).send({
+        error: 'confirmation_required',
+        message: 'Explicit confirmation from the reviewed form is required before payment.',
+      });
+    }
+
     const referenceId = `voice-${session.id}`;
     const amountPaise = Math.round(session.frozenPricing.total * 100);
 
@@ -162,7 +178,13 @@ export async function registerCheckoutRoutes(app: FastifyInstance): Promise<void
         amountPaise,
         currency: session.frozenPricing.currency,
         referenceId,
-        customer: { name: session.name, email: session.email, contact: session.phone },
+        customer: {
+          name: session.name,
+          email: session.email,
+          contact: session.phone.startsWith('+')
+            ? session.phone
+            : `+91${session.phone.replace(/\D/g, '')}`,
+        },
         callbackUrl: `${config.PUBLIC_APP_URL}/voice-checkout/${req.params.token}`,
       });
 

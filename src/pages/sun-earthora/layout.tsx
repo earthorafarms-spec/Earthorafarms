@@ -14,7 +14,7 @@ const navItems = [
   { id: "orders",     label: "Orders",         icon: ShoppingCart,    path: "/sun-earthora/orders", hint: "View & fulfill customer orders" },
   { id: "coupons",    label: "Coupons",        icon: Tag,             path: "/sun-earthora/coupons", hint: "Create promotional discounts" },
   { id: "festive",    label: "Festive Deals",  icon: Sparkles,        path: "/sun-earthora/festive", hint: "Seasonal campaigns & banners" },
-  { id: "voice-knowledge", label: "Voice Agent KB", icon: MessageCircleQuestion, path: "/sun-earthora/voice-knowledge", hint: "Approved answers for the voice ordering assistant" },
+  { id: "voice-knowledge", label: "Agent Knowledge", icon: MessageCircleQuestion, path: "/sun-earthora/voice-knowledge", hint: "Approved product answers for WhatsApp and voice" },
   { id: "analytics", label: "Analytics",      icon: TrendingUp,      path: "/sun-earthora/analytics", hint: "Revenue & traffic trends" },
   { id: "settings",  label: "Settings",       icon: Settings,        path: "/sun-earthora/settings", hint: "Admin configuration" },
 ];

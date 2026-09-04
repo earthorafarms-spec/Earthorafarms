@@ -4,7 +4,16 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 // unless RUN_INTEGRATION_TESTS=1 AND a real OPENAI_API_KEY are both present
 // — this test costs real money/tokens per run, so it must never run by
 // accident in CI without both being deliberately configured.
-const RUN = process.env.RUN_INTEGRATION_TESTS === '1' && Boolean(process.env.OPENAI_API_KEY);
+const RUN = process.env.RUN_INTEGRATION_TESTS === '1'
+  && Boolean(process.env.OPENAI_API_KEY)
+  && (
+    (process.env.WHATSAPP_PROVIDER === 'tata_omni'
+      && Boolean(process.env.TATA_OMNI_ACCESS_TOKEN)
+      && Boolean(process.env.WHATSAPP_CHECKOUT_TEMPLATE_NAME))
+    || (Boolean(process.env.WHATSAPP_PHONE_NUMBER_ID) && Boolean(process.env.WHATSAPP_TOKEN))
+  )
+  && Boolean(process.env.E2E_WHATSAPP_PHONE);
+const testWhatsappPhone = process.env.E2E_WHATSAPP_PHONE ?? '';
 
 describe.skipIf(!RUN)('text-mode conversation end to end', () => {
   let supabase: import('@supabase/supabase-js').SupabaseClient;
@@ -37,7 +46,7 @@ describe.skipIf(!RUN)('text-mode conversation end to end', () => {
     await supabase.from('products').delete().eq('id', productId);
   });
 
-  it('builds a cart, collects checkout fields, and creates a verification link without leaking the raw token', async () => {
+  it('builds a cart, collects checkout fields, and sends a review form without leaking the raw token', async () => {
     const { processTurn } = await import('../../src/conversation/controller.js');
     const { getCallSession } = await import('../../src/repositories/callSessions.repository.js');
 
@@ -45,7 +54,7 @@ describe.skipIf(!RUN)('text-mode conversation end to end', () => {
 
     const turns = [
       'I want to buy the E2E Test Moringa Powder, one unit.',
-      'My name is Jane Doe, email e2e-test@example.com, phone 9876543210.',
+      `My name is Jane Doe, email e2e-test@example.com, phone ${testWhatsappPhone}.`,
       'My address is 123 Test Lane, Ahmedabad, Gujarat, 380001, India.',
       "That's everything, please send me the checkout link.",
     ];

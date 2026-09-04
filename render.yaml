@@ -5,7 +5,7 @@ services:
     rootDir: voice-service
     buildCommand: npm install && npm run build
     startCommand: npm start
-    plan: free          # upgrade to "starter" ($7/mo) for always-on in production
+    plan: free          # Free sleeps after 15 idle minutes; use 0.5c-512mb for always-on production calls.
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
@@ -23,14 +23,38 @@ services:
         sync: false
       - key: OPENAI_MODEL
         value: gpt-4o-mini
+      - key: OPENAI_STT_MODEL
+        value: gpt-4o-mini-transcribe
       - key: LLM_PROVIDER
         value: openai
       - key: STT_PROVIDER
-        value: sarvam
+        value: openai
       - key: TTS_PROVIDER
         value: auto
       - key: SARVAM_API_KEY
         sync: false
+      - key: SARVAM_API_KEYS
+        sync: false
+      - key: SARVAM_KEY_COOLDOWN_MS
+        value: "300000"
+      - key: WHATSAPP_PROVIDER
+        value: tata_omni
+      - key: TATA_OMNI_ACCESS_TOKEN
+        sync: false
+      - key: TATA_OMNI_API_BASE_URL
+        value: https://wb.omni.tatatelebusiness.com
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: WHATSAPP_CHECKOUT_TEMPLATE_NAME
+        sync: false
+      - key: WHATSAPP_CHECKOUT_TEMPLATE_LANGUAGE
+        value: en
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET
@@ -47,3 +71,48 @@ services:
         sync: false
       - key: MAIN_APP_NETLIFY_URL
         sync: false     # same as PUBLIC_APP_URL — used to fire invoice emails
+
+  # Text WhatsApp agent. Do not point the same number's callbacks at both agents.
+  # Apply the WhatsApp integration migration and deploy the admin Edge Function first.
+  - type: web
+    name: earthora-messaging-platform
+    runtime: python
+    rootDir: earthora-messaging-platform
+    region: singapore
+    plan: starter # Paid always-on compute; deploying this service incurs Render charges.
+    buildCommand: pip install uv==0.12.9 && uv sync --locked --no-dev
+    startCommand: .venv/bin/uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: prod
+      - key: USE_SUPABASE_DATA_API
+        value: "true"
+      - key: ENABLE_DEVELOPER_TOOLS
+        value: "false"
+      - key: BGE_M3_ENABLED
+        value: "false"
+      - key: SECRET_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_WABA_ID
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false

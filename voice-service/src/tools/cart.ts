@@ -80,6 +80,64 @@ export const addCartItemTool: ToolModule = {
   },
 };
 
+export const addCartItemsTool: ToolModule = {
+  definition: {
+    name: 'add_cart_items',
+    description:
+      'Adds two or more explicitly requested products in one operation. Use this when the caller names ' +
+      'multiple products and gives a quantity for each in the same utterance. Each item is checked against ' +
+      'the live catalog and stock, and the result reports every line separately.',
+    parameters: {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          minItems: 2,
+          maxItems: 10,
+          items: {
+            type: 'object',
+            properties: {
+              productId: { type: 'string', description: 'Exact product ID from list_products.' },
+              quantity: { type: 'integer', minimum: 1, description: 'How many units to add.' },
+            },
+            required: ['productId', 'quantity'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['items'],
+      additionalProperties: false,
+    },
+  },
+  handler: async (args, ctx: ToolContext) => {
+    const rawItems = Array.isArray(args.items) ? args.items.slice(0, 10) : [];
+    if (rawItems.length < 2) return { ok: false, reason: 'multiple_items_required' };
+
+    // Combine duplicate IDs first, so "two Alpha and another Alpha" becomes
+    // one stock-bounded addition instead of two potentially confusing lines.
+    const quantities = new Map<string, number>();
+    for (const raw of rawItems) {
+      const item = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
+      const productId = String(item.productId ?? '');
+      const quantity = Math.max(1, Math.trunc(Number(item.quantity ?? 1)));
+      if (!productId) continue;
+      quantities.set(productId, (quantities.get(productId) ?? 0) + quantity);
+    }
+    if (quantities.size < 2) return { ok: false, reason: 'multiple_products_required' };
+
+    const results: { productId: string; requestedQuantity: number; result: unknown }[] = [];
+    for (const [productId, quantity] of quantities) {
+      const result = await addCartItemTool.handler({ productId, quantity }, ctx);
+      results.push({ productId, requestedQuantity: quantity, result });
+    }
+
+    const allAdded = results.every(({ result }) =>
+      Boolean(result && typeof result === 'object' && (result as { ok?: boolean }).ok)
+    );
+    return { ok: allAdded, results, cart: cartSummary(ctx.state.cart) };
+  },
+};
+
 export const updateCartItemTool: ToolModule = {
   definition: {
     name: 'update_cart_item',

@@ -1,14 +1,9 @@
 import type { ToolModule, ToolContext } from './types.js';
 import type { CheckoutFieldSnapshot } from '../conversation/state.js';
 import { generateVerificationToken, hashToken } from '../lib/crypto.js';
-import {
-  createCheckoutSession,
-  attachPaymentLink,
-  freezeCheckoutPricing,
-} from '../repositories/checkoutSessions.repository.js';
+import { createCheckoutSession } from '../repositories/checkoutSessions.repository.js';
 import { upsertCheckoutItem } from '../repositories/checkoutItems.repository.js';
-import { createPaymentLink } from '../payments/razorpay-links.js';
-import { priceCart } from '../domain/pricing.js';
+import { sendWhatsAppCheckoutForm } from '../adapters/meta-cloud.js';
 import { config } from '../config.js';
 
 const ALLOWED_FIELDS = [
@@ -145,9 +140,11 @@ export const createVerificationLinkTool: ToolModule = {
   definition: {
     name: 'create_verification_link',
     description:
-      'Prices the cart, creates a Razorpay payment link, and sends it directly to the caller ' +
-      'via SMS and email — Razorpay handles delivery automatically. Call this only after the ' +
-      'cart is non-empty and all required checkout fields are set.',
+      'Creates a secure, editable order-review form and sends it to the caller on WhatsApp. ' +
+      'This does NOT create a Razorpay payment link. The customer must review or edit the form, ' +
+      'confirm the freshly calculated price, and explicitly continue before payment can begin. ' +
+      'Call this only after the cart is non-empty, all required checkout fields are set, and ' +
+      'the optional GST question was answered (an empty gst value means the caller declined).',
     parameters: { type: 'object', properties: {}, required: [], additionalProperties: false },
   },
   handler: async (_args, ctx: ToolContext) => {
@@ -158,25 +155,23 @@ export const createVerificationLinkTool: ToolModule = {
     if (missing.length > 0) {
       return { ok: false, reason: 'missing_fields', missingRequiredFields: missing };
     }
+    if (ctx.state.checkoutFields.gst === undefined) {
+      return { ok: false, reason: 'gst_question_not_answered' };
+    }
 
     const fields = ctx.state.checkoutFields;
+    if (!config.whatsappCheckoutConfigured) {
+      return { ok: false, reason: 'whatsapp_not_configured' };
+    }
 
-    // Price the cart live — applies festival deals, coupon, GST (Gujarat vs inter-state).
-    const priced = await priceCart(
-      ctx.state.cart.map((l) => ({ productId: l.productId, quantity: l.quantity })),
-      {
-        country: fields.country ?? 'India',
-        state: fields.state ?? '',
-        couponCode: fields.couponCode,
-      }
-    );
-
-    // Create a session record so the Razorpay webhook can look up order details and
-    // finalize the order when payment completes. The verification token is generated
-    // purely to satisfy the DB NOT NULL constraint — it is never sent to the caller;
-    // there is no form step in this flow.
-    const tokenHash = hashToken(generateVerificationToken());
-    const tokenExpiresAt = new Date(Date.now() + 24 * 60 * 60_000).toISOString();
+    // The raw token is sent only to the customer's WhatsApp number. Supabase
+    // stores only its SHA-256 hash, so a database read cannot reveal a usable
+    // checkout URL.
+    const rawToken = generateVerificationToken();
+    const tokenHash = hashToken(rawToken);
+    const tokenExpiresAt = new Date(
+      Date.now() + config.VOICE_CHECKOUT_TTL_MINUTES * 60_000
+    ).toISOString();
 
     const session = await createCheckoutSession({
       callSessionId: ctx.callSessionId,
@@ -189,26 +184,25 @@ export const createVerificationLinkTool: ToolModule = {
       await upsertCheckoutItem(session.id, line.productId, line.quantity, line.unitPrice);
     }
 
-    // Freeze pricing so the finalizer RPC has authoritative amounts to validate against.
-    await freezeCheckoutPricing(session.id, priced);
-
-    // Normalize phone to E.164 (assume India +91 if no country code).
+    // Do not price or create a Razorpay link here. The checkout page first
+    // persists the customer's edits, then calls verify-and-price, and only an
+    // explicit confirmation from that page can request the payment link.
     const rawPhone = fields.phone!;
     const contact = rawPhone.startsWith('+') ? rawPhone : `+91${rawPhone.replace(/\D/g, '')}`;
-    const referenceId = `VOICE-${session.id.slice(0, 8).toUpperCase()}`;
+    const verificationUrl = `${config.PUBLIC_APP_URL.replace(/\/$/, '')}/voice-checkout/${rawToken}`;
+    try {
+      await sendWhatsAppCheckoutForm(contact, verificationUrl);
+    } catch {
+      return { ok: false, reason: 'whatsapp_delivery_failed' };
+    }
 
-    // Razorpay sends the payment link via SMS to `contact` and email to `email`
-    // automatically (notify.sms + notify.email are enabled in razorpay-links.ts).
-    const link = await createPaymentLink({
-      amountPaise: Math.round(priced.total * 100),
-      currency: 'INR',
-      referenceId,
-      customer: { name: fields.name!, email: fields.email!, contact },
-      callbackUrl: config.PUBLIC_APP_URL,
-    });
-
-    await attachPaymentLink(session.id, { paymentLinkId: link.id, referenceId });
-
-    return { ok: true, paymentLinkSent: true, totalAmount: priced.total };
+    // Never return the raw token or URL to the LLM: tool results are persisted
+    // in the conversation transcript and may later be spoken aloud.
+    return {
+      ok: true,
+      verificationFormSent: true,
+      channel: 'whatsapp',
+      expiresInMinutes: config.VOICE_CHECKOUT_TTL_MINUTES,
+    };
   },
 };

@@ -8,7 +8,7 @@ const repositoryMocks = vi.hoisted(() => ({
 
 vi.mock('../../src/repositories/products.repository.js', () => repositoryMocks);
 
-import { addCartItemTool, updateCartItemTool } from '../../src/tools/cart.js';
+import { addCartItemTool, addCartItemsTool, updateCartItemTool } from '../../src/tools/cart.js';
 
 describe('cart tools', () => {
   beforeEach(() => {
@@ -60,5 +60,26 @@ describe('cart tools', () => {
     expect(result).toMatchObject({ ok: false, reason: 'out_of_stock' });
     expect(state.cart).toEqual([]);
   });
-});
 
+  it('adds multiple products with independent quantities in one operation', async () => {
+    repositoryMocks.getProductById.mockImplementation(async (id: string) => ({
+      id, slug: id, name: id === 'product-1' ? 'Alpha' : 'Beta', mrp: 100, price: 90,
+      status: 'active', stockQty: 10, stockLabel: 'In Stock', tag: '', badge: '',
+      description: '', highlights: [],
+    }));
+    const state = createInitialState();
+    const result = await addCartItemsTool.handler(
+      { items: [
+        { productId: 'product-1', quantity: 2 },
+        { productId: 'product-2', quantity: 2 },
+      ] },
+      { callSessionId: 'session-1', state }
+    );
+
+    expect(result).toMatchObject({ ok: true });
+    expect(state.cart).toEqual([
+      { productId: 'product-1', productName: 'Alpha', quantity: 2, unitPrice: 90 },
+      { productId: 'product-2', productName: 'Beta', quantity: 2, unitPrice: 90 },
+    ]);
+  });
+});

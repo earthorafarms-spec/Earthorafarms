@@ -1,4 +1,4 @@
-import { SarvamAIClient } from 'sarvamai';
+import { requireSarvamKeys, withSarvamClient } from './sarvam-client.js';
 import { config } from '../config.js';
 import type { SttAdapter, TranscriptionResult } from './types.js';
 import type { SupportedLanguage } from '../conversation/language.js';
@@ -22,25 +22,20 @@ const SUPPORTED_TO_BCP47: Record<SupportedLanguage, 'en-IN' | 'hi-IN' | 'gu-IN'>
 };
 
 export class SarvamSttAdapter implements SttAdapter {
-  private client: SarvamAIClient;
-
   constructor() {
-    if (!config.SARVAM_API_KEY) {
-      throw new Error('SARVAM_API_KEY is not set — cannot use STT_PROVIDER=sarvam.');
-    }
-    this.client = new SarvamAIClient({ apiSubscriptionKey: config.SARVAM_API_KEY });
+    requireSarvamKeys();
   }
 
   async transcribe(audio: Buffer, opts?: { languageHint?: SupportedLanguage; format?: 'webm' | 'wav' }): Promise<TranscriptionResult> {
     const format = opts?.format ?? 'webm';
     const contentType = format === 'wav' ? 'audio/wav' : 'audio/webm';
 
-    const response = await this.client.speechToText.transcribe({
+    const response = await withSarvamClient((client, requestOptions) => client.speechToText.transcribe({
       file: { data: audio, filename: `utterance.${format}`, contentType },
       model: config.SARVAM_STT_MODEL,
       mode: 'transcribe',
       language_code: 'unknown',
-    }, { timeoutInSeconds: config.VOICE_STT_TIMEOUT_MS / 1_000 });
+    }, requestOptions), config.VOICE_STT_TIMEOUT_MS);
 
     const autoCode = response.language_code;
     const probability = response.language_probability;
@@ -48,12 +43,13 @@ export class SarvamSttAdapter implements SttAdapter {
     const lowConfidence = probability !== undefined && probability < config.SARVAM_STT_MIN_LANGUAGE_PROBABILITY;
 
     if (opts?.languageHint && !unsupportedLanguage && lowConfidence) {
-      const retry = await this.client.speechToText.transcribe({
+      const languageHint = opts.languageHint;
+      const retry = await withSarvamClient((client, requestOptions) => client.speechToText.transcribe({
         file: { data: audio, filename: `utterance.${format}`, contentType },
         model: config.SARVAM_STT_MODEL,
         mode: 'transcribe',
-        language_code: SUPPORTED_TO_BCP47[opts.languageHint],
-      }, { timeoutInSeconds: config.VOICE_STT_TIMEOUT_MS / 1_000 });
+        language_code: SUPPORTED_TO_BCP47[languageHint],
+      }, requestOptions), config.VOICE_STT_TIMEOUT_MS);
 
       return {
         text: retry.transcript,

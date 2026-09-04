@@ -15,4 +15,17 @@ describe('checkout turn context', () => {
     expect(instruction).toContain('set_delivery_location');
     expect(instruction).toMatch(/Do not ask.*translate.*English/i);
   });
+
+  it('requires the optional GST question after required delivery fields', () => {
+    const state = createInitialState();
+    state.cart.push({ productId: 'p1', productName: 'Alpha', quantity: 1, unitPrice: 1 });
+    Object.assign(state.checkoutFields, {
+      name: 'Heli Parmar', email: 'heli@example.com', phone: '9876543210', address: '35 Test Road',
+      city: 'Ahmedabad', state: 'Gujarat', postalCode: '380001', country: 'India',
+    });
+
+    expect(buildCheckoutTurnInstruction(state)).toContain('OPTIONAL GST QUESTION REQUIRED NOW');
+    state.checkoutFields.gst = '';
+    expect(buildCheckoutTurnInstruction(state)).toBeNull();
+  });
 });

@@ -26,4 +26,8 @@ export const patchCheckoutBodySchema = z.object({
   items: z.array(checkoutItemSchema).max(20).optional(),
 });
 
+export const createPaymentLinkBodySchema = z.object({
+  confirmed: z.literal(true),
+});
+
 export type PatchCheckoutBody = z.infer<typeof patchCheckoutBodySchema>;

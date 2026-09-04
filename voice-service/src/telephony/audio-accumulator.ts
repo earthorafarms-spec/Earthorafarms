@@ -54,6 +54,8 @@ export type UtteranceReadyCallback = (pcm16Mono16k: Buffer) => void;
 export interface AudioAccumulatorOptions {
   speechRmsThreshold?: number;
   onSpeechStart?: () => void;
+  /** Called for every above-threshold chunk, including short noise bursts. */
+  onSpeechActivity?: () => void;
 }
 
 /**
@@ -86,6 +88,7 @@ export class AudioAccumulator {
     const isSpeech = energy >= this.speechRmsThreshold;
 
     if (isSpeech) {
+      this.options.onSpeechActivity?.();
       if (!this.hasSpeechStarted) {
         this.hasSpeechStarted = true;
         this.speechBuffer.push(...this.preRollBuffer, chunk);

@@ -1,4 +1,5 @@
-import { SarvamAIClient, type SarvamAI } from 'sarvamai';
+import type { SarvamAI } from 'sarvamai';
+import { requireSarvamKeys, withSarvamClient } from './sarvam-client.js';
 import { config } from '../config.js';
 import type { ToolDefinition } from '../tools/types.js';
 import type { ConversationMessage } from '../conversation/state.js';
@@ -43,17 +44,12 @@ function toSarvamTools(tools: ToolDefinition[]) {
 }
 
 export class SarvamLLMAdapter implements LLMAdapter {
-  private client: SarvamAIClient;
-
   constructor() {
-    if (!config.SARVAM_API_KEY) {
-      throw new Error('SARVAM_API_KEY is not set — cannot use LLM_PROVIDER=sarvam.');
-    }
-    this.client = new SarvamAIClient({ apiSubscriptionKey: config.SARVAM_API_KEY });
+    requireSarvamKeys();
   }
 
   async chatWithTools(messages: ConversationMessage[], tools: ToolDefinition[]): Promise<LLMTurnResult> {
-    const completion = await this.client.chat.completions({
+    const completion = await withSarvamClient((client, requestOptions) => client.chat.completions({
       model: config.SARVAM_MODEL as SarvamAI.SarvamModelIds,
       stream: false,
       temperature: 0.2,
@@ -65,7 +61,7 @@ export class SarvamLLMAdapter implements LLMAdapter {
       messages: toSarvamMessages(messages),
       tools: toSarvamTools(tools),
       tool_choice: 'auto',
-    });
+    }, requestOptions), config.VOICE_LLM_TIMEOUT_MS);
 
     const choice = completion.choices[0];
     const message = choice?.message;

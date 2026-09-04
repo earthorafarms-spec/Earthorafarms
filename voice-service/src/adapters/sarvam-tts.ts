@@ -1,4 +1,5 @@
-import { SarvamAIClient } from 'sarvamai';
+import type { SarvamAIClient } from 'sarvamai';
+import { requireSarvamKeys, withSarvamClient } from './sarvam-client.js';
 import { config } from '../config.js';
 import type { TtsAdapter } from './types.js';
 import type { SupportedLanguage } from '../conversation/language.js';
@@ -30,13 +31,8 @@ const TTS_TEMPERATURE = 0.3;
 const SILENCE_GAP_MS = 100;
 
 export class SarvamTtsAdapter implements TtsAdapter {
-  private client: SarvamAIClient;
-
   constructor() {
-    if (!config.SARVAM_API_KEY) {
-      throw new Error('SARVAM_API_KEY is not set — cannot use TTS_PROVIDER=sarvam.');
-    }
-    this.client = new SarvamAIClient({ apiSubscriptionKey: config.SARVAM_API_KEY });
+    requireSarvamKeys();
   }
 
   private async synthesizeOne(text: string, language: SupportedLanguage): Promise<Buffer> {
@@ -50,10 +46,10 @@ export class SarvamTtsAdapter implements TtsAdapter {
       speech_sample_rate: 24000,
       output_audio_codec: 'wav',
     };
-    const response = await this.client.textToSpeech.convert(
+    const response = await withSarvamClient((client, requestOptions) => client.textToSpeech.convert(
       rawRequest as unknown as TtsConvertParams,
-      { timeoutInSeconds: config.VOICE_TTS_TIMEOUT_MS / 1_000 }
-    );
+      requestOptions,
+    ), config.VOICE_TTS_TIMEOUT_MS);
     const audioBase64 = response.audios[0];
     if (!audioBase64) throw new Error('Sarvam textToSpeech.convert returned no audio.');
     return Buffer.from(audioBase64, 'base64');
@@ -88,10 +84,10 @@ export class SarvamTtsAdapter implements TtsAdapter {
         speech_sample_rate: 8000,
         output_audio_codec: 'mulaw',
       };
-      const response = await this.client.textToSpeech.convert(
+      const response = await withSarvamClient((client, requestOptions) => client.textToSpeech.convert(
         request as unknown as TtsConvertParams,
-        { timeoutInSeconds: config.VOICE_TTS_TIMEOUT_MS / 1_000 }
-      );
+        requestOptions,
+      ), config.VOICE_TTS_TIMEOUT_MS);
       const audioBase64 = response.audios[0];
       if (!audioBase64) throw new Error('Sarvam textToSpeech.convert returned no mu-law audio.');
       return Buffer.from(audioBase64, 'base64');

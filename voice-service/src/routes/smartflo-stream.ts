@@ -57,6 +57,7 @@ const OUTBOUND_CHUNK_BYTES = 1_600; // 200 ms; multiple of the required 160 byte
 const SOCKET_HIGH_WATER_BYTES = 512 * 1024;
 const SOCKET_BACKPRESSURE_TIMEOUT_MS = 2_000;
 const START_EVENT_TIMEOUT_MS = 15_000;
+const CALLER_SILENCE_HANGUP_MS = 7_000;
 const MAX_STORED_VOICE_METRICS = 100;
 const BETWEEN_SENTENCE_SILENCE = Buffer.alloc(640, 0xff); // 80 ms at 8 kHz mu-law
 
@@ -131,6 +132,8 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
     let greetingPending = true;
     let activeMarkName: string | null = null;
     let activeMarkSentAt = 0;
+    let endAfterPlaybackMarkName: string | null = null;
+    let callerSilenceTimer: ReturnType<typeof setTimeout> | null = null;
     let outboundChunk = 1;
     let turnSequence = 0;
     let droppedTranscripts = 0;
@@ -150,15 +153,40 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
 
     const logContext = () => ({ sessionId, callSid, streamSid });
 
+    function clearCallerSilenceTimer(): void {
+      if (callerSilenceTimer) clearTimeout(callerSilenceTimer);
+      callerSilenceTimer = null;
+    }
+
+    function armCallerSilenceTimer(): void {
+      clearCallerSilenceTimer();
+      if (closing || socket.readyState !== socket.OPEN) return;
+      callerSilenceTimer = setTimeout(() => {
+        callerSilenceTimer = null;
+        if (closing || socket.readyState !== socket.OPEN) return;
+        // Silence while the agent is thinking or speaking does not count
+        // against the caller. Playback completion arms a fresh full window.
+        if (busy || playbackActive || activeMarkName !== null) {
+          armCallerSilenceTimer();
+          return;
+        }
+        void finishSession('abandoned', 'caller_silence_7s').finally(() => {
+          if (socket.readyState === socket.OPEN) socket.close(1000, 'caller silence');
+        });
+      }, CALLER_SILENCE_HANGUP_MS);
+    }
+
     async function finishSession(status: CallSessionStatus, reason: string): Promise<void> {
       if (sessionFinished) return;
       sessionFinished = true;
       clearTimeout(startEventTimer);
+      clearCallerSilenceTimer();
       closing = true;
       queuedUtterances.length = 0;
       playbackEpoch++;
       playbackActive = false;
       activeMarkName = null;
+      endAfterPlaybackMarkName = null;
       if (sessionId) {
         resetGuardState(sessionId);
         try {
@@ -198,6 +226,7 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
         sent: false, partial: false, firstAudioAt: null, sentenceCount,
       });
       if (!streamSid || closing || socket.readyState !== socket.OPEN) return unsent();
+      clearCallerSilenceTimer();
       const speechEpoch = ++playbackEpoch;
       const tts = buildTtsForLanguage(language);
       const sentences = splitSentences(text);
@@ -329,6 +358,7 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
     async function runUtterance(utterance: QueuedUtterance): Promise<void> {
       if (!sessionId || closing) return;
       busy = true;
+      clearCallerSilenceTimer();
       const turnId = ++turnSequence;
       const audioMs = Math.round((utterance.pcm.length / 2 / 16_000) * 1_000);
       const totalStartedAt = Date.now();
@@ -416,7 +446,12 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
         }
 
         const ttsStartedAt = Date.now();
-        const speech = await sendSpeech(result.replyText, result.language, `reply-${turnId}-${Date.now()}`);
+        const replyMarkName = `reply-${turnId}-${Date.now()}`;
+        const speech = await sendSpeech(result.replyText, result.language, replyMarkName);
+        if (result.callShouldEnd) {
+          queuedUtterances.length = 0;
+          if (speech.sent) endAfterPlaybackMarkName = replyMarkName;
+        }
         ttsMs = Date.now() - ttsStartedAt;
         const totalMs = Date.now() - totalStartedAt;
         const firstAudioMs = speech.firstAudioAt === null ? undefined : speech.firstAudioAt - totalStartedAt;
@@ -452,6 +487,10 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
             ? 'partial_tts'
             : speech.sent ? undefined : 'caller_barge_in_during_tts_or_send',
         });
+        if (result.callShouldEnd && !speech.sent) {
+          await finishSession('ended', 'checkout_form_sent_without_final_audio');
+          if (socket.readyState === socket.OPEN) socket.close(1000, 'checkout form sent');
+        }
       } catch (err) {
         req.log.error({ err, ...logContext(), event: 'smartflo_turn_failed', turnId, audioMs }, 'Smartflo voice turn failed');
         let repeat: SpeechSendResult | null = null;
@@ -482,6 +521,7 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
     }
 
     function enqueueUtterance(pcm: Buffer): void {
+      if (endAfterPlaybackMarkName) return;
       const utterance = { pcm, inputEpoch };
       if (!busy) {
         void runUtterance(utterance);
@@ -496,7 +536,11 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
 
     const accumulator = new AudioAccumulator(enqueueUtterance, {
       speechRmsThreshold: config.VOICE_SPEECH_RMS_THRESHOLD,
+      onSpeechActivity: armCallerSilenceTimer,
       onSpeechStart: () => {
+        // Once the form was delivered, let the short confirmation finish and
+        // close the call; do not let a late noise burst start another turn.
+        if (endAfterPlaybackMarkName) return;
         // An eager caller often says "hello" before the first TTS request has
         // returned. There is no audio to interrupt yet; bumping playbackEpoch
         // here used to cancel the greeting before its first frame was sent.
@@ -621,6 +665,7 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
         if (message.event === 'mark') {
           if (message.mark?.name && message.mark.name === activeMarkName) {
             const completedMarkName = activeMarkName;
+            const shouldEndCall = completedMarkName === endAfterPlaybackMarkName;
             const playbackMs = activeMarkSentAt ? Date.now() - activeMarkSentAt : null;
             req.log.info({
               ...logContext(),
@@ -630,7 +675,14 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
             }, 'Smartflo playback completed');
             playbackActive = false;
             activeMarkName = null;
+            if (shouldEndCall) endAfterPlaybackMarkName = null;
             await markVoiceMetricPlaybackCompleted(completedMarkName, playbackMs);
+            if (shouldEndCall) {
+              await finishSession('ended', 'checkout_form_sent');
+              if (socket.readyState === socket.OPEN) socket.close(1000, 'checkout form sent');
+            } else {
+              armCallerSilenceTimer();
+            }
           }
           return;
         }

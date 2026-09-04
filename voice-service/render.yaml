@@ -29,14 +29,20 @@ services:
         sync: false
       - key: OPENAI_MODEL
         value: gpt-4o-mini
+      - key: OPENAI_STT_MODEL
+        value: gpt-4o-mini-transcribe
       - key: SARVAM_API_KEY
         sync: false
+      - key: SARVAM_API_KEYS
+        sync: false
+      - key: SARVAM_KEY_COOLDOWN_MS
+        value: "300000"
       - key: SARVAM_MODEL
         value: sarvam-105b
       - key: STT_PROVIDER
-        value: sarvam
+        value: openai
       - key: TTS_PROVIDER
-        value: sarvam
+        value: auto
       - key: SARVAM_STT_MODEL
         value: saaras:v3
       - key: SARVAM_STT_MIN_LANGUAGE_PROBABILITY
@@ -55,6 +61,24 @@ services:
       # wss://earthora-voice-service.onrender.com/ws/voice/smartflo
       - key: VOICE_STREAM_PUBLIC_WSS_URL
         sync: false
+      - key: WHATSAPP_PROVIDER
+        value: tata_omni
+      - key: TATA_OMNI_ACCESS_TOKEN
+        sync: false
+      - key: TATA_OMNI_API_BASE_URL
+        value: https://wb.omni.tatatelebusiness.com
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: WHATSAPP_CHECKOUT_TEMPLATE_NAME
+        sync: false
+      - key: WHATSAPP_CHECKOUT_TEMPLATE_LANGUAGE
+        value: en
       - key: GOOGLE_CLOUD_PROJECT_ID
         sync: false
       - key: GOOGLE_APPLICATION_CREDENTIALS_JSON

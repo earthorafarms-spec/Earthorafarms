@@ -190,6 +190,46 @@ describe('Smartflo WebSocket local integration', () => {
     await collector.waitFor(() => mocks.updateStatus.mock.calls.some((call) => call[1] === 'ended'));
   });
 
+  it('ends the call after seven seconds of caller silence once playback finishes', async () => {
+    const { ws, collector } = await connect();
+    const closed = new Promise<number>((resolve) => ws.once('close', (code) => resolve(code)));
+    sendStart(ws);
+    await collector.waitFor((messages) => messages.some((m) => m.event === 'mark'));
+
+    vi.useFakeTimers();
+    try {
+      acknowledgeLatestMark(ws, collector);
+      await vi.advanceTimersByTimeAsync(7_001);
+      vi.useRealTimers();
+      await expect(closed).resolves.toBe(1000);
+      expect(mocks.updateStatus).toHaveBeenCalledWith('session-test', 'abandoned');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ends only after the delivered-form confirmation finishes playing', async () => {
+    mocks.stt.mockResolvedValue({ text: 'No GST number', detectedLanguageCode: 'en-IN', languageProbability: 0.99 });
+    mocks.processMessage.mockResolvedValue({
+      replyText: 'I sent the editable form to your WhatsApp.',
+      language: 'en',
+      callShouldEnd: true,
+      policyViolations: [],
+    });
+    const { ws, collector } = await connect();
+    const closed = new Promise<number>((resolve) => ws.once('close', (code) => resolve(code)));
+    sendStart(ws);
+    await collector.waitFor((messages) => messages.filter((m) => m.event === 'mark').length === 1);
+    acknowledgeLatestMark(ws, collector);
+    sendUtterance(ws);
+    await collector.waitFor((messages) => messages.some((m) => m.event === 'mark' && m.mark?.name?.startsWith('reply-1-')));
+
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+    acknowledgeLatestMark(ws, collector);
+    await expect(closed).resolves.toBe(1000);
+    expect(mocks.updateStatus).toHaveBeenCalledWith('session-test', 'ended');
+  });
+
   it('never sends an unsupported-language transcript to the LLM', async () => {
     mocks.stt.mockResolvedValue({ text: 'ಅಕ್ಕ ಇರ್ತಾ ಇರೋದು', detectedLanguageCode: 'kn-IN', languageProbability: 0.99 });
     const { ws, collector } = await connect();

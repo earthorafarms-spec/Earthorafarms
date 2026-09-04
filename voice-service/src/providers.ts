@@ -13,20 +13,36 @@ import type { LLMAdapter, LLMTurnResult } from './adapters/types.js';
 import type { ToolDefinition } from './tools/types.js';
 import type { SttAdapter, TtsAdapter } from './adapters/types.js';
 import { OpenAiLLMAdapter } from './adapters/openai.js';
+import { OpenAiSttAdapter } from './adapters/openai-stt.js';
 import { OpenAiTtsAdapter } from './adapters/openai-tts.js';
 import { SarvamLLMAdapter } from './adapters/sarvam.js';
 import { SarvamSttAdapter } from './adapters/sarvam-stt.js';
 import { SarvamTtsAdapter } from './adapters/sarvam-tts.js';
 import { GoogleSttAdapter } from './adapters/google-stt.js';
 import { GoogleTtsAdapter } from './adapters/google-tts.js';
+import { wavToMulaw8k } from './telephony/mulaw.js';
 
 // Constructed lazily, at most once each, regardless of how many times a
 // factory below is called — cheap to call chatWithRouting() every turn.
 let openaiSingleton: OpenAiLLMAdapter | null = null;
+let openaiSttSingleton: OpenAiSttAdapter | null = null;
 let openaiTtsSingleton: OpenAiTtsAdapter | null = null;
 let sarvamSingleton: SarvamLLMAdapter | null = null;
 let sarvamSttSingleton: SarvamSttAdapter | null = null;
 let sarvamTtsSingleton: SarvamTtsAdapter | null = null;
+
+function getOpenAiStt(): OpenAiSttAdapter {
+  if (!openaiSttSingleton) openaiSttSingleton = new OpenAiSttAdapter();
+  return openaiSttSingleton;
+}
+function getOpenAiTts(): OpenAiTtsAdapter {
+  if (!openaiTtsSingleton) openaiTtsSingleton = new OpenAiTtsAdapter();
+  return openaiTtsSingleton;
+}
+function getSarvamTts(): SarvamTtsAdapter {
+  if (!sarvamTtsSingleton) sarvamTtsSingleton = new SarvamTtsAdapter();
+  return sarvamTtsSingleton;
+}
 
 function getOpenAi(): OpenAiLLMAdapter {
   if (!openaiSingleton) openaiSingleton = new OpenAiLLMAdapter();
@@ -92,6 +108,8 @@ export async function chatWithRouting(
 
 export function buildStt(): SttAdapter {
   switch (config.STT_PROVIDER) {
+    case 'openai':
+      return getOpenAiStt();
     case 'sarvam':
       if (!sarvamSttSingleton) sarvamSttSingleton = new SarvamSttAdapter();
       return sarvamSttSingleton;
@@ -108,8 +126,7 @@ export function buildTts(): TtsAdapter {
       if (!sarvamTtsSingleton) sarvamTtsSingleton = new SarvamTtsAdapter();
       return sarvamTtsSingleton;
     case 'openai':
-      if (!openaiTtsSingleton) openaiTtsSingleton = new OpenAiTtsAdapter();
-      return openaiTtsSingleton;
+      return getOpenAiTts();
     case 'google':
       return new GoogleTtsAdapter();
     case 'auto':
@@ -135,9 +152,28 @@ export function buildTtsForLanguage(language: SupportedLanguage): TtsAdapter {
     return buildTts();
   }
   if (language === 'en') {
-    if (!openaiTtsSingleton) openaiTtsSingleton = new OpenAiTtsAdapter();
-    return openaiTtsSingleton;
+    return getOpenAiTts();
   }
-  if (!sarvamTtsSingleton) sarvamTtsSingleton = new SarvamTtsAdapter();
-  return sarvamTtsSingleton;
+  // Indic languages prefer Sarvam, but an exhausted/missing Sarvam account
+  // must not make the call silent. OpenAI TTS is a degraded-voice fallback.
+  return {
+    async synthesize(text, replyLanguage) {
+      try {
+        return await getSarvamTts().synthesize(text, replyLanguage);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(`[providers] Sarvam TTS failed; using OpenAI TTS: ${(err as Error).message}`);
+        return getOpenAiTts().synthesize(text, replyLanguage);
+      }
+    },
+    async synthesizeMulaw8k(text, replyLanguage) {
+      try {
+        return await getSarvamTts().synthesizeMulaw8k(text, replyLanguage);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(`[providers] Sarvam telephony TTS failed; using OpenAI TTS: ${(err as Error).message}`);
+        return wavToMulaw8k(await getOpenAiTts().synthesize(text, replyLanguage));
+      }
+    },
+  };
 }

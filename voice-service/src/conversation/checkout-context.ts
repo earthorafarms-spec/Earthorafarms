@@ -13,7 +13,17 @@ export function buildCheckoutTurnInstruction(state: ConversationState): string |
   if (state.cart.length === 0) return null;
 
   const nextMissing = REQUIRED_CHECKOUT_FIELDS.find((field) => !state.checkoutFields[field]);
-  if (!nextMissing) return null;
+  if (!nextMissing) {
+    if (state.checkoutFields.gst === undefined) {
+      return (
+        'OPTIONAL GST QUESTION REQUIRED NOW: Ask whether the caller has a GST number for a business tax invoice. ' +
+        'If they provide one, save it with set_checkout_field using field gst. If they say no, do not have one, ' +
+        'or want to skip it, save an empty string in field gst so the decision is recorded. Do not create the ' +
+        'verification link until this question has been answered.'
+      );
+    }
+    return null;
+  }
 
   const locationRule = nextMissing === 'city' || nextMissing === 'state'
     ? ' If the reply contains both city and state, call set_delivery_location and save both in this turn.'

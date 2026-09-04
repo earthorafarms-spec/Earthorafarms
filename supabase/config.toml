@@ -9,5 +9,8 @@ verify_jwt = false
 [functions.verify-admin]
 verify_jwt = false
 
+[functions.manage-product-knowledge]
+verify_jwt = false # verifies the admin password server-side on every mutation
+
 [functions.send-invoice]
 verify_jwt = false

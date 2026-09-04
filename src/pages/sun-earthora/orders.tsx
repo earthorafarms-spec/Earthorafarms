@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Filter, ChevronRight, Clock, RefreshCw, PackageOpen, Plus, User, Package, X, Check, Minus } from "lucide-react";
+import { Search, Filter, ChevronRight, Clock, RefreshCw, PackageOpen, Plus, User, Package, X, Check, Minus, Mail, Phone, Building, MapPin } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
@@ -124,7 +124,10 @@ export default function AdminOrders() {
       if (error) throw error;
 
       const mapped = (data || []).map((o: any) => {
-        const shipping = o.shipping_address || {};
+        let shipping = o.shipping_address || {};
+        if (typeof shipping === "string") {
+          try { shipping = JSON.parse(shipping); } catch { shipping = {}; }
+        }
         const itemsList = (o.order_items || []).map((item: any) => ({
           id: item.id,
           product_id: item.product_id,
@@ -155,7 +158,8 @@ export default function AdminOrders() {
           items: itemsCount,
           itemsList,
           total: Number(o.total_amount || 0),
-          status: o.status || "pending",
+          source: shipping.source || (String(o.user_id || "").startsWith("whatsapp:") ? "whatsapp" : "website"),
+          status: ({ created: "pending", confirmed: "processing", ready_for_shipment: "packed" } as Record<string, string>)[String(o.status).toLowerCase()] || String(o.status || "pending").toLowerCase(),
           date: new Date(o.created_at || Date.now()).toLocaleDateString("en-IN", {
             day: "numeric",
             month: "short",
@@ -237,7 +241,9 @@ export default function AdminOrders() {
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    // Fallback when Supabase Realtime publication is not enabled or reconnecting.
+    const refresh = window.setInterval(() => { if (!document.hidden) fetchOrders(); }, 15000);
+    return () => { window.clearInterval(refresh); supabase.removeChannel(channel); };
   }, []);
 
   const handleCreateOfflineOrder = async (e: React.FormEvent) => {
@@ -486,6 +492,7 @@ export default function AdminOrders() {
                       ) : (
                         <span className={statusBadge(order.status)}>
                           <span>{order.status}</span>
+                          {order.source === "whatsapp" && <span className="text-emerald-700">· WhatsApp</span>}
                           <ChevronRight className={`w-3 h-3 transition-transform duration-200 ${activeStatusMenuId === order.id ? "rotate-90 text-primary" : "rotate-0 text-foreground/40 group-hover/btn:text-foreground"}`} />
                         </span>
                       )}

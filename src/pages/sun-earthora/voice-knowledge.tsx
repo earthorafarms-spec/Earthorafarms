@@ -6,7 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import { supabase } from "@/lib/supabase";
 
-// Manages product_knowledge — the ONLY source the voice ordering assistant
+// Manages product_knowledge — the approved source for WhatsApp and voice assistants
 // (see /voice-service) is allowed to speak from for benefits/dosage/
 // warnings/etc. Nothing here is spoken by the agent until status is set to
 // "approved". See supabase/migrations/20260901000000_voice_agent_schema.sql.
@@ -30,6 +30,7 @@ interface KnowledgeEntry {
   content: string;
   status: "draft" | "approved" | "archived";
   version: number;
+  locale: string;
 }
 
 const statusStyles: Record<KnowledgeEntry["status"], string> = {
@@ -40,6 +41,13 @@ const statusStyles: Record<KnowledgeEntry["status"], string> = {
 
 const categoryLabel = (c: string) =>
   c.charAt(0).toUpperCase() + c.slice(1).replace(/-/g, " ");
+
+async function mutateKnowledge(body: Record<string, unknown>) {
+  const { data, error } = await supabase.functions.invoke("manage-product-knowledge", {
+    body, headers: { "x-admin-password": sessionStorage.getItem("admin_password") || "" },
+  });
+  return { error: error || (data?.ok === true ? null : new Error(data?.error || "Knowledge update failed")) };
+}
 
 interface SelectOption { value: string; label: string }
 
@@ -135,6 +143,7 @@ export default function AdminVoiceKnowledge() {
 
   const [form, setForm] = useState({
     category: "benefits" as Category,
+    locale: "en-IN",
     question: "",
     content: "",
   });
@@ -151,7 +160,7 @@ export default function AdminVoiceKnowledge() {
     if (!productId) return;
     setLoading(true);
     const { data, error } = await (supabase.from("product_knowledge") as any)
-      .select("id, product_id, category, question, content, status, version")
+      .select("id, product_id, category, question, content, status, version, locale")
       .eq("product_id", productId)
       .order("category")
       .order("version", { ascending: false });
@@ -163,7 +172,7 @@ export default function AdminVoiceKnowledge() {
       setEntries(
         (data ?? []).map((r: any) => ({
           id: r.id, productId: r.product_id, category: r.category,
-          question: r.question, content: r.content, status: r.status, version: r.version,
+          question: r.question, content: r.content, status: r.status, version: r.version, locale: r.locale || "en-IN",
         }))
       );
     }
@@ -175,13 +184,13 @@ export default function AdminVoiceKnowledge() {
 
   const openCreateForm = () => {
     setEditingId(null);
-    setForm({ category: "benefits", question: "", content: "" });
+    setForm({ category: "benefits", locale: "en-IN", question: "", content: "" });
     setShowForm(true);
   };
 
   const openEditForm = (entry: KnowledgeEntry) => {
     setEditingId(entry.id);
-    setForm({ category: entry.category, question: entry.question ?? "", content: entry.content });
+    setForm({ category: entry.category, locale: entry.locale, question: entry.question ?? "", content: entry.content });
     setShowForm(true);
   };
 
@@ -193,21 +202,21 @@ export default function AdminVoiceKnowledge() {
 
     try {
       if (editingId) {
-        const { error } = await (supabase.from("product_knowledge") as any)
-          .update({ category: form.category, question: form.question || null, content: form.content })
-          .eq("id", editingId);
+        const { error } = await mutateKnowledge({ action: "update", id: editingId, ...form });
         if (error) throw error;
         toast({ title: "Entry updated" });
       } else {
-        const { error } = await (supabase.from("product_knowledge") as any).insert({
+        const { error } = await mutateKnowledge({
+          action: "create",
           product_id: selectedProductId,
           category: form.category,
+          locale: form.locale,
           question: form.question || null,
           content: form.content,
           status: "draft",
         });
         if (error) throw error;
-        toast({ title: "Entry created", description: "Set it to Approved when it's ready for the voice agent to use." });
+        toast({ title: "Entry created", description: "Approve it when ready for the WhatsApp and voice agents." });
       }
       setShowForm(false);
       fetchEntries(selectedProductId);
@@ -217,9 +226,7 @@ export default function AdminVoiceKnowledge() {
   };
 
   const handleSetStatus = async (id: string, status: KnowledgeEntry["status"]) => {
-    const payload: Record<string, unknown> = { status };
-    if (status === "approved") payload.approved_at = new Date().toISOString();
-    const { error } = await (supabase.from("product_knowledge") as any).update(payload).eq("id", id);
+    const { error } = await mutateKnowledge({ action: "status", id, status });
     if (error) {
       toast({ title: "Update failed", description: error.message, variant: "destructive" });
       return;
@@ -228,7 +235,7 @@ export default function AdminVoiceKnowledge() {
   };
 
   const handleDelete = async (id: string) => {
-    const { error } = await supabase.from("product_knowledge").delete().eq("id", id);
+    const { error } = await mutateKnowledge({ action: "delete", id });
     if (error) {
       toast({ title: "Delete failed", description: error.message, variant: "destructive" });
       return;
@@ -243,9 +250,9 @@ export default function AdminVoiceKnowledge() {
         <div className="mb-6 p-4 rounded-2xl bg-primary/5 border border-primary/10 flex items-start gap-3">
           <BookOpen className="w-4 h-4 text-primary shrink-0 mt-0.5" strokeWidth={1.5} />
           <p className="text-xs text-foreground/60 leading-relaxed">
-            The voice ordering assistant only ever speaks benefits, dosage, ingredients, or warnings that
-            exist here with status <strong>Approved</strong>. Draft and archived entries are never spoken,
-            even if the caller asks directly — the agent will say it doesn't have approved information.
+            The WhatsApp and voice assistants use the approved product knowledge here. Information must
+            have status <strong>Approved</strong>. Draft and archived entries are never used,
+            even if requested directly. Edits return to Draft for re-approval. Medical safety rules still apply.
           </p>
         </div>
 
@@ -286,6 +293,7 @@ export default function AdminVoiceKnowledge() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                       <span className="px-2.5 py-0.5 rounded-full bg-muted text-foreground/60 text-[11px] font-semibold uppercase tracking-wide">{entry.category}</span>
+                      <span className="text-[10px] text-foreground/40">{entry.locale}</span>
                       <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${statusStyles[entry.status]}`}>{entry.status}</span>
                       <span className="text-[10px] text-foreground/30">v{entry.version}</span>
                     </div>
@@ -344,6 +352,20 @@ export default function AdminVoiceKnowledge() {
 
               <div className="flex-1 overflow-y-auto p-6 md:p-8">
                 <div className="max-w-lg mx-auto space-y-5">
+                  <div>
+                    <label className="text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5 block">Agent language</label>
+                    <CustomSelect
+                      value={form.locale}
+                      onChange={(locale) => setForm({ ...form, locale })}
+                      options={[
+                        { value: "en-IN", label: "English" },
+                        { value: "hi-IN", label: "Hindi" },
+                        { value: "hi-Latn", label: "Hinglish" },
+                        { value: "gu-IN", label: "Gujarati" },
+                        { value: "gu-Latn", label: "Gujlish" },
+                      ]}
+                    />
+                  </div>
                   <div>
                     <label className="text-xs font-semibold text-foreground/60 uppercase tracking-wider mb-1.5 block">Category</label>
                     <CustomSelect

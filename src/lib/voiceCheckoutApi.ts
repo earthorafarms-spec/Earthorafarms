@@ -93,7 +93,11 @@ export async function verifyAndPriceVoiceCheckout(
 
 export async function createVoiceCheckoutPaymentLink(token: string): Promise<{ paymentLinkUrl: string }> {
   assertConfigured();
-  const res = await fetch(`${VOICE_SERVICE_URL}/checkout/${token}/payment-link`, { method: 'POST' });
+  const res = await fetch(`${VOICE_SERVICE_URL}/checkout/${token}/payment-link`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmed: true }),
+  });
   return parseOrThrow(res);
 }
 

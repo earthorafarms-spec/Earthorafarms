@@ -258,7 +258,7 @@ export default function VoiceCheckout({ params }: VoiceCheckoutProps) {
               <div><label className={labelClass}>City</label><input className={inputClass} disabled={view !== 'edit'} value={session.customer.city} onChange={(e) => updateField('city', e.target.value)} /></div>
               <div><label className={labelClass}>State</label><input className={inputClass} disabled={view !== 'edit'} value={session.customer.state} onChange={(e) => updateField('state', e.target.value)} /></div>
               <div><label className={labelClass}>Postal Code</label><input className={inputClass} disabled={view !== 'edit'} value={session.customer.postalCode} onChange={(e) => updateField('postalCode', e.target.value)} /></div>
-              <div><label className={labelClass}>GST Number (optional)</label><input className={inputClass} disabled={view !== 'edit'} value={session.customer.gst ?? ''} onChange={(e) => updateField('gst', e.target.value)} /></div>
+              <div><label className={labelClass}>GST Number (optional)</label><input className={`${inputClass} uppercase`} placeholder="e.g. 24ABCDE1234F1Z5" disabled={view !== 'edit'} value={session.customer.gst ?? ''} onChange={(e) => updateField('gst', e.target.value.toUpperCase())} /></div>
             </div>
           </div>
 

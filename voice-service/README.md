@@ -17,11 +17,18 @@ Implements Phases 0–4 of the spec:
 - **Phase 2** — the conversation engine: GPT-4o mini with strict tool-calling, grounded only in
   live Supabase data and approved knowledge-base entries. **Text-mode only** — see below.
 - **Phase 3** — the secure, editable verification form (`../src/pages/voice-checkout.tsx`) that a
-  customer opens from an emailed link. This is the *only* confirmation step; the agent never
+  customer opens from a link sent to their WhatsApp number. This is the *only* confirmation step; the agent never
   reads the full order back verbally.
 - **Phase 4** — Razorpay Payment Links, a signature-verified webhook, and an idempotent
   transactional finalizer that is the *only* code path allowed to write to the real
   `orders`/`order_items`/`Payments`/`Order_history` tables.
+
+The ordering flow is intentionally sequential: the agent collects the cart and delivery details,
+sends only the editable review form on WhatsApp, and ends the conversation. The customer can change
+their details and cart in that form. The server recalculates and freezes the price after the reviewed
+form is saved; only the form's explicit confirmation action can create and open a Razorpay Payment Link.
+For voice-call follow-ups, configure an approved Meta WhatsApp template through
+`WHATSAPP_CHECKOUT_TEMPLATE_NAME`; its body must contain one text placeholder for the secure form URL.
 
 **Phase 5 (Tata Smartflo telephony) is explicitly out of scope for this build.** `src/adapters/tata-smartflo.ts`
 exists only as an empty adapter seam — do not implement it until real Tata Smartflo account
@@ -29,8 +36,9 @@ credentials and API documentation are available. Do not guess at that API surfac
 
 ## Voice
 
-Speech-to-text and text-to-speech run for real via Sarvam AI (`src/adapters/sarvam-stt.ts`,
-`src/adapters/sarvam-tts.ts`; `STT_PROVIDER`/`TTS_PROVIDER=sarvam`). `src/adapters/google-stt.ts` and
+Incoming speech uses OpenAI transcription by default (`STT_PROVIDER=openai`), so English calls do
+not depend on Sarvam availability. In `TTS_PROVIDER=auto`, English uses OpenAI TTS while Hindi and
+Gujarati prefer Sarvam and fall back to OpenAI TTS if Sarvam is unavailable. `src/adapters/google-stt.ts` and
 `src/adapters/google-tts.ts` remain real adapter interfaces with stub implementations (`"not
 configured"`, no fake audio logic) as a second seam in case Google credentials arrive later — the
 conversation controller never needs to change either way.
@@ -103,6 +111,34 @@ npm test
 ```
 
 ## Deploying
+
+### Sarvam credit failover
+
+Set the server-only secret `SARVAM_API_KEYS` to an ordered comma-separated list.
+It overrides `SARVAM_API_KEY`; leaving it blank retains single-key compatibility.
+STT (including language-confidence retries), WAV/mu-law TTS, and Sarvam chat all
+share one pool per service process. HTTP 402 credit failures retry the same request
+with the next key. Exhausted slots are skipped across calls for five minutes
+(`SARVAM_KEY_COOLDOWN_MS=300000`), then checked again to allow recovery after top-up.
+Only slot numbers are logged, never credentials or caller audio/text.
+
+Each request tries each eligible key at most once within its timeout budget.
+There is no key rotation on 429 rate limits, 401/403 access failures, invalid
+requests, network failures, or server errors. Once the pool has no funded keys,
+it raises `SARVAM_CREDITS_EXHAUSTED` immediately during cooldown. Existing automatic
+LLM/TTS routing can still fall back to OpenAI; explicit Sarvam STT has no cross-vendor
+fallback. `STT_PROVIDER=openai` keeps transcription independent of Sarvam credits.
+
+Keys on the same exhausted Sarvam balance do not provide extra credits. Add credits
+or use independently funded, authorized keys; do not use rotation to evade account
+limits. See [Sarvam billing](https://docs.sarvam.ai/api/platform/billing).
+
+For Render, add `SARVAM_API_KEYS` as a secret on the **voice service**, then deploy
+the updated backend. Updating the local ignored `.env` does not change Render.
+The September 4 call logs showed deployed Sarvam STT returning 402 even though the
+local/default transcription provider is OpenAI: verify the deployed provider setting
+and code version too. No real API requests or customer messages are made by the
+mocked failover regression tests.
 
 See `render.yaml`. Set every secret in the Render dashboard (`sync: false` vars) — never commit
 real credentials. `rootDir: voice-service` means this deploys independently of the main app's

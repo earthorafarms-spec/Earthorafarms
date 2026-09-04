@@ -12,6 +12,7 @@ const requiredSchema = z.object({
 
   OPENAI_API_KEY: z.string().min(1),
   OPENAI_MODEL: z.string().default('gpt-4o-mini'),
+  OPENAI_STT_MODEL: z.string().default('gpt-4o-mini-transcribe'),
 
   // Vendor-neutral provider seams — see src/providers.ts. Selecting by env
   // var (rather than importing a vendor SDK directly wherever it's used)
@@ -24,9 +25,9 @@ const requiredSchema = z.object({
   // lapse) — a routing failure should degrade to "answers in English"
   // rather than break the caller's turn outright.
   LLM_PROVIDER: z.enum(['openai', 'sarvam', 'auto']).default('openai'),
-  // Default 'sarvam' — it's the real, working implementation (Google stays
-  // an unconfigured stub pending credentials; see google-stt.ts/-tts.ts).
-  STT_PROVIDER: z.enum(['google', 'sarvam']).default('sarvam'),
+  // OpenAI STT keeps English calls independent from Sarvam account balance.
+  // Sarvam remains selectable when its Indic-language transcription is wanted.
+  STT_PROVIDER: z.enum(['google', 'sarvam', 'openai']).default('openai'),
   // 'auto' = English → OpenAI TTS (nova voice, much better English than
   // bulbul:v3), Hindi/Gujarati → Sarvam TTS. Mirrors LLM_PROVIDER=auto logic.
   TTS_PROVIDER: z.enum(['google', 'sarvam', 'openai', 'auto']).default('auto'),
@@ -52,6 +53,9 @@ const optionalSchema = z.object({
   // throws a clear "not configured" error rather than a confusing SDK
   // failure if this is unset and sarvam is selected.
   SARVAM_API_KEY: z.string().optional(),
+  // Ordered, comma/whitespace-separated server secrets. Overrides the legacy single key.
+  SARVAM_API_KEYS: z.string().optional(),
+  SARVAM_KEY_COOLDOWN_MS: z.coerce.number().int().min(1_000).max(86_400_000).default(300_000),
   // sarvam-30b was deprecated server-side (confirmed live, 2026-08-21) —
   // sarvam-105b is the current default. Check Sarvam's dashboard/docs before
   // assuming this default is still current; their model lineup moves fast.
@@ -84,12 +88,23 @@ const optionalSchema = z.object({
   // if unset, invoices can still be resent manually from the admin portal.
   MAIN_APP_NETLIFY_URL: z.string().url().optional(),
 
-  // WhatsApp Business Cloud API (Meta). All three must be set for WhatsApp
-  // routes to register; if any is absent the /whatsapp/* routes are skipped.
+  // Outbound checkout delivery can use either Meta Cloud directly or Tata
+  // Omni, which fronts the same WhatsApp channel with its own API and token.
+  WHATSAPP_PROVIDER: z.enum(['meta', 'tata_omni']).default('meta'),
+  TATA_OMNI_ACCESS_TOKEN: z.string().optional(),
+  TATA_OMNI_API_BASE_URL: z.string().url().default('https://wb.omni.tatatelebusiness.com'),
+  // Meta Cloud settings. All three must be set for the inbound /whatsapp/*
+  // routes to register; Tata Omni is currently used only for outbound review
+  // links, so it does not enable the Meta-shaped inbound webhook handler.
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(), // from Meta developer portal
   WHATSAPP_TOKEN: z.string().optional(),            // permanent or system-user token
   WHATSAPP_VERIFY_TOKEN: z.string().optional(),     // chosen by you, used for webhook setup
   WHATSAPP_APP_SECRET: z.string().optional(),       // app secret for HMAC signature verification
+  // Approved Meta template used when a voice caller has not messaged the
+  // business within WhatsApp's customer-service window. The template must
+  // contain one body text parameter: the secure review-form URL.
+  WHATSAPP_CHECKOUT_TEMPLATE_NAME: z.string().optional(),
+  WHATSAPP_CHECKOUT_TEMPLATE_LANGUAGE: z.string().default('en'),
 
   // Tata SmartFlow SMS — same credentials as the send-sms-alert Supabase Edge
   // function. All three must be set for SMS delivery to work; if any is absent,
@@ -104,6 +119,7 @@ export type Config = z.infer<typeof requiredSchema> & z.infer<typeof optionalSch
   googleSttTtsConfigured: boolean;
   smartflowConfigured: boolean;
   whatsappConfigured: boolean;
+  whatsappCheckoutConfigured: boolean;
 };
 
 function loadConfig(): Config {
@@ -125,11 +141,12 @@ function loadConfig(): Config {
 
   if (!googleSttTtsConfigured) {
     // eslint-disable-next-line no-console
-    console.warn('[config] Google Cloud STT/TTS credentials not set — Google STT/TTS unavailable (fine, Sarvam is the default provider for both).');
+    console.warn('[config] Google Cloud STT/TTS credentials not set — Google STT/TTS unavailable (fine, OpenAI STT and automatic TTS routing are the defaults).');
   }
-  if ((required.data.STT_PROVIDER === 'sarvam' || required.data.TTS_PROVIDER === 'sarvam') && !optional.SARVAM_API_KEY) {
+  if ((required.data.STT_PROVIDER === 'sarvam' || required.data.TTS_PROVIDER === 'sarvam') &&
+      !optional.SARVAM_API_KEY?.trim() && !optional.SARVAM_API_KEYS?.split(/[,\s]+/).some(Boolean)) {
     // eslint-disable-next-line no-console
-    console.warn('[config] STT/TTS_PROVIDER=sarvam but SARVAM_API_KEY is unset — voice routes will fail until it is set.');
+    console.warn('[config] STT/TTS_PROVIDER=sarvam but no SARVAM_API_KEYS or SARVAM_API_KEY is set — voice routes will fail until configured.');
   }
 
   const smartflowConfigured = Boolean(
@@ -145,12 +162,23 @@ function loadConfig(): Config {
     optional.WHATSAPP_VERIFY_TOKEN
   );
 
+  const whatsappCheckoutConfigured = optional.WHATSAPP_PROVIDER === 'tata_omni'
+    ? Boolean(optional.TATA_OMNI_ACCESS_TOKEN && optional.WHATSAPP_CHECKOUT_TEMPLATE_NAME)
+    : Boolean(optional.WHATSAPP_PHONE_NUMBER_ID && optional.WHATSAPP_TOKEN);
+
   if (whatsappConfigured) {
     // eslint-disable-next-line no-console
     console.info('[config] WhatsApp channel enabled.');
   }
 
-  return { ...required.data, ...optional, googleSttTtsConfigured, smartflowConfigured, whatsappConfigured };
+  return {
+    ...required.data,
+    ...optional,
+    googleSttTtsConfigured,
+    smartflowConfigured,
+    whatsappConfigured,
+    whatsappCheckoutConfigured,
+  };
 }
 
 export const config = loadConfig();
