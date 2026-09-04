@@ -36,3 +36,5 @@ voice-service/.env
 # Voice service build output
 voice-service/dist
 voice-service/node_modules
+
+scrub_secrets.ps1
