@@ -300,6 +300,7 @@ describe('Smartflo WebSocket local integration', () => {
   });
 
   it('does not cancel the greeting when the caller speaks before TTS returns', async () => {
+    mocks.stt.mockResolvedValue({ text: 'Hello', detectedLanguageCode: 'en-IN', languageProbability: 0.99 });
     let resolveGreeting!: (audio: Buffer) => void;
     mocks.ttsMulaw.mockReturnValueOnce(new Promise<Buffer>((resolve) => {
       resolveGreeting = resolve;
@@ -309,12 +310,17 @@ describe('Smartflo WebSocket local integration', () => {
     await collector.waitFor(() => mocks.ttsMulaw.mock.calls.length === 1);
 
     ws.send(JSON.stringify({ event: 'media', media: { payload: mulawFrame(4_000).toString('base64') } }));
+    for (let i = 0; i < 7; i++) {
+      ws.send(JSON.stringify({ event: 'media', media: { payload: Buffer.alloc(800, 0xff).toString('base64') } }));
+    }
     await new Promise((resolve) => setTimeout(resolve, 20));
     resolveGreeting(Buffer.alloc(1_600, 0x7f));
 
     await collector.waitFor((messages) => messages.some((m) => m.event === 'mark' && m.mark?.name?.startsWith('greeting-')));
+    await collector.waitFor(() => mocks.processMessage.mock.calls.length === 1);
     expect(collector.messages.some((m) => m.event === 'media')).toBe(true);
     expect(collector.messages.some((m) => m.event === 'clear')).toBe(false);
+    expect(mocks.processMessage).toHaveBeenCalledWith('session-test', 'Hello');
   });
 
   it('sends clear and stops queued playback when the caller barges in', async () => {

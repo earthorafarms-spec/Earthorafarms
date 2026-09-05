@@ -536,7 +536,11 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
 
     const accumulator = new AudioAccumulator(enqueueUtterance, {
       speechRmsThreshold: config.VOICE_SPEECH_RMS_THRESHOLD,
-      allowShortUtterances: () => !playbackActive && activeMarkName === null && !greetingPending,
+      // A caller may say a brief "hello" while the greeting TTS request is
+      // still pending. Nothing is audible yet, so accept and queue that short
+      // utterance; keep the longer speech requirement only while audio is
+      // actually playing to avoid treating a click as barge-in.
+      allowShortUtterances: () => !playbackActive && activeMarkName === null,
       onSpeechActivity: armCallerSilenceTimer,
       onSpeechStart: () => {
         // Once the form was delivered, let the short confirmation finish and
