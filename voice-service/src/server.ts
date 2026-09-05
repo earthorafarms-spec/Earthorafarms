@@ -10,7 +10,6 @@ import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
-import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { config } from './config.js';
 import { registerHealthRoutes } from './routes/health.js';
@@ -19,16 +18,22 @@ import { registerVoiceStreamRoutes } from './routes/voice-stream.js';
 import { registerSmartfloStreamRoutes } from './routes/smartflo-stream.js';
 import { registerCheckoutRoutes } from './routes/checkout.js';
 import { registerPaymentWebhookRoutes } from './routes/payment-webhook.js';
-import { registerWhatsAppRoutes } from './routes/whatsapp.js';
+import { registerWhatsAppRoutes } from '../../whatsapp-chatbot/routes.js';
+import { startWhatsAppWorker } from '../../whatsapp-chatbot/worker.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const publicDirectory = path.resolve(process.cwd(), 'public');
 
 /**
  * Builds (but does not start listening) the Fastify app. Exported
  * separately from main() so integration tests can `app.inject(...)`
  * against a real app instance without binding a port.
  */
-export async function buildApp() {
+export interface BuildAppOptions {
+  mode?: 'all' | 'whatsapp';
+}
+
+export async function buildApp(options: BuildAppOptions = {}) {
+  const mode = options.mode ?? 'all';
   const app = Fastify({
     logger: {
       level: config.LOG_LEVEL,
@@ -51,44 +56,34 @@ export async function buildApp() {
     timeWindow: '1 minute',
   });
 
-  // Payment webhook route is registered FIRST, in its own encapsulated
-  // context with a raw-body parser — must not be affected by any global
-  // JSON parsing configuration registered after it.
-  await registerPaymentWebhookRoutes(app);
-
-  await app.register(websocket);
-
   await registerHealthRoutes(app);
-  await registerVoiceRoutes(app);
-  await registerVoiceStreamRoutes(app);
-  await registerSmartfloStreamRoutes(app);
-  await registerCheckoutRoutes(app);
+
+  if (mode === 'all') {
+    // Payment webhook route is registered before any other body-parsing route
+    // so Razorpay signatures are always checked against the exact bytes.
+    await registerPaymentWebhookRoutes(app);
+    await app.register(websocket);
+    await registerVoiceRoutes(app);
+    await registerVoiceStreamRoutes(app);
+    await registerSmartfloStreamRoutes(app);
+    await registerCheckoutRoutes(app);
+  }
 
   if (config.whatsappConfigured) {
     await registerWhatsAppRoutes(app);
+    startWhatsAppWorker(app);
+  } else if (mode === 'whatsapp') {
+    throw new Error('WhatsApp-only service cannot start: provider configuration is incomplete');
   }
 
-  // Dev-only text-mode harness (see voice-service/README.md) — not a
-  // customer-facing surface, never linked from the main site.
-  await app.register(fastifyStatic, {
-    root: path.join(__dirname, '..', 'public'),
-    prefix: '/',
-  });
+  if (mode === 'all') {
+    // Dev-only text-mode harness (see voice-service/README.md) — not a
+    // customer-facing surface, never linked from the main site.
+    await app.register(fastifyStatic, {
+      root: publicDirectory,
+      prefix: '/',
+    });
+  }
 
   return app;
-}
-
-async function main() {
-  const app = await buildApp();
-  await app.listen({ port: config.PORT, host: '0.0.0.0' });
-}
-
-// Only auto-start when this file is run directly (node dist/server.js /
-// tsx src/server.ts) — not when imported by tests via buildApp().
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
-  main().catch((err) => {
-    // eslint-disable-next-line no-console
-    console.error('voice-service failed to start:', err);
-    process.exit(1);
-  });
 }

@@ -20,7 +20,7 @@ describe('review-form delivery boundary', () => {
 
   it('the conversation checkout tool sends WhatsApp but cannot create a Razorpay link', () => {
     const contents = readFileSync(path.join(srcToolsDir, 'checkout.ts'), 'utf8');
-    expect(contents).toMatch(/adapters\/meta-cloud/);
+    expect(contents).toMatch(/whatsapp-chatbot\/provider/);
     expect(contents).not.toMatch(/payments\/razorpay-links/);
     expect(contents).not.toMatch(/freezeCheckoutPricing/);
   });

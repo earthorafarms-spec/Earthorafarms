@@ -1,6 +1,6 @@
 import type { ConversationState, ConversationMessage } from './state.js';
 import { SYSTEM_PROMPT } from './prompt.js';
-import { WHATSAPP_SYSTEM_PROMPT } from './whatsapp-prompt.js';
+import { WHATSAPP_SYSTEM_PROMPT } from '../../../whatsapp-chatbot/prompt.js';
 import { enforceOutputPolicy } from './output-policy.js';
 import { limitSpokenReply, toSpokenText } from './speech-format.js';
 import { detectLanguage, requestedLanguage, buildLanguageInstruction } from './language.js';

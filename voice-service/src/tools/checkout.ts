@@ -3,7 +3,7 @@ import type { CheckoutFieldSnapshot } from '../conversation/state.js';
 import { generateVerificationToken, hashToken } from '../lib/crypto.js';
 import { createCheckoutSession } from '../repositories/checkoutSessions.repository.js';
 import { upsertCheckoutItem } from '../repositories/checkoutItems.repository.js';
-import { sendWhatsAppCheckoutForm } from '../adapters/meta-cloud.js';
+import { sendWhatsAppCheckoutForm } from '../../../whatsapp-chatbot/provider.js';
 import { config } from '../config.js';
 
 const ALLOWED_FIELDS = [

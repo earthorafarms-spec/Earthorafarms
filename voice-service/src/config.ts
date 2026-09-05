@@ -93,9 +93,11 @@ const optionalSchema = z.object({
   WHATSAPP_PROVIDER: z.enum(['meta', 'tata_omni']).default('meta'),
   TATA_OMNI_ACCESS_TOKEN: z.string().optional(),
   TATA_OMNI_API_BASE_URL: z.string().url().default('https://wb.omni.tatatelebusiness.com'),
-  // Meta Cloud settings. All three must be set for the inbound /whatsapp/*
-  // routes to register; Tata Omni is currently used only for outbound review
-  // links, so it does not enable the Meta-shaped inbound webhook handler.
+  // Shared secret expected in X-Webhook-Secret (or X-Tata-Webhook-Secret)
+  // on Tata Omni callbacks. Keep it separate from the outbound API token.
+  TATA_OMNI_WEBHOOK_SECRET: z.string().min(16).optional(),
+  // Direct Meta Cloud settings. All four must be set for the authenticated
+  // inbound webhook and outbound messaging channel to start.
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(), // from Meta developer portal
   WHATSAPP_TOKEN: z.string().optional(),            // permanent or system-user token
   WHATSAPP_VERIFY_TOKEN: z.string().optional(),     // chosen by you, used for webhook setup
@@ -156,11 +158,12 @@ function loadConfig(): Config {
     optional.SMARTFLOW_BASE_URL.startsWith('http')
   );
 
-  const whatsappConfigured = Boolean(
-    optional.WHATSAPP_PHONE_NUMBER_ID &&
-    optional.WHATSAPP_TOKEN &&
-    optional.WHATSAPP_VERIFY_TOKEN
-  );
+  const whatsappConfigured = optional.WHATSAPP_PROVIDER === 'tata_omni'
+    ? Boolean(optional.TATA_OMNI_ACCESS_TOKEN && optional.TATA_OMNI_WEBHOOK_SECRET)
+    : Boolean(
+      optional.WHATSAPP_PHONE_NUMBER_ID && optional.WHATSAPP_TOKEN &&
+      optional.WHATSAPP_VERIFY_TOKEN && optional.WHATSAPP_APP_SECRET
+    );
 
   const whatsappCheckoutConfigured = optional.WHATSAPP_PROVIDER === 'tata_omni'
     ? Boolean(optional.TATA_OMNI_ACCESS_TOKEN && optional.WHATSAPP_CHECKOUT_TEMPLATE_NAME)

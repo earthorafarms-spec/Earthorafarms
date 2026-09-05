@@ -1,6 +1,6 @@
-import { supabase } from '../lib/supabaseClient.js';
-import { createInitialState } from '../conversation/state.js';
-import type { ConversationState } from '../conversation/state.js';
+import { supabase } from '../voice-service/src/lib/supabaseClient.js';
+import { createInitialState } from '../voice-service/src/conversation/state.js';
+import type { ConversationState } from '../voice-service/src/conversation/state.js';
 
 // WhatsApp sessions live for 24 h of inactivity; each message resets the clock.
 const SESSION_TTL_HOURS = 24;

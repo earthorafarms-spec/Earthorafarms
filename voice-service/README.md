@@ -59,6 +59,56 @@ and safety checks:
   batch upload-and-wait route (`POST /voice/session/:id/audio-message`, hold-to-talk) still exists
   in `src/routes/voice.ts` for callers that can't do a persistent WebSocket.
 
+## WhatsApp ordering chatbot
+
+WhatsApp is a third transport over that same conversation engine. It does not
+maintain a second catalogue or create orders directly:
+
+1. `POST /whatsapp/webhook` authenticates the callback and stores each provider
+   message id in `whatsapp_message_events`.
+2. A database-backed worker claims messages with `FOR UPDATE SKIP LOCKED`,
+   deduplicates provider message ids, and preserves each customer's message
+   order across retries and multiple Render instances.
+3. The shared product, knowledge, cart, language and checkout tools fetch live
+   Supabase data on every relevant turn.
+4. After delivery details are complete, the existing secure review form is sent
+   in WhatsApp. The chatbot never creates an order or marks a payment successful.
+5. Review-form confirmation creates a Razorpay Payment Link. The signed payment
+   webhook and `finalize_voice_order` transaction write to the same order tables
+   shown in the admin portal.
+
+Apply these SQL files in order before enabling the callback:
+
+1. `supabase/migrations/schema_website.sql`
+2. `supabase/migrations/schema_agent.sql`
+3. `supabase/migrations/whatsapp_sessions.sql`
+4. `supabase/migrations/20260905000000_whatsapp_chatbot_inbox.sql`
+
+For Tata Omni, set `WHATSAPP_PROVIDER=tata_omni`, `TATA_OMNI_ACCESS_TOKEN`,
+`WHATSAPP_CHECKOUT_TEMPLATE_NAME`, and a random 16+ character
+`TATA_OMNI_WEBHOOK_SECRET`. In Omni, set the Additional Callback URL to:
+
+```text
+https://<voice-service-host>/whatsapp/webhook
+```
+
+Configure Tata to send an `X-Webhook-Secret` header with the same secret. If
+your Omni account cannot add callback headers, use a Tata-supported gateway or
+authentication mechanism before enabling the endpoint; do not expose an
+unauthenticated callback. The status callback can use the same endpoint;
+delivery receipts are acknowledged and ignored.
+The public Tata setup guide does not publish a fixed incoming-message JSON
+schema, so `../whatsapp-chatbot/inbound.ts` is the isolated normalization
+boundary. Save one redacted real callback fixture and add it to
+`tests/unit/whatsapp-inbound.test.ts` before production launch. All WhatsApp
+transport code lives together in the top-level `whatsapp-chatbot/` folder; it imports the shared
+conversation and checkout engine instead of duplicating business logic.
+
+For direct Meta Cloud API, use `WHATSAPP_PROVIDER=meta` and configure the phone
+number id, permanent token, verification token and app secret. Subscribe Meta's
+messages webhook to the same URL. Meta callbacks are verified against the exact
+raw request bytes using `X-Hub-Signature-256`.
+
 ### Tata/VOICE Streaming WebSocket
 
 The service also exposes a telephony-compatible bidirectional socket at

@@ -4,7 +4,7 @@ import { resetGuardState } from '../../src/conversation/output-policy.js';
 
 const mocks = vi.hoisted(() => ({ chat: vi.fn(), createSession: vi.fn(), saveItem: vi.fn(), send: vi.fn() }));
 vi.mock('../../src/providers.js', () => ({ chatWithRouting: mocks.chat }));
-vi.mock('../../src/adapters/meta-cloud.js', () => ({ sendWhatsAppCheckoutForm: mocks.send }));
+vi.mock('../../../whatsapp-chatbot/provider.js', () => ({ sendWhatsAppCheckoutForm: mocks.send }));
 vi.mock('../../src/repositories/checkoutSessions.repository.js', () => ({ createCheckoutSession: mocks.createSession }));
 vi.mock('../../src/repositories/checkoutItems.repository.js', () => ({ upsertCheckoutItem: mocks.saveItem }));
 vi.mock('../../src/config.js', async (importOriginal) => {
