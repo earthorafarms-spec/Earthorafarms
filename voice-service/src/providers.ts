@@ -75,9 +75,9 @@ export function buildLLM(): LLMAdapter {
  * The actual per-turn call site conversation/controller.ts uses. In 'auto'
  * mode for a non-English turn, a Sarvam failure (rate limit, billing lapse,
  * network error — anything) falls back to OpenAI for THIS call rather than
- * breaking the caller's turn; the reply just comes back in English instead
- * of the requested language, which is a degraded experience, not a broken
- * one. Every other mode calls its single configured provider with no
+ * breaking the caller's turn. The SAME language instruction stays in the
+ * request when falling back; output-policy checks the returned script.
+ * Every other mode calls its single configured provider with no
  * fallback — an explicit single-provider choice should fail loudly, not
  * silently substitute a different vendor.
  */

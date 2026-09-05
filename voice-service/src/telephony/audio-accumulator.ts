@@ -21,16 +21,16 @@ const BYTES_PER_SAMPLE = 2;
 // Keep the default conservative but configurable per deployment, and retain
 // a short pre-roll so leading consonants below the gate are not clipped.
 const DEFAULT_SPEECH_RMS_THRESHOLD = 600;
-// Short enough to capture "yes", "okay", one-word answers. The client-side
-// MIN_TRANSMIT_RMS gate already filters near-silent non-speech before it
-// reaches the server, so a low MIN_SPEECH_MS is safe.
+// Keep interruption confirmation stricter than listening-window answers.
+// A telephone "yes"/"two" can have less than 200ms above the energy gate.
 const MIN_SPEECH_MS_BEFORE_FLUSH = 200;
+const SHORT_ANSWER_MIN_SPEECH_MS = 80;
 // 700ms of continuous silence after speech → flush. Natural intra-sentence
 // pauses (breath, hesitation between clauses) are typically 200-500ms, so
 // 700ms avoids splitting one thought into two turns while still feeling
 // responsive after the user actually finishes speaking. 300ms was too
 // aggressive — it was flushing mid-sentence pauses as if the turn had ended.
-const SILENCE_MS_TO_FLUSH = 500;
+const SILENCE_MS_TO_FLUSH = 700;
 const MAX_UTTERANCE_MS = 20_000; // safety cap — force-flush a runaway utterance rather than buffer forever
 const PRE_ROLL_MS = 200;
 
@@ -53,6 +53,8 @@ export type UtteranceReadyCallback = (pcm16Mono16k: Buffer) => void;
 
 export interface AudioAccumulatorOptions {
   speechRmsThreshold?: number;
+  /** Snapshot at speech onset: accept brief answers only while the bot is listening. */
+  allowShortUtterances?: () => boolean;
   onSpeechStart?: () => void;
   /** Called for every above-threshold chunk, including short noise bursts. */
   onSpeechActivity?: () => void;
@@ -72,6 +74,8 @@ export class AudioAccumulator {
   private silenceMs = 0;
   private hasSpeechStarted = false;
   private speechStartNotified = false;
+  private minimumSpeechMs = MIN_SPEECH_MS_BEFORE_FLUSH;
+  private utteranceMs = 0;
 
   private readonly speechRmsThreshold: number;
 
@@ -91,6 +95,8 @@ export class AudioAccumulator {
       this.options.onSpeechActivity?.();
       if (!this.hasSpeechStarted) {
         this.hasSpeechStarted = true;
+        this.minimumSpeechMs = this.options.allowShortUtterances?.()
+          ? SHORT_ANSWER_MIN_SPEECH_MS : MIN_SPEECH_MS_BEFORE_FLUSH;
         this.speechBuffer.push(...this.preRollBuffer, chunk);
         this.preRollBuffer = [];
         this.preRollMs = 0;
@@ -102,7 +108,7 @@ export class AudioAccumulator {
       // Do not interrupt bot playback on the first loud packet. Telephone
       // clicks and brief line noise were previously treated as barge-in and
       // could clear a perfectly valid response halfway through. Confirm the
-      // same minimum amount of speech required for a real utterance first.
+      // stronger 200ms barge-in threshold even when listening accepts short answers.
       if (!this.speechStartNotified && this.speechMs >= MIN_SPEECH_MS_BEFORE_FLUSH) {
         this.speechStartNotified = true;
         this.options.onSpeechStart?.();
@@ -116,9 +122,10 @@ export class AudioAccumulator {
       this.addPreRoll(chunk, chunkMs);
     }
 
-    const enoughSpeech = this.speechMs >= MIN_SPEECH_MS_BEFORE_FLUSH;
+    if (this.hasSpeechStarted) this.utteranceMs += chunkMs;
+    const enoughSpeech = this.speechMs >= this.minimumSpeechMs;
     const longEnoughSilence = this.silenceMs >= SILENCE_MS_TO_FLUSH;
-    const tooLong = this.speechMs + this.silenceMs >= MAX_UTTERANCE_MS;
+    const tooLong = this.utteranceMs >= MAX_UTTERANCE_MS;
 
     // Discard a short cough/click after a full silence window instead of
     // carrying it forward and combining it with the caller's next sentence.
@@ -134,7 +141,7 @@ export class AudioAccumulator {
 
   /** Force-flush whatever's buffered — used on WS close so a final partial utterance isn't lost. */
   flushIfPending(): void {
-    if (this.hasSpeechStarted && this.speechMs >= MIN_SPEECH_MS_BEFORE_FLUSH) {
+    if (this.hasSpeechStarted && this.speechMs >= this.minimumSpeechMs) {
       this.flush();
     } else {
       this.reset();
@@ -155,6 +162,7 @@ export class AudioAccumulator {
     this.silenceMs = 0;
     this.hasSpeechStarted = false;
     this.speechStartNotified = false;
+    this.utteranceMs = 0;
   }
 
   private addPreRoll(chunk: Buffer, chunkMs: number): void {

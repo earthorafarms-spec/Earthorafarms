@@ -242,6 +242,21 @@ describe('Smartflo WebSocket local integration', () => {
     expect(mocks.ttsMulaw).toHaveBeenCalledWith("Sorry, I didn't catch that clearly. Please say it again.", 'en');
   });
 
+  it.each(['yes', '2', 'Ahmedabad, Gujarat'])('passes a short listening-window answer (%s) through the phone pipeline', async (text) => {
+    mocks.stt.mockResolvedValue({ text });
+    const { ws, collector } = await connect();
+    sendStart(ws);
+    await collector.waitFor((messages) => messages.some((m) => m.event === 'mark'));
+    acknowledgeLatestMark(ws, collector);
+    ws.send(JSON.stringify({ event: 'media', media: { payload: mulawFrame(4_000).toString('base64') } }));
+    for (let i = 0; i < 7; i++) {
+      ws.send(JSON.stringify({ event: 'media', media: { payload: Buffer.alloc(800, 0xff).toString('base64') } }));
+    }
+    await collector.waitFor(() => mocks.processMessage.mock.calls.length === 1);
+    expect(mocks.processMessage).toHaveBeenCalledWith('session-test', text);
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+  });
+
   it('asks for a repeat in the established Hindi conversation language', async () => {
     session.currentLanguage = 'hi';
     mocks.stt.mockResolvedValue({ text: 'ಅಕ್ಕ ಇರ್ತಾ ಇರೋದು', detectedLanguageCode: 'kn-IN', languageProbability: 0.99 });

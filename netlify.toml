@@ -2,6 +2,10 @@
   command = "npm run build"
   publish = "dist"
 
+[build.environment]
+  # Public API origin required by the editable voice-order review form.
+  VITE_VOICE_SERVICE_URL = "https://earthorafarms-mhwv.onrender.com"
+
 [functions]
   directory = "netlify/functions"
   external_node_modules = ["pdf-lib", "nodemailer"]

@@ -1,5 +1,6 @@
 import type { TurnToolFact } from './state.js';
 import type { SupportedLanguage } from './language.js';
+import { buildLanguageInstruction, replyMatchesLanguage } from './language.js';
 
 // The concrete enforcement mechanism behind the spec's single most important
 // safety rule: "never speak from model memory — only from a live tool call
@@ -159,6 +160,9 @@ export function enforceOutputPolicy(
   // replacement for "the specific price/stock claim you just made" — the
   // best fix is a fresh, correctly-grounded answer from the model. ──
   const attributionViolations: string[] = [];
+  if (!replyMatchesLanguage(text, language)) {
+    attributionViolations.push('reply language/script does not match the conversation language');
+  }
   const successfulFacts = turnFacts.filter(isSuccessfulFact);
   const priceFactsBlob = successfulFacts
     .filter((f) => PRICE_GROUNDING_TOOLS.has(f.toolName))
@@ -200,7 +204,7 @@ export function enforceOutputPolicy(
       `Your last reply included a claim not backed by this turn's tool results: ${attributionViolations.join('; ')}. ` +
       'Re-answer using ONLY facts already returned by a tool call above. If you have not looked up ' +
       'the relevant product yet, call the appropriate tool first, then answer from its result. ' +
-      'Reply in the same language as your previous attempt.';
+      buildLanguageInstruction(language);
     return { action: 'regenerate', text, violations, instruction };
   }
 

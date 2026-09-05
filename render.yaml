@@ -3,7 +3,7 @@ services:
     name: earthora-voice-service
     runtime: node
     rootDir: voice-service
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci --include=dev --no-audit --no-fund --loglevel=info && npm run build
     startCommand: npm start
     plan: free          # Free sleeps after 15 idle minutes; use 0.5c-512mb for always-on production calls.
     healthCheckPath: /health

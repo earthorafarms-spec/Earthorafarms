@@ -1,7 +1,21 @@
 import { describe, it, expect } from 'vitest';
-import { detectLanguageHint } from '../../src/conversation/language.js';
+import { detectLanguageHint, requestedLanguage, replyMatchesLanguage } from '../../src/conversation/language.js';
 
 describe('detectLanguageHint', () => {
+  it('recognizes explicit language preferences, not place names', () => {
+    expect(requestedLanguage('Please speak Hindi')).toBe('hi');
+    expect(requestedLanguage('हिंदी में बात करें')).toBe('hi');
+    expect(requestedLanguage('English please')).toBe('en');
+    expect(requestedLanguage('ગુજરાતીમાં વાત કરો')).toBe('gu');
+    expect(requestedLanguage('Ahmedabad, Gujarat')).toBeNull();
+  });
+  it('blocks unrelated output scripts and full English replies through Indic voices', () => {
+    expect(replyMatchesLanguage('Здравствуйте!', 'hi')).toBe(false);
+    expect(replyMatchesLanguage('તમારું નામ શું છે?', 'hi')).toBe(false);
+    expect(replyMatchesLanguage('Hello! Please provide your correct phone number.', 'hi')).toBe(false);
+    expect(replyMatchesLanguage('Morilife+ के कितने पैक चाहिए?', 'hi')).toBe(true);
+    expect(replyMatchesLanguage('What is your name?', 'en')).toBe(true);
+  });
   it('detects Devanagari (Hindi) script', () => {
     const hint = detectLanguageHint('इस उत्पाद की कीमत क्या है');
     expect(hint).toContain('Hindi');

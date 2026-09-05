@@ -26,6 +26,6 @@ describe('checkout turn context', () => {
 
     expect(buildCheckoutTurnInstruction(state)).toContain('OPTIONAL GST QUESTION REQUIRED NOW');
     state.checkoutFields.gst = '';
-    expect(buildCheckoutTurnInstruction(state)).toBeNull();
+    expect(buildCheckoutTurnInstruction(state)).toContain('CHECKOUT READY NOW');
   });
 });

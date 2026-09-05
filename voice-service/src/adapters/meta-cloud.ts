@@ -1,5 +1,11 @@
 import { config } from '../config.js';
 
+export class WhatsAppDeliveryError extends Error {
+  constructor(readonly status: number) {
+    super(`WhatsApp provider rejected delivery (HTTP ${status})`);
+  }
+}
+
 async function sendWhatsAppPayload(payload: Record<string, unknown>): Promise<void> {
   const url = `https://graph.facebook.com/v21.0/${config.WHATSAPP_PHONE_NUMBER_ID}/messages`;
 
@@ -10,11 +16,11 @@ async function sendWhatsAppPayload(payload: Record<string, unknown>): Promise<vo
       Authorization: `Bearer ${config.WHATSAPP_TOKEN}`,
     },
     body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(8_000),
   });
 
   if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`WhatsApp send failed ${res.status}: ${body}`);
+    throw new WhatsAppDeliveryError(res.status);
   }
 }
 
@@ -49,11 +55,11 @@ async function sendTataOmniCheckoutTemplate(to: string, reviewUrl: string): Prom
       Authorization: config.TATA_OMNI_ACCESS_TOKEN,
     },
     body: JSON.stringify(buildCheckoutTemplatePayload(to, reviewUrl)),
+    signal: AbortSignal.timeout(8_000),
   });
 
   if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Tata Omni WhatsApp send failed ${res.status}: ${body}`);
+    throw new WhatsAppDeliveryError(res.status);
   }
 }
 

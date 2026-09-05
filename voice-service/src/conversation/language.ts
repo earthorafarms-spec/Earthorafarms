@@ -59,8 +59,9 @@ export function detectLanguage(text: string): SupportedLanguage | null {
     const words = new Set(t.toLowerCase().match(/[a-z]+/g) ?? []);
     const guHits = [...ROMAN_GU_WORDS].filter((w) => words.has(w)).length;
     const hiHits = [...ROMAN_HI_WORDS].filter((w) => words.has(w)).length;
-    if (guHits >= 2) return 'gu';
-    if (hiHits >= 2) return 'hi';
+    if (guHits >= 2 && guHits > hiHits) return 'gu';
+    if (hiHits >= 2 && hiHits > guHits) return 'hi';
+    if (guHits >= 2 && hiHits >= 2) return null;
     // Don't switch to English on short Latin-only utterances — a single city
     // name ("Ahmedabad"), a yes/no answer, or any ≤ 2-word reply during
     // Hindi/Gujarati checkout would incorrectly flip the language and make the
@@ -86,4 +87,29 @@ export function buildLanguageInstruction(lang: SupportedLanguage): string {
 export function detectLanguageHint(text: string): string | null {
   const lang = detectLanguage(text);
   return lang ? buildLanguageInstruction(lang) : null;
+}
+
+/** Explicit preferences can change language even during checkout. Mere place/name values cannot. */
+export function requestedLanguage(text: string): SupportedLanguage | null {
+  const t = text.toLowerCase().trim();
+  const request = /\b(?:speak|talk|reply|respond|continue|switch|please|bolo|boliye|baat|vato)\b|बोल|बात|जवाब|बताइ|बता|બોલ|વાત|જવાબ/u;
+  if (!request.test(t)) return null;
+  if (/\b(?:english|angrezi)\b|अंग्रेज़ी|अंग्रेजी|અંગ્રેજી/u.test(t)) return 'en';
+  if (/\bhindi\b|हिंदी|हिन्दी|હિન્દી/u.test(t)) return 'hi';
+  if (/\bgujarati\b|गुजराती|ગુજરાતી/u.test(t)) return 'gu';
+  return null;
+}
+
+/** Script-level guard, not a full language classifier. Brand names in Latin are allowed in Indic replies. */
+export function replyMatchesLanguage(text: string, language: SupportedLanguage): boolean {
+  for (const char of text) {
+    if (/\p{L}/u.test(char) && !/[A-Za-z\u0900-\u097F\u0A80-\u0AFF]/u.test(char)) return false;
+  }
+  const hi = /[\u0900-\u097F]/u.test(text);
+  const gu = /[\u0A80-\u0AFF]/u.test(text);
+  if (language === 'en') return !hi && !gu;
+  if ((language === 'hi' && gu) || (language === 'gu' && hi)) return false;
+  // A full English sentence must not be spoken through a Hindi/Gujarati voice.
+  if ((text.match(/[a-z]+/gi) ?? []).length >= 4 && !(language === 'hi' ? hi : gu)) return false;
+  return true;
 }

@@ -112,6 +112,38 @@ npm test
 
 ## Deploying
 
+### Render service settings
+
+For a manually created Render **Web Service**, use these settings even if Render
+auto-detects a different runtime from the repository root:
+
+| Setting | Value |
+| --- | --- |
+| Runtime | Node |
+| Root directory | `voice-service` |
+| Build command | `npm ci --include=dev --no-audit --no-fund --loglevel=info && npm run build` |
+| Start command | `npm start` |
+| Health check | `/health` |
+
+`cargo build --release` is incorrect: this is a Node/TypeScript service and has no
+`Cargo.toml`. The build explicitly installs dev dependencies because `tsup` is a
+build-time dependency, even when `NODE_ENV=production`. Keep security auditing
+as a separate check (`npm audit`), not a network dependency of the release build.
+
+Set `PUBLIC_APP_URL` to the deployed storefront origin, never localhost.
+Set `VOICE_STREAM_PUBLIC_WSS_URL` to
+`wss://<this-render-service-host>/ws/voice/smartflo`. Point the telephony provider
+at this same service (or its `/voice/stream/endpoint` resolver). Configure the
+storefront's `VITE_VOICE_SERVICE_URL` with the backend HTTPS origin and rebuild
+Netlify: Vite embeds this setting at build time.
+
+Local `.env` changes do not update Render. Add the required secrets to this
+service's environment, including the Tata token and Sarvam key pool when used.
+`/health` and `/ready` do not verify external provider credentials or payments.
+Free Render instances sleep when idle; use an approved paid compute plan for
+always-on calling. Do not apply the repository-root Blueprint indiscriminately:
+it also defines a separate, paid messaging-platform service.
+
 ### Sarvam credit failover
 
 Set the server-only secret `SARVAM_API_KEYS` to an ordered comma-separated list.

@@ -3,11 +3,23 @@ import { SYSTEM_PROMPT } from './prompt.js';
 import { WHATSAPP_SYSTEM_PROMPT } from './whatsapp-prompt.js';
 import { enforceOutputPolicy } from './output-policy.js';
 import { limitSpokenReply, toSpokenText } from './speech-format.js';
-import { detectLanguage, buildLanguageInstruction } from './language.js';
+import { detectLanguage, requestedLanguage, buildLanguageInstruction } from './language.js';
 import { turnFailurePrompt } from './voice-copy.js';
 import { buildCheckoutTurnInstruction } from './checkout-context.js';
 import { chatWithRouting } from '../providers.js';
 import { allTools, toolsByName } from '../tools/index.js';
+import { isCheckoutReady } from '../tools/checkout.js';
+
+function reviewFormReply(sent: boolean, language: ConversationState['currentLanguage']): string {
+  if (sent) {
+    if (language === 'hi') return 'आपके WhatsApp पर ऑर्डर रिव्यू फॉर्म भेज दिया है। उसमें जानकारी चेक या बदलकर कन्फर्म करें, उसके बाद ही Razorpay पेमेंट कर सकते हैं।';
+    if (language === 'gu') return 'તમારા WhatsApp પર ઓર્ડર રિવ્યુ ફોર્મ મોકલ્યું છે. વિગતો તપાસીને કે બદલીને કન્ફર્મ કરો, ત્યાર પછી જ Razorpay પેમેન્ટ કરી શકશો.';
+    return 'I’ve sent the order-review form to your WhatsApp. Please review or edit your details and confirm the form before continuing to Razorpay payment.';
+  }
+  if (language === 'hi') return 'माफ़ कीजिए, अभी WhatsApp पर फॉर्म नहीं भेज पाई। आपका ऑर्डर या पेमेंट नहीं हुआ है; क्या आप फिर कोशिश करना चाहेंगे?';
+  if (language === 'gu') return 'માફ કરશો, અત્યારે WhatsApp પર ફોર્મ મોકલી શકી નથી. તમારો ઓર્ડર કે પેમેન્ટ થયું નથી; ફરી પ્રયત્ન કરવો છે?';
+  return 'Sorry, I couldn’t send the WhatsApp form. No order or payment has been completed; would you like me to try again?';
+}
 
 const MAX_TOOL_LOOP_ITERATIONS = 6;
 // guard.py-style two-strike system: 1 regenerate attempt, then fallback.
@@ -91,8 +103,11 @@ export async function processTurn(
   // Language is locked once checkout field collection begins: short answers
   // like city names ("Ahmedabad") or PIN codes are ambiguous and would
   // incorrectly flip the conversation language mid-checkout.
-  const checkoutStarted = Object.keys(state.checkoutFields).length > 0;
-  if (!checkoutStarted) {
+  const checkoutStarted = state.cart.length > 0 || Object.keys(state.checkoutFields).length > 0;
+  const explicitLanguage = requestedLanguage(userText);
+  if (explicitLanguage) {
+    state.currentLanguage = explicitLanguage;
+  } else if (!checkoutStarted) {
     const detected = detectLanguage(userText);
     if (detected) state.currentLanguage = detected;
   }
@@ -177,6 +192,11 @@ export async function processTurn(
   let transientCorrection: ConversationMessage | null = null;
 
   for (let iteration = 0; iteration < MAX_TOOL_LOOP_ITERATIONS; iteration++) {
+    // Tools mutate the state during the loop. Never keep asking for a field
+    // that was saved earlier in this same turn (especially city + state/GST).
+    const liveCheckoutInstruction = buildCheckoutTurnInstruction(state);
+    systemMessage.content = `${buildLanguageInstruction(state.currentLanguage)}\n\n` +
+      (liveCheckoutInstruction ? `${liveCheckoutInstruction}\n\n` : '') + basePrompt;
     // Per-turn provider selection — see providers.ts. In LLM_PROVIDER=auto,
     // this is what actually routes Hindi/Gujarati to Sarvam and English to
     // OpenAI (with a same-turn fallback to OpenAI if Sarvam errors).
@@ -222,6 +242,35 @@ export async function processTurn(
         const resultJson = JSON.stringify(resultObj);
         state.currentTurnFacts.push({ toolName: call.name, resultJson });
         state.messages.push({ role: 'tool', content: resultJson, toolCallId: call.id, toolName: call.name });
+      }
+
+      // After the last detail is saved, sending the review form is a workflow
+      // step, not an optional model decision. Execute only after the entire
+      // batch (including every cart change) and never twice in the same turn.
+      const fieldSaved = result.calls.some((call) => ['set_checkout_field', 'set_delivery_location'].includes(call.name));
+      if (fieldSaved && isCheckoutReady(state) && !state.currentTurnFacts.some((fact) => fact.toolName === 'create_verification_link')) {
+        const callId = `review-${state.turnCount}-${iteration}`;
+        state.messages.push({ role: 'assistant', content: '', toolCalls: [{ id: callId, name: 'create_verification_link', argumentsJson: '{}' }] });
+        let delivery: unknown;
+        try {
+          delivery = await toolsByName.create_verification_link.handler({}, { callSessionId, state });
+        } catch {
+          delivery = { ok: false, reason: 'checkout_preparation_failed' };
+        }
+        const resultJson = JSON.stringify(delivery);
+        state.currentTurnFacts.push({ toolName: 'create_verification_link', resultJson });
+        state.messages.push({ role: 'tool', toolName: 'create_verification_link', toolCallId: callId, content: resultJson });
+      }
+
+      const deliveryFact = state.currentTurnFacts.find((fact) => fact.toolName === 'create_verification_link');
+      if (deliveryFact) {
+        const delivery = JSON.parse(deliveryFact.resultJson) as { ok?: boolean; reason?: string };
+        // Missing fields still go through the model to ask the right question.
+        if (delivery.ok || !['empty_cart', 'missing_fields', 'gst_question_not_answered', 'invalid_phone'].includes(delivery.reason ?? '')) {
+          const replyText = reviewFormReply(delivery.ok === true, state.currentLanguage);
+          state.messages.push({ role: 'assistant', content: replyText });
+          return { state, replyText, policyViolations: [] };
+        }
       }
 
       continue; // let the model see the tool results and respond

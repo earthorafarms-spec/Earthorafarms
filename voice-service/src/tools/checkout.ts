@@ -13,6 +13,23 @@ type AllowedField = (typeof ALLOWED_FIELDS)[number];
 
 const REQUIRED_FIELDS: AllowedField[] = ['name', 'email', 'phone', 'address', 'city', 'state', 'postalCode', 'country'];
 
+export function normalizeWhatsAppPhone(raw: string): string | null {
+  const normalized = raw.normalize('NFKC').replace(/[०-९૦-૯]/gu, (digit) =>
+    String(digit.charCodeAt(0) - (digit.charCodeAt(0) >= 0x0ae6 ? 0x0ae6 : 0x0966)));
+  if (!/^[+\d\s().-]+$/.test(normalized.trim())) return null;
+  const digits = normalized.replace(/\D/g, '');
+  if (/^[6-9]\d{9}$/.test(digits)) return `+91${digits}`;
+  if (/^0[6-9]\d{9}$/.test(digits)) return `+91${digits.slice(1)}`;
+  if (/^91[6-9]\d{9}$/.test(digits)) return `+${digits}`;
+  if (normalized.trim().startsWith('+') && /^[1-9]\d{7,14}$/.test(digits) && !digits.startsWith('91')) return `+${digits}`;
+  return null;
+}
+
+export function isCheckoutReady(state: ToolContext['state']): boolean {
+  return state.cart.length > 0 && missingRequiredFields(state.checkoutFields).length === 0 &&
+    state.checkoutFields.gst !== undefined;
+}
+
 function missingRequiredFields(fields: CheckoutFieldSnapshot): AllowedField[] {
   return REQUIRED_FIELDS.filter((f) => !fields[f as keyof CheckoutFieldSnapshot]);
 }
@@ -59,6 +76,13 @@ function normalizeAndValidate(field: AllowedField, rawValue: unknown): { value: 
     return { value: false, error: 'Marketing consent must be true or false.' };
   }
   const value = String(rawValue ?? '').trim();
+  if (field === 'phone') {
+    const phone = normalizeWhatsAppPhone(value);
+    return phone ? { value: phone } : { value, error: 'Please provide a valid WhatsApp mobile number with country code if outside India.' };
+  }
+  if (['name', 'address', 'city', 'state'].includes(field) && /^(?:yes|no|ok(?:ay)?|hello|hi|हाँ|हां|नहीं|હા|ના)[.!?]*$/iu.test(value)) {
+    return { value, error: 'That is an acknowledgement, not the requested checkout detail. Use the preceding question to interpret it.' };
+  }
   if (field === 'city' || field === 'state') {
     return { value: normalizeSpokenPlace(field, value) };
   }
@@ -160,6 +184,8 @@ export const createVerificationLinkTool: ToolModule = {
     }
 
     const fields = ctx.state.checkoutFields;
+    const contact = normalizeWhatsAppPhone(fields.phone!);
+    if (!contact) return { ok: false, reason: 'invalid_phone' };
     if (!config.whatsappCheckoutConfigured) {
       return { ok: false, reason: 'whatsapp_not_configured' };
     }
@@ -187,12 +213,16 @@ export const createVerificationLinkTool: ToolModule = {
     // Do not price or create a Razorpay link here. The checkout page first
     // persists the customer's edits, then calls verify-and-price, and only an
     // explicit confirmation from that page can request the payment link.
-    const rawPhone = fields.phone!;
-    const contact = rawPhone.startsWith('+') ? rawPhone : `+91${rawPhone.replace(/\D/g, '')}`;
     const verificationUrl = `${config.PUBLIC_APP_URL.replace(/\/$/, '')}/voice-checkout/${rawToken}`;
     try {
       await sendWhatsAppCheckoutForm(contact, verificationUrl);
-    } catch {
+    } catch (err) {
+      // Never log the provider body: it may echo phone numbers, tokens or the review URL.
+      console.warn('[checkout] WhatsApp review form failed', {
+        callSessionId: ctx.callSessionId,
+        provider: config.WHATSAPP_PROVIDER,
+        httpStatus: typeof (err as { status?: unknown })?.status === 'number' ? (err as { status: number }).status : undefined,
+      });
       return { ok: false, reason: 'whatsapp_delivery_failed' };
     }
 

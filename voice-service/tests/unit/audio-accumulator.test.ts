@@ -19,6 +19,34 @@ function amplitudeChunk(ms: number, amplitude: number): Buffer {
 }
 
 describe('AudioAccumulator', () => {
+  it.each([80, 100, 160])('accepts a %dms answer while listening without treating it as barge-in', (ms) => {
+    const onReady = vi.fn();
+    const onSpeechStart = vi.fn();
+    const acc = new AudioAccumulator(onReady, { allowShortUtterances: () => true, onSpeechStart });
+    acc.push(chunk(ms, true));
+    acc.push(chunk(700, false));
+    expect(onReady).toHaveBeenCalledTimes(1);
+    expect(onSpeechStart).not.toHaveBeenCalled();
+  });
+
+  it('still ignores a 20ms click while listening', () => {
+    const onReady = vi.fn();
+    const acc = new AudioAccumulator(onReady, { allowShortUtterances: () => true });
+    acc.push(chunk(20, true));
+    acc.push(chunk(700, false));
+    expect(onReady).not.toHaveBeenCalled();
+  });
+
+  it('preserves city and state separated by a 500ms pause as one utterance', () => {
+    const onReady = vi.fn();
+    const acc = new AudioAccumulator(onReady);
+    acc.push(chunk(300, true));
+    acc.push(chunk(500, false));
+    expect(onReady).not.toHaveBeenCalled();
+    acc.push(chunk(300, true));
+    acc.push(chunk(700, false));
+    expect(onReady).toHaveBeenCalledTimes(1);
+  });
   it('does not flush on silence alone (no speech ever started)', () => {
     const onReady = vi.fn();
     const acc = new AudioAccumulator(onReady);

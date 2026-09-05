@@ -1,9 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialState } from '../../src/conversation/state.js';
-import { createVerificationLinkTool, setCheckoutFieldTool, setDeliveryLocationTool } from '../../src/tools/checkout.js';
+import { createVerificationLinkTool, setCheckoutFieldTool, setDeliveryLocationTool, normalizeWhatsAppPhone } from '../../src/tools/checkout.js';
 import { createPaymentLinkBodySchema } from '../../src/schemas/checkout.js';
 
 describe('checkout field validation', () => {
+  it.each(['9876543210', '919876543210', '+91 98765-43210', '09876543210', '९८७६५४३२१०'])('normalizes %s without duplicating the country code', (phone) => {
+    expect(normalizeWhatsAppPhone(phone)).toBe('+919876543210');
+  });
+  it.each(['1234', '+91919876543210', 'yes', '9876543210 garbage'])('rejects an invalid WhatsApp number: %s', (phone) => {
+    expect(normalizeWhatsAppPhone(phone)).toBeNull();
+  });
+  it('does not save an acknowledgement as an address', async () => {
+    const state = createInitialState();
+    const result = await setCheckoutFieldTool.handler({ field: 'address', value: 'okay' }, { callSessionId: 'session-1', state });
+    expect(result).toMatchObject({ ok: false });
+    expect(state.checkoutFields.address).toBeUndefined();
+  });
   it('does not coerce the string "false" to true', async () => {
     const state = createInitialState();
     const result = await setCheckoutFieldTool.handler(

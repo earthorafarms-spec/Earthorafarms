@@ -536,6 +536,7 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
 
     const accumulator = new AudioAccumulator(enqueueUtterance, {
       speechRmsThreshold: config.VOICE_SPEECH_RMS_THRESHOLD,
+      allowShortUtterances: () => !playbackActive && activeMarkName === null && !greetingPending,
       onSpeechActivity: armCallerSilenceTimer,
       onSpeechStart: () => {
         // Once the form was delivered, let the short confirmation finish and
