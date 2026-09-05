@@ -5,6 +5,8 @@ import { extractWhatsAppInboundMessages } from './inbound.js';
 import { enqueueWhatsAppMessage } from './events.repository.js';
 import { wakeWhatsAppWorker } from './worker.js';
 
+let lastWebhookDiagnostic: Record<string, unknown> | null = null;
+
 function constantTimeEqual(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(left);
   const rightBuffer = Buffer.from(right);
@@ -61,6 +63,11 @@ function rejectedWebhookDiagnostics(rawBody: unknown, req: FastifyRequest): Reco
 }
 
 export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void> {
+  // Temporary-safe operational state: structural booleans only, with no URL,
+  // token, message text, or customer identifier. This makes provider callback
+  // mismatches diagnosable even when the hosting dashboard is unavailable.
+  app.get('/whatsapp/diagnostics', async () => ({ lastWebhookDiagnostic }));
+
   app.get<{ Querystring: Record<string, string> }>('/whatsapp/webhook', async (req, reply) => {
     const q = req.query;
     if (config.WHATSAPP_PROVIDER === 'meta' &&
@@ -92,7 +99,12 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
       if (!rawBody?.length || !verifyWebhook(rawBody, req)) {
         // Log only structural booleans and sizes; never log callback URLs,
         // tokens, message contents, or customer identifiers.
-        app.log.warn(rejectedWebhookDiagnostics(rawBody, req), 'WhatsApp webhook rejected');
+        lastWebhookDiagnostic = {
+          at: new Date().toISOString(),
+          stage: 'rejected',
+          ...rejectedWebhookDiagnostics(rawBody, req),
+        };
+        app.log.warn(lastWebhookDiagnostic, 'WhatsApp webhook rejected');
         return reply.status(403).send('Forbidden');
       }
 
@@ -104,6 +116,11 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
       }
 
       const messages = extractWhatsAppInboundMessages(body);
+      lastWebhookDiagnostic = {
+        at: new Date().toISOString(),
+        stage: 'parsed',
+        extractedMessages: messages.length,
+      };
       try {
         let queued = 0;
         for (const message of messages) {
