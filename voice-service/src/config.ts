@@ -93,8 +93,8 @@ const optionalSchema = z.object({
   WHATSAPP_PROVIDER: z.enum(['meta', 'tata_omni']).default('meta'),
   TATA_OMNI_ACCESS_TOKEN: z.string().optional(),
   TATA_OMNI_API_BASE_URL: z.string().url().default('https://wb.omni.tatatelebusiness.com'),
-  // Shared secret expected in X-Webhook-Secret (or X-Tata-Webhook-Secret)
-  // on Tata Omni callbacks. Keep it separate from the outbound API token.
+  // Shared secret expected in X-Webhook-Secret, X-Tata-Webhook-Secret, or the
+  // callback URL's token query parameter. Keep it separate from the API token.
   TATA_OMNI_WEBHOOK_SECRET: z.string().min(16).optional(),
   // Direct Meta Cloud settings. All four must be set for the authenticated
   // inbound webhook and outbound messaging channel to start.

@@ -13,8 +13,14 @@ function constantTimeEqual(left: string, right: string): boolean {
 
 function verifyWebhook(rawBody: Buffer, req: FastifyRequest): boolean {
   if (config.WHATSAPP_PROVIDER === 'tata_omni') {
-    const supplied = req.headers['x-webhook-secret'] ?? req.headers['x-tata-webhook-secret'];
-    const value = Array.isArray(supplied) ? supplied[0] : supplied;
+    const suppliedHeader = req.headers['x-webhook-secret'] ?? req.headers['x-tata-webhook-secret'];
+    const headerValue = Array.isArray(suppliedHeader) ? suppliedHeader[0] : suppliedHeader;
+    const queryValue = (req.query as Record<string, unknown> | undefined)?.token;
+    // Omni's live configuration UI exposes callback URLs but not custom
+    // headers, so a query token is supported as the provider-compatible
+    // fallback. Request logging is disabled on this route below so the token
+    // never appears in application logs.
+    const value = headerValue ?? (typeof queryValue === 'string' ? queryValue : undefined);
     return Boolean(value && config.TATA_OMNI_WEBHOOK_SECRET && constantTimeEqual(value, config.TATA_OMNI_WEBHOOK_SECRET));
   }
 
@@ -49,7 +55,10 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
     // per-IP limiter would reject legitimate bursts across many customers.
     // Authentication plus the durable inbox's message-id uniqueness protect
     // this endpoint; conversation work happens asynchronously in the worker.
-    scoped.post('/whatsapp/webhook', { config: { rateLimit: false } }, async (req, reply) => {
+    scoped.post('/whatsapp/webhook', {
+      config: { rateLimit: false },
+      logLevel: 'silent',
+    }, async (req, reply) => {
       const rawBody = req.body as Buffer;
       if (!rawBody?.length || !verifyWebhook(rawBody, req)) {
         app.log.warn('WhatsApp webhook rejected');
