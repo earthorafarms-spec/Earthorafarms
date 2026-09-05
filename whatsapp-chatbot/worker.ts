@@ -9,7 +9,8 @@ import {
   type WhatsAppInboxEvent,
 } from './events.repository.js';
 import { processTurn } from '../voice-service/src/conversation/controller.js';
-import { sendWhatsAppMessage } from './provider.js';
+import { sendWhatsAppMessage, WhatsAppDeliveryError } from './provider.js';
+import { recordWhatsAppDiagnostic } from './diagnostics.js';
 
 const POLL_INTERVAL_MS = 750;
 const MAX_EVENTS_PER_DRAIN = 10;
@@ -54,10 +55,17 @@ export function startWhatsAppWorker(app: FastifyInstance): void {
         const event = await claimNextWhatsAppMessage();
         if (!event) break;
         try {
+          recordWhatsAppDiagnostic('processing', { attempt: event.attemptCount });
           await processInboxEvent(event);
+          recordWhatsAppDiagnostic('reply_sent', { attempt: event.attemptCount });
           app.log.info({ messageId: event.providerMessageId, contact: phoneReference(event.phone) }, 'WhatsApp message processed');
         } catch (err) {
           const message = (err as Error).message || 'unknown WhatsApp processing error';
+          recordWhatsAppDiagnostic('worker_failed', {
+            attempt: event.attemptCount,
+            failureType: err instanceof Error ? err.name : typeof err,
+            ...(err instanceof WhatsAppDeliveryError ? { providerStatus: err.status } : {}),
+          });
           app.log.error({ err: message, messageId: event.providerMessageId, contact: phoneReference(event.phone) }, 'WhatsApp message processing failed');
           await markWhatsAppMessageFailed(event.id, message, event.attemptCount).catch((markErr) => {
             app.log.error(markErr, 'failed to persist WhatsApp inbox error');

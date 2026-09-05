@@ -4,8 +4,7 @@ import { config } from '../voice-service/src/config.js';
 import { extractWhatsAppInboundMessages } from './inbound.js';
 import { enqueueWhatsAppMessage } from './events.repository.js';
 import { wakeWhatsAppWorker } from './worker.js';
-
-let lastWebhookDiagnostic: Record<string, unknown> | null = null;
+import { getLastWhatsAppDiagnostic, recordWhatsAppDiagnostic } from './diagnostics.js';
 
 function describePayloadShape(value: unknown, depth = 0): unknown {
   if (value === null) return 'null';
@@ -87,7 +86,9 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
   // Temporary-safe operational state: structural booleans only, with no URL,
   // token, message text, or customer identifier. This makes provider callback
   // mismatches diagnosable even when the hosting dashboard is unavailable.
-  app.get('/whatsapp/diagnostics', async () => ({ lastWebhookDiagnostic }));
+  app.get('/whatsapp/diagnostics', async () => ({
+    lastWebhookDiagnostic: getLastWhatsAppDiagnostic(),
+  }));
 
   app.get<{ Querystring: Record<string, string> }>('/whatsapp/webhook', async (req, reply) => {
     const q = req.query;
@@ -120,12 +121,9 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
       if (!rawBody?.length || !verifyWebhook(rawBody, req)) {
         // Log only structural booleans and sizes; never log callback URLs,
         // tokens, message contents, or customer identifiers.
-        lastWebhookDiagnostic = {
-          at: new Date().toISOString(),
-          stage: 'rejected',
-          ...rejectedWebhookDiagnostics(rawBody, req),
-        };
-        app.log.warn(lastWebhookDiagnostic, 'WhatsApp webhook rejected');
+        const diagnostic = rejectedWebhookDiagnostics(rawBody, req);
+        recordWhatsAppDiagnostic('rejected', diagnostic);
+        app.log.warn(diagnostic, 'WhatsApp webhook rejected');
         return reply.status(403).send('Forbidden');
       }
 
@@ -137,17 +135,16 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
       }
 
       const messages = extractWhatsAppInboundMessages(body);
-      lastWebhookDiagnostic = {
-        at: new Date().toISOString(),
-        stage: messages.length > 0 ? 'parsed' : 'parsed_unrecognized',
+      recordWhatsAppDiagnostic(messages.length > 0 ? 'parsed' : 'parsed_unrecognized', {
         extractedMessages: messages.length,
         ...(messages.length === 0 ? { payloadShape: describePayloadShape(body) } : {}),
-      };
+      });
       try {
         let queued = 0;
         for (const message of messages) {
           if (await enqueueWhatsAppMessage(message)) queued++;
         }
+        recordWhatsAppDiagnostic('queued', { extractedMessages: messages.length, queued });
         if (queued > 0) wakeWhatsAppWorker();
         return reply.status(200).send({ ok: true, queued });
       } catch (err) {
