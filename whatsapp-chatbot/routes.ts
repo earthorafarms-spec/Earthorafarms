@@ -35,6 +35,31 @@ function verifyWebhook(rawBody: Buffer, req: FastifyRequest): boolean {
   return constantTimeEqual(expected, value);
 }
 
+function rejectedWebhookDiagnostics(rawBody: unknown, req: FastifyRequest): Record<string, unknown> {
+  const suppliedHeader = req.headers['x-webhook-secret'] ?? req.headers['x-tata-webhook-secret'];
+  const headerValue = Array.isArray(suppliedHeader) ? suppliedHeader[0] : suppliedHeader;
+  const queryValue = (req.query as Record<string, unknown> | undefined)?.token;
+  const pathValue = (req.params as Record<string, unknown> | undefined)?.token;
+  const expected = config.TATA_OMNI_WEBHOOK_SECRET;
+  const matches = (value: unknown) => typeof value === 'string'
+    && Boolean(expected)
+    && constantTimeEqual(value, expected!);
+
+  return {
+    provider: config.WHATSAPP_PROVIDER,
+    contentType: req.headers['content-type'],
+    bodyType: Buffer.isBuffer(rawBody) ? 'buffer' : typeof rawBody,
+    bodyLength: Buffer.isBuffer(rawBody) || typeof rawBody === 'string' ? rawBody.length : null,
+    hasHeaderToken: typeof headerValue === 'string',
+    hasQueryToken: typeof queryValue === 'string',
+    hasPathToken: typeof pathValue === 'string',
+    headerTokenMatches: matches(headerValue),
+    queryTokenMatches: matches(queryValue),
+    pathTokenMatches: matches(pathValue),
+    secretConfigured: Boolean(expected),
+  };
+}
+
 export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: Record<string, string> }>('/whatsapp/webhook', async (req, reply) => {
     const q = req.query;
@@ -65,7 +90,9 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
     }, async (req, reply) => {
       const rawBody = req.body as Buffer;
       if (!rawBody?.length || !verifyWebhook(rawBody, req)) {
-        app.log.warn('WhatsApp webhook rejected');
+        // Log only structural booleans and sizes; never log callback URLs,
+        // tokens, message contents, or customer identifiers.
+        app.log.warn(rejectedWebhookDiagnostics(rawBody, req), 'WhatsApp webhook rejected');
         return reply.status(403).send('Forbidden');
       }
 
