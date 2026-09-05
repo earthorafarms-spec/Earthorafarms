@@ -10,6 +10,12 @@
   directory = "netlify/functions"
   external_node_modules = ["pdf-lib", "nodemailer"]
 
+# GitHub's scheduled workflow is best-effort and has skipped multiple runs.
+# Use Netlify's scheduler as the primary external heartbeat so the free Render
+# voice service receives traffic comfortably inside its idle window.
+[functions."keep-render-awake"]
+  schedule = "*/5 * * * *"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
