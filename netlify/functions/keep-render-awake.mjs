@@ -1,4 +1,4 @@
-const HEALTH_URL = 'https://earthorafarms-mhwv.onrender.com/health';
+const HEALTH_URL = 'https://earthorafarms-mhwv.onrender.com/health?source=netlify-scheduled-function';
 const TIMEOUT_MS = 25_000;
 
 /**
