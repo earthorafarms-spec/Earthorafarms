@@ -21,8 +21,14 @@ CREATE TABLE IF NOT EXISTS whatsapp_sessions (
   phone_number     TEXT        NOT NULL UNIQUE,   -- E.164, e.g. +919876543210
   voice_session_id UUID        NOT NULL REFERENCES voice_call_sessions(id) ON DELETE CASCADE,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-  last_active_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+  last_active_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- CREATE TABLE IF NOT EXISTS does not add columns to installations where an
+-- older version of this migration already created the table.
+ALTER TABLE whatsapp_sessions
+  ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 
 CREATE INDEX IF NOT EXISTS idx_whatsapp_sessions_phone ON whatsapp_sessions(phone_number);
 CREATE INDEX IF NOT EXISTS idx_whatsapp_sessions_voice ON whatsapp_sessions(voice_session_id);
