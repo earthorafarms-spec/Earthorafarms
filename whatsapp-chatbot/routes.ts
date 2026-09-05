@@ -7,6 +7,27 @@ import { wakeWhatsAppWorker } from './worker.js';
 
 let lastWebhookDiagnostic: Record<string, unknown> | null = null;
 
+function describePayloadShape(value: unknown, depth = 0): unknown {
+  if (value === null) return 'null';
+  if (depth >= 6) return Array.isArray(value) ? 'array' : typeof value;
+  if (Array.isArray(value)) {
+    return {
+      type: 'array',
+      length: value.length,
+      item: value.length > 0 ? describePayloadShape(value[0], depth + 1) : null,
+    };
+  }
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .slice(0, 50)
+        .map(([key, child]) => [key, describePayloadShape(child, depth + 1)]),
+    );
+  }
+  return typeof value;
+}
+
 function constantTimeEqual(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(left);
   const rightBuffer = Buffer.from(right);
@@ -118,8 +139,9 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
       const messages = extractWhatsAppInboundMessages(body);
       lastWebhookDiagnostic = {
         at: new Date().toISOString(),
-        stage: 'parsed',
+        stage: messages.length > 0 ? 'parsed' : 'parsed_unrecognized',
         extractedMessages: messages.length,
+        ...(messages.length === 0 ? { payloadShape: describePayloadShape(body) } : {}),
       };
       try {
         let queued = 0;
