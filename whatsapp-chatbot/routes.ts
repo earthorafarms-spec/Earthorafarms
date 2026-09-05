@@ -16,11 +16,15 @@ function verifyWebhook(rawBody: Buffer, req: FastifyRequest): boolean {
     const suppliedHeader = req.headers['x-webhook-secret'] ?? req.headers['x-tata-webhook-secret'];
     const headerValue = Array.isArray(suppliedHeader) ? suppliedHeader[0] : suppliedHeader;
     const queryValue = (req.query as Record<string, unknown> | undefined)?.token;
+    const pathValue = (req.params as Record<string, unknown> | undefined)?.token;
     // Omni's live configuration UI exposes callback URLs but not custom
-    // headers, so a query token is supported as the provider-compatible
-    // fallback. Request logging is disabled on this route below so the token
-    // never appears in application logs.
-    const value = headerValue ?? (typeof queryValue === 'string' ? queryValue : undefined);
+    // headers. Some Omni callback relays also strip query strings, so an
+    // unguessable path segment is the preferred provider-compatible fallback.
+    // Request logging is disabled on this route below so the token never
+    // appears in application logs.
+    const value = headerValue
+      ?? (typeof pathValue === 'string' ? pathValue : undefined)
+      ?? (typeof queryValue === 'string' ? queryValue : undefined);
     return Boolean(value && config.TATA_OMNI_WEBHOOK_SECRET && constantTimeEqual(value, config.TATA_OMNI_WEBHOOK_SECRET));
   }
 
@@ -55,7 +59,7 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
     // per-IP limiter would reject legitimate bursts across many customers.
     // Authentication plus the durable inbox's message-id uniqueness protect
     // this endpoint; conversation work happens asynchronously in the worker.
-    scoped.post('/whatsapp/webhook', {
+    scoped.post('/whatsapp/webhook/:token?', {
       config: { rateLimit: false },
       logLevel: 'silent',
     }, async (req, reply) => {

@@ -96,11 +96,12 @@ Configure Tata to send an `X-Webhook-Secret` header with the same secret. If
 the Omni configuration only accepts a URL, use:
 
 ```text
-https://<voice-service-host>/whatsapp/webhook?token=<TATA_OMNI_WEBHOOK_SECRET>
+https://<voice-service-host>/whatsapp/webhook/<TATA_OMNI_WEBHOOK_SECRET>
 ```
 
-Request logging is disabled for this authenticated callback route so the query
-token is not written to application logs. The status callback can use the same
+The path-token form is preferred because some Omni callback relays strip query
+strings. Request logging is disabled for this authenticated callback route so
+the token is not written to application logs. The status callback can use the same
 endpoint; delivery receipts are acknowledged and ignored.
 The public Tata setup guide does not publish a fixed incoming-message JSON
 schema, so `../whatsapp-chatbot/inbound.ts` is the isolated normalization

@@ -41,7 +41,7 @@ configure fresh values. Never commit them. `TOKEN_SIGNING_SECRET`, Supabase,
 provider, and checkout-related values must match the existing production flow.
 
 Tata Omni's Additional Callback URL and Additional Status Callback URL can both
-point to `https://<service>.onrender.com/whatsapp/webhook?token=<secret>`. The
+point to `https://<service>.onrender.com/whatsapp/webhook/<secret>`. The
 same secret must be configured as `TATA_OMNI_WEBHOOK_SECRET` on Render. The
 callback route suppresses request URL logging so the token is not logged.
 
