@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { limitSpokenReply, MAX_SPOKEN_REPLY_CHARS, toSpokenText } from '../../src/conversation/speech-format.js';
+import {
+  limitSpokenReply,
+  MAX_SPOKEN_REPLY_CHARS,
+  normalizeIndicSpeechText,
+  toSpokenText,
+} from '../../src/conversation/speech-format.js';
 
 describe('toSpokenText', () => {
   it('strips bold markers', () => {
@@ -47,5 +52,17 @@ describe('toSpokenText', () => {
     expect(result.length).toBeLessThanOrEqual(MAX_SPOKEN_REPLY_CHARS);
     expect(result.endsWith('.')).toBe(true);
     expect(result.endsWith(' detai.')).toBe(false);
+  });
+});
+
+describe('normalizeIndicSpeechText', () => {
+  it('corrects recurring Gujarati agreement and doubled-particle artifacts', () => {
+    expect(normalizeIndicSpeechText('અમારા પાસે Morilife+ છે. આ ટેબ્લેટ્સ એ એન્ટીઓક્સિડન્ટ્સથી ભરપૂર છે.', 'gu'))
+      .toBe('અમારી પાસે Morilife+ છે. આ ટેબ્લેટ્સ એન્ટીઓક્સિડન્ટ્સથી ભરપૂર છે.');
+  });
+
+  it('does not rewrite English or Hindi text', () => {
+    expect(normalizeIndicSpeechText('We have one product.', 'en')).toBe('We have one product.');
+    expect(normalizeIndicSpeechText('हमारे पास एक प्रोडक्ट है।', 'hi')).toBe('हमारे पास एक प्रोडक्ट है।');
   });
 });

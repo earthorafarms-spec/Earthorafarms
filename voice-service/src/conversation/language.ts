@@ -22,10 +22,12 @@ const LANG_RULES: Record<SupportedLanguage, string> = {
     'Reply in simple, everyday spoken Hindi using Devanagari script. Use familiar Hinglish words such as ' +
     'प्रोडक्ट, ऑर्डर, प्राइस, सिटी, स्टेट, फोन, ईमेल, पेमेंट, और एड्रेस instead of formal or literary Hindi. ' +
     'Write every Hindi word in Devanagari, not Romanized Hindi, because native script is required for clear text-to-speech. ' +
+    'Write ordinary numbers as Hindi words, not digits. ' +
     'Keep only brand/product names (e.g. Earthora, Morilife+) in their normal Roman spelling.',
   gu:
     'Reply in simple, everyday spoken Gujarati using Gujarati Unicode script. Avoid formal, literary, or word-for-word translated phrasing. ' +
     'Write every Gujarati word in Gujarati script, not Romanized Gujarati, because native script is required for clear text-to-speech. ' +
+    'Write ordinary numbers as Gujarati words, not digits. ' +
     'Keep only brand/product names (e.g. Earthora, Morilife+) in their normal Roman spelling.',
 };
 

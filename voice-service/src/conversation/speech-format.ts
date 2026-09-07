@@ -5,7 +5,24 @@
 // output-policy.ts (prompt instruction + mechanical enforcement). Without
 // this, Sarvam/OpenAI TTS reads literal asterisks and list markers aloud,
 // which is what made early responses sound unnaturally robotic.
+import type { SupportedLanguage } from './language.js';
+
 export const MAX_SPOKEN_REPLY_CHARS = 240;
+
+/**
+ * Small deterministic corrections for recurring model artifacts observed in
+ * real Indic calls. This is intentionally narrow: it fixes known grammar
+ * errors without trying to rewrite or translate factual content.
+ */
+export function normalizeIndicSpeechText(text: string, language: SupportedLanguage): string {
+  if (language === 'gu') {
+    return text
+      .replace(/અમારા પાસે/gu, 'અમારી પાસે')
+      .replace(/તમારા પાસે/gu, 'તમારી પાસે')
+      .replace(/આ ટેબ્લેટ્સ એ (?=[઀-૿A-Za-z])/gu, 'આ ટેબ્લેટ્સ ');
+  }
+  return text;
+}
 
 export function toSpokenText(text: string): string {
   let out = text;

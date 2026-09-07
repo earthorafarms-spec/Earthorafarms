@@ -2,7 +2,7 @@ import type { ConversationState, ConversationMessage } from './state.js';
 import { SYSTEM_PROMPT } from './prompt.js';
 import { WHATSAPP_SYSTEM_PROMPT } from '../../../whatsapp-chatbot/prompt.js';
 import { enforceOutputPolicy } from './output-policy.js';
-import { limitSpokenReply, toSpokenText } from './speech-format.js';
+import { limitSpokenReply, normalizeIndicSpeechText, toSpokenText } from './speech-format.js';
 import { detectLanguage, requestedLanguage, buildLanguageInstruction } from './language.js';
 import { turnFailurePrompt } from './voice-copy.js';
 import { buildCheckoutTurnInstruction } from './checkout-context.js';
@@ -250,7 +250,7 @@ export async function processTurn(
         const directReply = buildDirectCatalogReply(productCatalog, state.currentLanguage);
         if (directReply) {
           const finalText = channel === 'voice'
-            ? limitSpokenReply(toSpokenText(directReply))
+            ? limitSpokenReply(normalizeIndicSpeechText(toSpokenText(directReply), state.currentLanguage))
             : directReply;
           state.messages.push({ role: 'assistant', content: finalText });
           return { state, replyText: finalText, policyViolations: [], outboundActions };
@@ -443,7 +443,7 @@ export async function processTurn(
     // this function. See speech-format.ts for why the prompt alone isn't
     // enough.
     const finalText = channel === 'voice'
-      ? limitSpokenReply(toSpokenText(policyResult.text))
+      ? limitSpokenReply(normalizeIndicSpeechText(toSpokenText(policyResult.text), state.currentLanguage))
       : formatWhatsAppReply(policyResult.text);
     state.messages.push({ role: 'assistant', content: finalText });
     return { state, replyText: finalText, policyViolations: policyResult.violations, productImage, outboundActions };
