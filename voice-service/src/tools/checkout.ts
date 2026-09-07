@@ -1,7 +1,7 @@
 import type { ToolModule, ToolContext } from './types.js';
 import type { CheckoutFieldSnapshot } from '../conversation/state.js';
-import { generateVerificationToken, hashToken } from '../lib/crypto.js';
-import { createCheckoutSession } from '../repositories/checkoutSessions.repository.js';
+import { decryptPii, encryptPii, generateVerificationToken, hashToken } from '../lib/crypto.js';
+import { createCheckoutSession, findCheckoutSessionByTokenHash } from '../repositories/checkoutSessions.repository.js';
 import { upsertCheckoutItem } from '../repositories/checkoutItems.repository.js';
 import { sendWhatsAppCheckoutForm } from '../../../whatsapp-chatbot/provider.js';
 import { config } from '../config.js';
@@ -32,6 +32,31 @@ export function isCheckoutReady(state: ToolContext['state']): boolean {
 
 function missingRequiredFields(fields: CheckoutFieldSnapshot): AllowedField[] {
   return REQUIRED_FIELDS.filter((f) => !fields[f as keyof CheckoutFieldSnapshot]);
+}
+
+function checkoutFingerprint(ctx: ToolContext): string {
+  const fields = ctx.state.checkoutFields;
+  return hashToken(JSON.stringify({
+    cart: ctx.state.cart.map((line) => ({
+      productId: line.productId,
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+    })),
+    fields: {
+      name: fields.name ?? '', email: fields.email ?? '', phone: fields.phone ?? '',
+      address: fields.address ?? '', city: fields.city ?? '', state: fields.state ?? '',
+      postalCode: fields.postalCode ?? '', country: fields.country ?? '', gst: fields.gst ?? null,
+      couponCode: fields.couponCode ?? null, marketingConsent: fields.marketingConsent ?? false,
+    },
+  }));
+}
+
+async function deliverReviewUrl(contact: string, verificationUrl: string, ctx: ToolContext): Promise<void> {
+  if (ctx.channel === 'text' && ctx.outboundActions) {
+    ctx.outboundActions.push({ type: 'checkout_review', url: verificationUrl });
+    return;
+  }
+  await sendWhatsAppCheckoutForm(contact, verificationUrl);
 }
 
 function normalizeSpokenPlace(field: 'city' | 'state', rawValue: unknown): string {
@@ -190,9 +215,32 @@ export const createVerificationLinkTool: ToolModule = {
       return { ok: false, reason: 'whatsapp_not_configured' };
     }
 
-    // The raw token is sent only to the customer's WhatsApp number. Supabase
-    // stores only its SHA-256 hash, so a database read cannot reveal a usable
-    // checkout URL.
+    const fingerprint = checkoutFingerprint(ctx);
+    const active = ctx.state.activeCheckoutReview;
+    if (active && active.checkoutFingerprint === fingerprint &&
+        new Date(active.tokenExpiresAt).getTime() > Date.now()) {
+      try {
+        const rawToken = decryptPii(active.encryptedToken);
+        const existing = await findCheckoutSessionByTokenHash(hashToken(rawToken));
+        if (existing && existing.id === active.checkoutSessionId) {
+          const verificationUrl = `${config.PUBLIC_APP_URL.replace(/\/$/, '')}/voice-checkout/${rawToken}`;
+          await deliverReviewUrl(contact, verificationUrl, ctx);
+          return {
+            ok: true,
+            verificationFormSent: true,
+            reusedExistingForm: true,
+            channel: 'whatsapp',
+            expiresInMinutes: Math.max(1, Math.ceil((new Date(active.tokenExpiresAt).getTime() - Date.now()) / 60_000)),
+          };
+        }
+      } catch {
+        // Corrupt/legacy state should recover by issuing one fresh form below.
+      }
+    }
+
+    // The checkout row stores only a SHA-256 hash. A separately encrypted copy
+    // is kept in the private conversation state solely so the same short-lived
+    // form can be resent without creating duplicate checkout sessions.
     const rawToken = generateVerificationToken();
     const tokenHash = hashToken(rawToken);
     const tokenExpiresAt = new Date(
@@ -210,12 +258,22 @@ export const createVerificationLinkTool: ToolModule = {
       await upsertCheckoutItem(session.id, line.productId, line.quantity, line.unitPrice);
     }
 
+    ctx.state.activeCheckoutReview = {
+      checkoutSessionId: session.id,
+      encryptedToken: encryptPii(rawToken),
+      tokenExpiresAt,
+      checkoutFingerprint: fingerprint,
+    };
+
     // Do not price or create a Razorpay link here. The checkout page first
     // persists the customer's edits, then calls verify-and-price, and only an
     // explicit confirmation from that page can request the payment link.
     const verificationUrl = `${config.PUBLIC_APP_URL.replace(/\/$/, '')}/voice-checkout/${rawToken}`;
     try {
-      await sendWhatsAppCheckoutForm(contact, verificationUrl);
+      // An inbound WhatsApp conversation is already inside the customer-
+      // service window. Its durable worker sends one normal text message
+      // containing the exact URL, instead of a template plus acknowledgement.
+      await deliverReviewUrl(contact, verificationUrl, ctx);
     } catch (err) {
       // Never log the provider body: it may echo phone numbers, tokens or the review URL.
       console.warn('[checkout] WhatsApp review form failed', {

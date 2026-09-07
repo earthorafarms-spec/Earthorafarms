@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildCheckoutTemplatePayload, buildTataOmniTextPayload } from '../../../whatsapp-chatbot/provider.js';
+import {
+  buildCheckoutTemplatePayload,
+  buildTataOmniImagePayload,
+  buildTataOmniTextPayload,
+} from '../../../whatsapp-chatbot/provider.js';
 
 describe('WhatsApp checkout template payload', () => {
   it('uses Tata Omni international-number and template-variable format', () => {
@@ -28,6 +32,19 @@ describe('WhatsApp checkout template payload', () => {
       type: 'text',
       source: 'external',
       text: { preview_url: false, body: 'How can I help?' },
+    });
+  });
+
+  it('uses the Tata Omni public-link image shape for the live primary product photo', () => {
+    expect(buildTataOmniImagePayload(
+      '919876543210',
+      'https://cdn.example.com/product.png',
+      'Morilife+',
+    )).toEqual({
+      to: '+919876543210',
+      type: 'image',
+      source: 'external',
+      image: { link: 'https://cdn.example.com/product.png', caption: 'Morilife+' },
     });
   });
 });

@@ -73,6 +73,23 @@ export function buildTataOmniTextPayload(to: string, text: string): Record<strin
   };
 }
 
+export function buildTataOmniImagePayload(
+  to: string,
+  imageUrl: string,
+  caption?: string,
+): Record<string, unknown> {
+  const phone = to.startsWith('+') ? to : `+${to}`;
+  return {
+    to: phone,
+    type: 'image',
+    source: 'external',
+    image: {
+      link: imageUrl,
+      ...(caption ? { caption } : {}),
+    },
+  };
+}
+
 async function sendTataOmniText(to: string, text: string): Promise<void> {
   if (!config.TATA_OMNI_ACCESS_TOKEN) throw new Error('Tata Omni WhatsApp delivery is not configured');
   const url = `${config.TATA_OMNI_API_BASE_URL.replace(/\/$/, '')}/whatsapp-cloud/messages`;
@@ -98,6 +115,33 @@ export async function sendWhatsAppMessage(to: string, text: string): Promise<voi
     to: phone,
     type: 'text',
     text: { preview_url: false, body: text },
+  });
+}
+
+/** Sends a public HTTPS product image in the active customer-service conversation. */
+export async function sendWhatsAppImage(to: string, imageUrl: string, caption?: string): Promise<void> {
+  if (!/^https:\/\//i.test(imageUrl)) throw new Error('WhatsApp image URL must use HTTPS');
+
+  if (config.WHATSAPP_PROVIDER === 'tata_omni') {
+    if (!config.TATA_OMNI_ACCESS_TOKEN) throw new Error('Tata Omni WhatsApp delivery is not configured');
+    const url = `${config.TATA_OMNI_API_BASE_URL.replace(/\/$/, '')}/whatsapp-cloud/messages`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: config.TATA_OMNI_ACCESS_TOKEN },
+      body: JSON.stringify(buildTataOmniImagePayload(to, imageUrl, caption)),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) throw new WhatsAppDeliveryError(res.status);
+    return;
+  }
+
+  const phone = to.startsWith('+') ? to.slice(1) : to;
+  await sendWhatsAppPayload({
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: phone,
+    type: 'image',
+    image: { link: imageUrl, ...(caption ? { caption } : {}) },
   });
 }
 

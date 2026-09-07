@@ -5,11 +5,12 @@ import {
   claimNextWhatsAppMessage,
   markWhatsAppMessageFailed,
   markWhatsAppMessageProcessed,
+  markWhatsAppMediaSent,
   saveWhatsAppTurn,
   type WhatsAppInboxEvent,
 } from './events.repository.js';
 import { processTurn } from '../voice-service/src/conversation/controller.js';
-import { sendWhatsAppMessage, WhatsAppDeliveryError } from './provider.js';
+import { sendWhatsAppImage, sendWhatsAppMessage, WhatsAppDeliveryError } from './provider.js';
 import { recordWhatsAppDiagnostic } from './diagnostics.js';
 
 const POLL_INTERVAL_MS = 750;
@@ -24,6 +25,10 @@ async function processInboxEvent(event: WhatsAppInboxEvent): Promise<void> {
   // A reply already stored means the state transition committed previously;
   // retry delivery only, never run the user's turn or cart mutation twice.
   if (event.replyText) {
+    if (event.mediaUrl && !event.mediaSentAt) {
+      await sendWhatsAppImage(event.phone, event.mediaUrl, event.mediaCaption ?? undefined);
+      await markWhatsAppMediaSent(event.id);
+    }
     await sendWhatsAppMessage(event.phone, event.replyText);
     await markWhatsAppMessageProcessed(event.id);
     return;
@@ -38,7 +43,11 @@ async function processInboxEvent(event: WhatsAppInboxEvent): Promise<void> {
 
   // Persist conversation/cart state and the exact outbound reply atomically.
   // If delivery fails, the next attempt resends replyText without reprocessing.
-  await saveWhatsAppTurn(event.id, voiceSessionId, outcome.state, outcome.replyText);
+  await saveWhatsAppTurn(event.id, voiceSessionId, outcome.state, outcome.replyText, outcome.productImage);
+  if (outcome.productImage) {
+    await sendWhatsAppImage(event.phone, outcome.productImage.url, outcome.productImage.caption);
+    await markWhatsAppMediaSent(event.id);
+  }
   await sendWhatsAppMessage(event.phone, outcome.replyText);
   await markWhatsAppMessageProcessed(event.id);
 }

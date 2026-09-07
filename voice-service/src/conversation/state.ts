@@ -80,6 +80,13 @@ export interface ConversationState {
    * in the language the caller has actually been using, not a default.
    */
   currentLanguage: SupportedLanguage;
+  /** Reusable encrypted review token so "send the form again" does not create duplicate checkout sessions. */
+  activeCheckoutReview?: {
+    checkoutSessionId: string;
+    encryptedToken: string;
+    tokenExpiresAt: string;
+    checkoutFingerprint: string;
+  };
   /**
    * Transport-level evidence for the most recent voice turns. This lives in
    * the existing JSONB conversation state, so delivery/cancellation latency

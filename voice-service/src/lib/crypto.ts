@@ -3,7 +3,10 @@ import { config } from '../config.js';
 
 /** Generates a URL-safe random token (raw — only ever placed in an email link, never persisted). */
 export function generateVerificationToken(): string {
-  return randomBytes(32).toString('base64url');
+  // 128 bits of entropy is ample for a 30-minute, single-purpose token. Hex
+  // keeps the WhatsApp link short and avoids provider/client ambiguity around
+  // URL-safe Base64 punctuation when a long template variable wraps on mobile.
+  return randomBytes(16).toString('hex');
 }
 
 /** SHA-256 hex digest — what actually gets persisted in verification_token_hash. */

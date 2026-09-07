@@ -2,11 +2,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createInitialState } from '../../src/conversation/state.js';
 import { resetGuardState } from '../../src/conversation/output-policy.js';
 
-const mocks = vi.hoisted(() => ({ chat: vi.fn(), createSession: vi.fn(), saveItem: vi.fn(), send: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  chat: vi.fn(), createSession: vi.fn(), saveItem: vi.fn(), send: vi.fn(),
+  findSession: vi.fn(), listProducts: vi.fn(), listDeals: vi.fn(), getProduct: vi.fn(),
+}));
 vi.mock('../../src/providers.js', () => ({ chatWithRouting: mocks.chat }));
 vi.mock('../../../whatsapp-chatbot/provider.js', () => ({ sendWhatsAppCheckoutForm: mocks.send }));
-vi.mock('../../src/repositories/checkoutSessions.repository.js', () => ({ createCheckoutSession: mocks.createSession }));
+vi.mock('../../src/repositories/checkoutSessions.repository.js', () => ({
+  createCheckoutSession: mocks.createSession,
+  findCheckoutSessionByTokenHash: mocks.findSession,
+}));
 vi.mock('../../src/repositories/checkoutItems.repository.js', () => ({ upsertCheckoutItem: mocks.saveItem }));
+vi.mock('../../src/repositories/products.repository.js', () => ({
+  listActiveProducts: mocks.listProducts,
+  listActiveFestivalDeals: mocks.listDeals,
+  getProductById: mocks.getProduct,
+}));
 vi.mock('../../src/config.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/config.js')>();
   return { config: { ...actual.config, whatsappCheckoutConfigured: true } };
@@ -35,8 +46,12 @@ describe('conversation checkout regressions', () => {
     vi.clearAllMocks();
     mocks.chat.mockReset();
     mocks.createSession.mockResolvedValue({ id: 'checkout-1' });
+    mocks.findSession.mockReset().mockResolvedValue({ id: 'checkout-1' });
     mocks.saveItem.mockResolvedValue(undefined);
     mocks.send.mockReset().mockResolvedValue(undefined);
+    mocks.listProducts.mockReset().mockResolvedValue([]);
+    mocks.listDeals.mockReset().mockResolvedValue([]);
+    mocks.getProduct.mockReset().mockResolvedValue(null);
     resetGuardState('flow');
   });
 
@@ -67,6 +82,33 @@ describe('conversation checkout regressions', () => {
     ] });
     await processTurn('flow', checkoutState(), 'No');
     expect(mocks.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns one durable review link for an inbound WhatsApp turn instead of sending a second template', async () => {
+    mocks.chat.mockResolvedValueOnce({ kind: 'tool_calls', calls: [toolCall('set_checkout_field', { field: 'gst', value: '' })] });
+
+    const result = await processTurn('flow', checkoutState(), 'No', 'text');
+
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(result.replyText).toMatch(/order-review form is ready:\nhttps?:\/\/[^\s]+\/voice-checkout\/[a-f0-9]{32}/i);
+    expect(result.replyText).toContain('No order or payment has been completed yet');
+    expect(result.outboundActions).toHaveLength(1);
+  });
+
+  it('resends the same valid review form without creating a duplicate checkout session', async () => {
+    mocks.chat
+      .mockResolvedValueOnce({ kind: 'tool_calls', calls: [toolCall('set_checkout_field', { field: 'gst', value: '' })] })
+      .mockResolvedValueOnce({ kind: 'tool_calls', calls: [toolCall('create_verification_link', {})] });
+
+    const first = await processTurn('flow', checkoutState(), 'No', 'text');
+    const second = await processTurn('flow', first.state, 'Please send the form again', 'text');
+    const firstUrl = first.replyText.match(/https?:\/\/\S+/)?.[0];
+    const secondUrl = second.replyText.match(/https?:\/\/\S+/)?.[0];
+
+    expect(firstUrl).toBeTruthy();
+    expect(secondUrl).toBe(firstUrl);
+    expect(mocks.createSession).toHaveBeenCalledTimes(1);
+    expect(mocks.findSession).toHaveBeenCalledTimes(1);
   });
 
   it('refreshes the expected field after recording both short location values', async () => {

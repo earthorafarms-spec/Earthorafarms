@@ -15,6 +15,8 @@ export interface ProductSummary {
   badge: string;
   description: string;
   highlights: string[];
+  /** Live primary image from the product record, falling back to its first image. */
+  imageUrl: string | null;
 }
 
 export interface ActiveFestivalDeal {

@@ -11,9 +11,19 @@ import { allTools, toolsByName } from '../tools/index.js';
 import { isCheckoutReady } from '../tools/checkout.js';
 import { spokenProductNameMatches } from '../tools/products.js';
 import { getAllApprovedProductKnowledge } from '../tools/knowledge.js';
+import type { OutboundAction, ToolContext } from '../tools/types.js';
 
-function reviewFormReply(sent: boolean, language: ConversationState['currentLanguage']): string {
+function reviewFormReply(
+  sent: boolean,
+  language: ConversationState['currentLanguage'],
+  reviewUrl?: string,
+): string {
   if (sent) {
+    if (reviewUrl) {
+      if (language === 'hi') return `आपका ऑर्डर रिव्यू फॉर्म तैयार है:\n${reviewUrl}\n\nकृपया सामान और डिलीवरी की जानकारी जाँचें या बदलें, फिर फॉर्म कन्फर्म करें। अभी कोई पेमेंट या ऑर्डर पूरा नहीं हुआ है; कन्फर्म करने के बाद ही Razorpay खुलेगा।`;
+      if (language === 'gu') return `તમારું ઓર્ડર રિવ્યૂ ફોર્મ તૈયાર છે:\n${reviewUrl}\n\nકૃપા કરીને વસ્તુઓ અને ડિલિવરીની વિગતો તપાસો અથવા બદલો, પછી ફોર્મ કન્ફર્મ કરો. હજી કોઈ પેમેન્ટ કે ઓર્ડર પૂર્ણ થયો નથી; કન્ફર્મ કર્યા પછી જ Razorpay ખુલશે.`;
+      return `Your order-review form is ready:\n${reviewUrl}\n\nPlease check or edit the items and delivery details, then confirm the form. No order or payment has been completed yet; Razorpay opens only after your confirmation.`;
+    }
     if (language === 'hi') return 'आपके WhatsApp पर ऑर्डर रिव्यू फॉर्म भेज दिया है। उसमें जानकारी चेक या बदलकर कन्फर्म करें, उसके बाद ही Razorpay पेमेंट कर सकते हैं।';
     if (language === 'gu') return 'તમારા WhatsApp પર ઓર્ડર રિવ્યુ ફોર્મ મોકલ્યું છે. વિગતો તપાસીને કે બદલીને કન્ફર્મ કરો, ત્યાર પછી જ Razorpay પેમેન્ટ કરી શકશો.';
     return 'I’ve sent the order-review form to your WhatsApp. Please review or edit your details and confirm the form before continuing to Razorpay payment.';
@@ -21,6 +31,16 @@ function reviewFormReply(sent: boolean, language: ConversationState['currentLang
   if (language === 'hi') return 'माफ़ कीजिए, अभी WhatsApp पर फॉर्म नहीं भेज पाई। आपका ऑर्डर या पेमेंट नहीं हुआ है; क्या आप फिर कोशिश करना चाहेंगे?';
   if (language === 'gu') return 'માફ કરશો, અત્યારે WhatsApp પર ફોર્મ મોકલી શકી નથી. તમારો ઓર્ડર કે પેમેન્ટ થયું નથી; ફરી પ્રયત્ન કરવો છે?';
   return 'Sorry, I couldn’t send the WhatsApp form. No order or payment has been completed; would you like me to try again?';
+}
+
+function formatWhatsAppReply(text: string): string {
+  // WhatsApp bold uses one asterisk on each side. Some models still emit
+  // GitHub-style double asterisks despite the channel prompt.
+  return text.replace(/\*\*([^*\n]+)\*\*/g, '*$1*').trim();
+}
+
+function looksLikeSingleProductRecordDump(text: string): boolean {
+  return /(?:^|\n)\s*(?:#{1,6}\s+|[-•]\s+)|(?:^|\n)\s*\*?(?:description|benefits?|dosage|suggested use|ingredients?|highlights?|warnings?)\*?\s*:/imu.test(text);
 }
 
 const MAX_TOOL_LOOP_ITERATIONS = 6;
@@ -121,6 +141,8 @@ export interface TurnOutcome {
   state: ConversationState;
   replyText: string;
   policyViolations: string[];
+  productImage?: { url: string; caption: string };
+  outboundActions?: OutboundAction[];
 }
 
 /**
@@ -135,6 +157,9 @@ export async function processTurn(
   userText: string,
   channel: 'voice' | 'text' = 'voice'
 ): Promise<TurnOutcome> {
+  const outboundActions: OutboundAction[] = [];
+  const toolContext: ToolContext = { callSessionId, state, channel, outboundActions };
+  let productImage: TurnOutcome['productImage'];
   state.turnCount += 1;
   // Cleared every turn — see conversation/state.ts TurnToolFact doc comment.
   // A fact from a previous turn is not a fact the model may rely on; it
@@ -202,7 +227,7 @@ export async function processTurn(
     if (listTool) {
       let productCatalog: unknown;
       try {
-        productCatalog = await listTool.handler({ query: null }, { callSessionId, state });
+        productCatalog = await listTool.handler({ query: null }, toolContext);
       } catch (err) {
         productCatalog = { error: 'tool_execution_failed', message: (err as Error).message };
       }
@@ -217,7 +242,7 @@ export async function processTurn(
             ? limitSpokenReply(toSpokenText(directReply))
             : directReply;
           state.messages.push({ role: 'assistant', content: finalText });
-          return { state, replyText: finalText, policyViolations: [] };
+          return { state, replyText: finalText, policyViolations: [], outboundActions };
         }
       }
 
@@ -238,7 +263,7 @@ export async function processTurn(
         const detailsTool = toolsByName.get_product_details;
         if (selectedProduct && detailsTool) {
           const [details, knowledge] = await Promise.all([
-            detailsTool.handler({ productId: selectedProduct.id }, { callSessionId, state })
+            detailsTool.handler({ productId: selectedProduct.id }, toolContext)
               .catch((err) => ({ error: 'tool_execution_failed', message: (err as Error).message })),
             getAllApprovedProductKnowledge(selectedProduct.id)
               .catch((err) => ({ error: 'tool_execution_failed', message: (err as Error).message })),
@@ -247,13 +272,23 @@ export async function processTurn(
           const knowledgeJson = JSON.stringify(knowledge);
           state.currentTurnFacts.push({ toolName: 'get_product_details', resultJson: detailsJson });
           state.currentTurnFacts.push({ toolName: 'get_product_knowledge', resultJson: knowledgeJson });
+          if (details && typeof details === 'object') {
+            const liveDetails = details as { found?: boolean; imageUrl?: unknown; name?: unknown };
+            if (liveDetails.found && typeof liveDetails.imageUrl === 'string' && /^https:\/\//i.test(liveDetails.imageUrl)) {
+              productImage = {
+                url: liveDetails.imageUrl,
+                caption: typeof liveDetails.name === 'string' ? liveDetails.name : selectedProduct.name,
+              };
+            }
+          }
           turnContextMessages.push({
             role: 'system',
             content:
               `LIVE WEBSITE DETAILS FOR THE SELECTED PRODUCT (freshly fetched this turn): ${detailsJson}. ` +
               `LIVE ADMIN-APPROVED KNOWLEDGE FOR THE SAME PRODUCT (freshly fetched this turn): ${knowledgeJson}. ` +
-              'Answer the customer directly from these current records. Use only the categories relevant to their question, ' +
-              'and never replace these records with remembered or general product claims.',
+              'Answer the customer directly from these current records. Use only the categories relevant to their question. ' +
+              'Treat the records as factual notes: synthesize them into polished, natural customer-facing sentences instead of ' +
+              'copying field labels or knowledge entries. Never replace these records with remembered or general product claims.',
           });
         }
       }
@@ -269,6 +304,7 @@ export async function processTurn(
   const turnCallCache = new Map<string, unknown>();
   for (const [key, value] of preloadedToolResults) turnCallCache.set(key, value);
   let regenerateAttempts = 0;
+  let productStyleRegenerateAttempts = 0;
   let transientCorrection: ConversationMessage | null = null;
 
   for (let iteration = 0; iteration < MAX_TOOL_LOOP_ITERATIONS; iteration++) {
@@ -311,7 +347,7 @@ export async function processTurn(
               parsedArgs = {};
             }
             try {
-              resultObj = await toolModule.handler(parsedArgs, { callSessionId, state });
+              resultObj = await toolModule.handler(parsedArgs, toolContext);
             } catch (err) {
               resultObj = { error: 'tool_execution_failed', message: (err as Error).message };
             }
@@ -333,7 +369,7 @@ export async function processTurn(
         state.messages.push({ role: 'assistant', content: '', toolCalls: [{ id: callId, name: 'create_verification_link', argumentsJson: '{}' }] });
         let delivery: unknown;
         try {
-          delivery = await toolsByName.create_verification_link.handler({}, { callSessionId, state });
+          delivery = await toolsByName.create_verification_link.handler({}, toolContext);
         } catch {
           delivery = { ok: false, reason: 'checkout_preparation_failed' };
         }
@@ -347,9 +383,12 @@ export async function processTurn(
         const delivery = JSON.parse(deliveryFact.resultJson) as { ok?: boolean; reason?: string };
         // Missing fields still go through the model to ask the right question.
         if (delivery.ok || !['empty_cart', 'missing_fields', 'gst_question_not_answered', 'invalid_phone'].includes(delivery.reason ?? '')) {
-          const replyText = reviewFormReply(delivery.ok === true, state.currentLanguage);
+          const reviewUrl = channel === 'text'
+            ? outboundActions.find((action) => action.type === 'checkout_review')?.url
+            : undefined;
+          const replyText = reviewFormReply(delivery.ok === true, state.currentLanguage, reviewUrl);
           state.messages.push({ role: 'assistant', content: replyText });
-          return { state, replyText, policyViolations: [] };
+          return { state, replyText, policyViolations: [], productImage, outboundActions };
         }
       }
 
@@ -357,6 +396,18 @@ export async function processTurn(
     }
 
     // Final assistant message candidate for this turn.
+    if (channel === 'text' && productImage && looksLikeSingleProductRecordDump(result.content) && productStyleRegenerateAttempts < 1) {
+      productStyleRegenerateAttempts++;
+      transientCorrection = {
+        role: 'system',
+        content:
+          '[Formatting correction] Rewrite the answer as exactly one or two short, connected, customer-friendly paragraphs. ' +
+          'Do not use headings, bullets, field labels, or a knowledge-base-style dump. Keep every factual and safety claim grounded ' +
+          'in the live records already supplied for this turn.',
+      };
+      continue;
+    }
+
     const policyResult = enforceOutputPolicy(result.content, state.currentTurnFacts, callSessionId, state.currentLanguage);
 
     if (policyResult.action === 'regenerate' && regenerateAttempts < MAX_POLICY_REGENERATE_ATTEMPTS) {
@@ -379,12 +430,12 @@ export async function processTurn(
     // enough.
     const finalText = channel === 'voice'
       ? limitSpokenReply(toSpokenText(policyResult.text))
-      : policyResult.text;
+      : formatWhatsAppReply(policyResult.text);
     state.messages.push({ role: 'assistant', content: finalText });
-    return { state, replyText: finalText, policyViolations: policyResult.violations };
+    return { state, replyText: finalText, policyViolations: policyResult.violations, productImage, outboundActions };
   }
 
   const fallback = turnFailurePrompt(state.currentLanguage);
   state.messages.push({ role: 'assistant', content: fallback });
-  return { state, replyText: fallback, policyViolations: ['tool_loop_guard_exceeded'] };
+  return { state, replyText: fallback, policyViolations: ['tool_loop_guard_exceeded'], productImage, outboundActions };
 }

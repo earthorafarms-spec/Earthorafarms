@@ -12,6 +12,7 @@ interface DbProductRow {
   badge: string | null;
   description: string | null;
   highlights: string[] | null;
+  images: { url?: string; is_primary?: boolean }[] | null;
   inventory: { total_stock: number; low_stock_threshold: number }[] | null;
 }
 
@@ -25,6 +26,8 @@ function mapRow(row: DbProductRow): ProductSummary {
   const inv = Array.isArray(row.inventory) ? row.inventory[0] : row.inventory;
   const qty = inv?.total_stock ?? 0;
   const threshold = inv?.low_stock_threshold ?? 15;
+  const images = Array.isArray(row.images) ? row.images : [];
+  const imageUrl = images.find((image) => image?.is_primary)?.url ?? images[0]?.url ?? null;
   return {
     id: row.id,
     slug: row.slug,
@@ -38,6 +41,7 @@ function mapRow(row: DbProductRow): ProductSummary {
     badge: row.badge ?? '',
     description: row.description ?? '',
     highlights: row.highlights ?? [],
+    imageUrl: typeof imageUrl === 'string' && /^https:\/\//i.test(imageUrl) ? imageUrl : null,
   };
 }
 
@@ -45,7 +49,7 @@ function mapRow(row: DbProductRow): ProductSummary {
 export async function listActiveProducts(): Promise<ProductSummary[]> {
   const { data, error } = await supabase
     .from('products')
-    .select('id, slug, name, mrp, price, status, tag, badge, description, highlights, inventory(total_stock, low_stock_threshold)')
+    .select('id, slug, name, mrp, price, status, tag, badge, description, highlights, images, inventory(total_stock, low_stock_threshold)')
     .eq('status', 'active')
     .order('created_at', { ascending: true });
 
@@ -56,7 +60,7 @@ export async function listActiveProducts(): Promise<ProductSummary[]> {
 export async function getProductById(productId: string): Promise<ProductSummary | null> {
   const { data, error } = await supabase
     .from('products')
-    .select('id, slug, name, mrp, price, status, tag, badge, description, highlights, inventory(total_stock, low_stock_threshold)')
+    .select('id, slug, name, mrp, price, status, tag, badge, description, highlights, images, inventory(total_stock, low_stock_threshold)')
     .eq('id', productId)
     .eq('status', 'active')
     .maybeSingle();
@@ -70,7 +74,7 @@ export async function getProductById(productId: string): Promise<ProductSummary 
 export async function findProductByName(query: string): Promise<ProductSummary | null> {
   const { data, error } = await supabase
     .from('products')
-    .select('id, slug, name, mrp, price, status, tag, badge, description, highlights, inventory(total_stock, low_stock_threshold)')
+    .select('id, slug, name, mrp, price, status, tag, badge, description, highlights, images, inventory(total_stock, low_stock_threshold)')
     .eq('status', 'active')
     .ilike('name', `%${query}%`)
     .limit(1)

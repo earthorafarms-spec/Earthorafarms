@@ -15,7 +15,14 @@ export interface ToolDefinition {
 export interface ToolContext {
   callSessionId: string;
   state: ConversationState;
+  /** Transport that initiated this turn. Omitted by older/direct callers and treated as voice. */
+  channel?: 'voice' | 'text';
+  /** Turn-local transport actions. They are deliberately not exposed in the tool result sent to the LLM. */
+  outboundActions?: OutboundAction[];
 }
+
+export type OutboundAction =
+  | { type: 'checkout_review'; url: string };
 
 export type ToolHandler = (args: Record<string, unknown>, ctx: ToolContext) => Promise<unknown>;
 

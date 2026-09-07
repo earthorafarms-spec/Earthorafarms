@@ -128,6 +128,7 @@ export const getProductDetailsTool: ToolModule = {
       currency: 'INR',
       stockLabel: product.stockLabel,
       inStock: product.stockLabel !== 'Out of Stock',
+      imageUrl: product.imageUrl,
     };
   },
 };

@@ -36,6 +36,7 @@ describe('processTurn persisted state', () => {
         id: 'alpha-id', slug: 'alpha', name: 'Alpha', mrp: 100, price: 90,
         status: 'active', stockQty: 10, stockLabel: 'In Stock', tag: '120 caps', badge: '',
         description: 'Alpha description', highlights: [],
+        imageUrl: 'https://cdn.example.com/alpha-primary.png',
       },
     ]);
     productRepositoryMocks.listActiveFestivalDeals.mockResolvedValue([]);
@@ -43,6 +44,7 @@ describe('processTurn persisted state', () => {
       id: 'alpha-id', slug: 'alpha', name: 'Alpha', mrp: 100, price: 90,
       status: 'active', stockQty: 10, stockLabel: 'In Stock', tag: '120 caps', badge: '',
       description: 'Live website description', highlights: ['Live website highlight'],
+      imageUrl: 'https://cdn.example.com/alpha-primary.png',
     });
     knowledgeRepositoryMocks.getApprovedKnowledge.mockReset();
     knowledgeRepositoryMocks.getAllApprovedKnowledge.mockReset();
@@ -107,8 +109,32 @@ describe('processTurn persisted state', () => {
     const messages = chatMock.mock.calls[0][0] as { role: string; content: string }[];
     expect(messages.some((message) => message.role === 'system' && message.content.includes('LIVE WEBSITE DETAILS'))).toBe(true);
     expect(messages.some((message) => message.role === 'system' && message.content.includes('LIVE ADMIN-APPROVED KNOWLEDGE'))).toBe(true);
+    expect(messages.some((message) => message.role === 'system' && message.content.includes('polished, natural customer-facing sentences'))).toBe(true);
+    expect(outcome.productImage).toEqual({
+      url: 'https://cdn.example.com/alpha-primary.png',
+      caption: 'Alpha',
+    });
     expect(outcome.state.currentTurnFacts.map((fact) => fact.toolName)).toEqual([
       'list_products', 'get_product_details', 'get_product_knowledge',
     ]);
+  });
+
+  it('regenerates a single-product knowledge dump as connected prose', async () => {
+    chatMock
+      .mockResolvedValueOnce({
+        kind: 'message',
+        content: '### Benefits\n- Immunity: Approved support information.\n- Dosage: Take as directed.',
+      })
+      .mockResolvedValueOnce({
+        kind: 'message',
+        content: 'Alpha is designed to provide the approved support described for this product. Take it only as directed.',
+      });
+
+    const outcome = await processTurn('controller-test', createInitialState(), 'Tell me about Alpha', 'text');
+
+    expect(chatMock).toHaveBeenCalledTimes(2);
+    expect(outcome.replyText).not.toMatch(/^###|^- /m);
+    const messages = chatMock.mock.calls[1][0] as { role: string; content: string }[];
+    expect(messages.some((message) => message.content.includes('[Formatting correction]'))).toBe(true);
   });
 });

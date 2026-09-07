@@ -8,6 +8,9 @@ export interface WhatsAppInboxEvent {
   phone: string;
   messageText: string | null;
   replyText: string | null;
+  mediaUrl: string | null;
+  mediaCaption: string | null;
+  mediaSentAt: string | null;
   attemptCount: number;
 }
 
@@ -30,12 +33,21 @@ export async function claimNextWhatsAppMessage(): Promise<WhatsAppInboxEvent | n
   if (error) throw new Error(`whatsapp: failed to claim inbox event: ${error.message}`);
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return null;
+  const { data:delivery, error: deliveryError } = await supabase
+    .from('whatsapp_message_events')
+    .select('outbound_media_url, outbound_media_caption, media_sent_at')
+    .eq('id', row.id)
+    .single();
+  if (deliveryError) throw new Error(`whatsapp: failed to load outbound delivery state: ${deliveryError.message}`);
   return {
     id: row.id,
     providerMessageId: row.provider_message_id,
     phone: row.phone_number,
     messageText: row.message_text,
     replyText: row.reply_text,
+    mediaUrl: delivery.outbound_media_url,
+    mediaCaption: delivery.outbound_media_caption,
+    mediaSentAt: delivery.media_sent_at,
     attemptCount: Number(row.attempt_count),
   };
 }
@@ -45,14 +57,25 @@ export async function saveWhatsAppTurn(
   voiceSessionId: string,
   state: ConversationState,
   replyText: string,
+  media?: { url: string; caption: string },
 ): Promise<void> {
-  const { error } = await supabase.rpc('complete_whatsapp_message_turn', {
+  const { error } = await supabase.rpc('complete_whatsapp_message_turn_v2', {
     p_event_id: eventId,
     p_voice_session_id: voiceSessionId,
     p_conversation_state: state,
     p_reply_text: replyText,
+    p_outbound_media_url: media?.url ?? null,
+    p_outbound_media_caption: media?.caption ?? null,
   });
   if (error) throw new Error(`whatsapp: failed to save completed turn: ${error.message}`);
+}
+
+export async function markWhatsAppMediaSent(eventId: string): Promise<void> {
+  const { error } = await supabase
+    .from('whatsapp_message_events')
+    .update({ media_sent_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('id', eventId);
+  if (error) throw new Error(`whatsapp: failed to mark media sent: ${error.message}`);
 }
 
 export async function markWhatsAppMessageProcessed(eventId: string): Promise<void> {
