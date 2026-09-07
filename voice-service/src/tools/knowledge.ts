@@ -1,5 +1,25 @@
 import type { ToolModule } from './types.js';
-import { getApprovedKnowledge, KNOWLEDGE_CATEGORIES } from '../repositories/knowledge.repository.js';
+import {
+  getAllApprovedKnowledge,
+  getApprovedKnowledge,
+  KNOWLEDGE_CATEGORIES,
+} from '../repositories/knowledge.repository.js';
+
+export async function getAllApprovedProductKnowledge(productId: string): Promise<Record<string, unknown>> {
+  const entries = await getAllApprovedKnowledge(productId);
+  if (entries.length === 0) return { found: false, reason: 'not_found' };
+  return {
+    found: true,
+    entries: entries.map((entry) => ({
+      id: entry.id,
+      category: entry.category,
+      question: entry.question,
+      content: entry.content,
+      locale: entry.locale,
+      version: entry.version,
+    })),
+  };
+}
 
 export const getProductKnowledgeTool: ToolModule = {
   definition: {

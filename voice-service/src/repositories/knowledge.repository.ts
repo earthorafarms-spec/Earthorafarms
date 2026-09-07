@@ -27,6 +27,18 @@ interface DbKnowledgeRow {
   locale: string;
 }
 
+function mapKnowledgeRow(row: DbKnowledgeRow): KnowledgeEntry {
+  return {
+    id: row.id,
+    productId: row.product_id,
+    category: row.category,
+    question: row.question,
+    content: row.content,
+    version: row.version,
+    locale: row.locale,
+  };
+}
+
 /**
  * Only ever returns `approved` rows that are currently within their
  * effective window. This is the entire grounding surface for anything the
@@ -57,13 +69,26 @@ export async function getApprovedKnowledge(
 
   if (error) throw error;
 
-  return ((data ?? []) as DbKnowledgeRow[]).map((row) => ({
-    id: row.id,
-    productId: row.product_id,
-    category: row.category,
-    question: row.question,
-    content: row.content,
-    version: row.version,
-    locale: row.locale,
-  }));
+  return ((data ?? []) as DbKnowledgeRow[]).map(mapKnowledgeRow);
+}
+
+/**
+ * Loads every currently-effective, admin-approved entry for a product in one
+ * query. WhatsApp uses this for deterministic per-turn grounding so a terse
+ * follow-up such as a product name cannot depend on the model remembering to
+ * call several category-specific tools.
+ */
+export async function getAllApprovedKnowledge(productId: string): Promise<KnowledgeEntry[]> {
+  const nowIso = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('product_knowledge')
+    .select('id, product_id, category, question, content, version, locale')
+    .eq('product_id', productId)
+    .eq('status', 'approved')
+    .lte('effective_from', nowIso)
+    .or(`effective_until.is.null,effective_until.gte.${nowIso}`)
+    .order('version', { ascending: false });
+
+  if (error) throw error;
+  return ((data ?? []) as DbKnowledgeRow[]).map(mapKnowledgeRow);
 }

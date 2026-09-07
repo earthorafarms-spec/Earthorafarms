@@ -9,6 +9,8 @@ import { buildCheckoutTurnInstruction } from './checkout-context.js';
 import { chatWithRouting } from '../providers.js';
 import { allTools, toolsByName } from '../tools/index.js';
 import { isCheckoutReady } from '../tools/checkout.js';
+import { spokenProductNameMatches } from '../tools/products.js';
+import { getAllApprovedProductKnowledge } from '../tools/knowledge.js';
 
 function reviewFormReply(sent: boolean, language: ConversationState['currentLanguage']): string {
   if (sent) {
@@ -34,7 +36,52 @@ export function shouldAnswerCatalogDirectly(text: string): boolean {
   // Specific price, benefit, usage, and purchase questions still require
   // the normal tool/LLM loop. A plain "what do you sell?" does not: the live
   // list_products result is already the complete, grounded answer.
-  return !/\b(price|cost|how much|benefits?|uses?|dosage|dose|ingredients?|directions?|warnings?|buy|order|add|want|need)\b|कीमत|दाम|फायदे|लाभ|खुराक|सामग्री|इस्तेमाल|खरीद|ऑर्डर|જાણકારી|કિંમત|ફાયદા|ઉપયોગ|ખરીદ|ઓર્ડર/iu.test(text);
+  return !/\b(price|cost|how much|details?|info(?:rmation)?|tell me about|benefits?|uses?|dosage|dose|ingredients?|directions?|warnings?|buy|order|add|want|need)\b|जानकारी|कीमत|दाम|फायदे|लाभ|खुराक|सामग्री|इस्तेमाल|खरीद|ऑर्डर|જાણકારી|કિંમત|ફાયદા|ઉપયોગ|ખરીદ|ઓર્ડર/iu.test(text);
+}
+
+interface LiveCatalogProduct {
+  id: string;
+  name: string;
+}
+
+function liveCatalogProducts(catalog: unknown): LiveCatalogProduct[] {
+  if (!catalog || typeof catalog !== 'object') return [];
+  const products = (catalog as { products?: unknown }).products;
+  if (!Array.isArray(products)) return [];
+  return products.filter((product): product is LiveCatalogProduct =>
+    Boolean(product && typeof product === 'object' &&
+      typeof (product as LiveCatalogProduct).id === 'string' &&
+      typeof (product as LiveCatalogProduct).name === 'string')
+  );
+}
+
+function isProductInformationFollowUp(text: string): boolean {
+  return /\b(product|details?|info(?:rmation)?|tell me|what (?:do|does|is)|benefits?|uses?|dosage|dose|ingredients?|directions?|warnings?|price|cost|stock|buy|order|it|that|yes|yeah|sure)\b|प्रोडक्ट|जानकारी|फायदे|खुराक|सामग्री|कीमत|दाम|हाँ|હા|પ્રોડક્ટ|માહિતી|ફાયદા|માત્રા|ઘટકો|કિંમત/iu.test(text);
+}
+
+function resolveProductForTurn(
+  products: LiveCatalogProduct[],
+  userText: string,
+  messages: ConversationMessage[],
+): LiveCatalogProduct | null {
+  const currentMatch = products.find((product) => spokenProductNameMatches(product.name, userText));
+  if (currentMatch) return currentMatch;
+  if (!isProductInformationFollowUp(userText)) return null;
+
+  // Resolve terse follow-ups ("yes", "tell me more") from the most recent
+  // product the customer themselves named. Never rely on an old tool result.
+  const priorUserMessages = messages
+    .filter((message) => message.role === 'user' && message.content !== userText)
+    .slice(-12)
+    .reverse();
+  for (const message of priorUserMessages) {
+    const match = products.find((product) => spokenProductNameMatches(product.name, message.content));
+    if (match) return match;
+  }
+
+  // A generic singular-product question is unambiguous when the live store
+  // has exactly one active item.
+  return products.length === 1 ? products[0] : null;
 }
 
 function buildDirectCatalogReply(
@@ -146,7 +193,11 @@ export async function processTurn(
   // so both the answer and the safety policy have same-turn grounding.
   const turnContextMessages: ConversationMessage[] = [];
   const preloadedToolResults = new Map<string, unknown>();
-  if (shouldPrefetchProductCatalog(userText)) {
+  // WhatsApp is asynchronous and customers commonly answer with only a
+  // product name or "yes". Fetching the small live catalog on every text turn
+  // makes current website/admin data deterministic instead of optional model
+  // behaviour. Voice keeps the narrower latency-sensitive prefetch rule.
+  if (channel === 'text' || shouldPrefetchProductCatalog(userText)) {
     const listTool = toolsByName.list_products;
     if (listTool) {
       let productCatalog: unknown;
@@ -177,6 +228,35 @@ export async function processTurn(
           'Use it directly for catalog, availability, and product-name resolution. For benefits, dosage, ' +
           'ingredients, directions, or warnings, still call get_product_knowledge with the matching product ID.',
       });
+
+      if (channel === 'text') {
+        const selectedProduct = resolveProductForTurn(
+          liveCatalogProducts(productCatalog),
+          userText,
+          state.messages,
+        );
+        const detailsTool = toolsByName.get_product_details;
+        if (selectedProduct && detailsTool) {
+          const [details, knowledge] = await Promise.all([
+            detailsTool.handler({ productId: selectedProduct.id }, { callSessionId, state })
+              .catch((err) => ({ error: 'tool_execution_failed', message: (err as Error).message })),
+            getAllApprovedProductKnowledge(selectedProduct.id)
+              .catch((err) => ({ error: 'tool_execution_failed', message: (err as Error).message })),
+          ]);
+          const detailsJson = JSON.stringify(details);
+          const knowledgeJson = JSON.stringify(knowledge);
+          state.currentTurnFacts.push({ toolName: 'get_product_details', resultJson: detailsJson });
+          state.currentTurnFacts.push({ toolName: 'get_product_knowledge', resultJson: knowledgeJson });
+          turnContextMessages.push({
+            role: 'system',
+            content:
+              `LIVE WEBSITE DETAILS FOR THE SELECTED PRODUCT (freshly fetched this turn): ${detailsJson}. ` +
+              `LIVE ADMIN-APPROVED KNOWLEDGE FOR THE SAME PRODUCT (freshly fetched this turn): ${knowledgeJson}. ` +
+              'Answer the customer directly from these current records. Use only the categories relevant to their question, ' +
+              'and never replace these records with remembered or general product claims.',
+          });
+        }
+      }
     }
   }
 

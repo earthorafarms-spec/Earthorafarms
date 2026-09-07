@@ -8,11 +8,19 @@ const productRepositoryMocks = vi.hoisted(() => ({
   getProductById: vi.fn(),
   listActiveFestivalDeals: vi.fn(),
 }));
+const knowledgeRepositoryMocks = vi.hoisted(() => ({
+  getApprovedKnowledge: vi.fn(),
+  getAllApprovedKnowledge: vi.fn(),
+}));
 
 vi.mock('../../src/providers.js', () => ({
   chatWithRouting: (...args: unknown[]) => chatMock(...args),
 }));
 vi.mock('../../src/repositories/products.repository.js', () => productRepositoryMocks);
+vi.mock('../../src/repositories/knowledge.repository.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/repositories/knowledge.repository.js')>()),
+  ...knowledgeRepositoryMocks,
+}));
 
 import { processTurn } from '../../src/conversation/controller.js';
 
@@ -31,6 +39,17 @@ describe('processTurn persisted state', () => {
       },
     ]);
     productRepositoryMocks.listActiveFestivalDeals.mockResolvedValue([]);
+    productRepositoryMocks.getProductById.mockResolvedValue({
+      id: 'alpha-id', slug: 'alpha', name: 'Alpha', mrp: 100, price: 90,
+      status: 'active', stockQty: 10, stockLabel: 'In Stock', tag: '120 caps', badge: '',
+      description: 'Live website description', highlights: ['Live website highlight'],
+    });
+    knowledgeRepositoryMocks.getApprovedKnowledge.mockReset();
+    knowledgeRepositoryMocks.getAllApprovedKnowledge.mockReset();
+    knowledgeRepositoryMocks.getAllApprovedKnowledge.mockResolvedValue([{
+      id: 'knowledge-1', productId: 'alpha-id', category: 'benefits', question: null,
+      content: 'Admin-approved immunity support information.', version: 2, locale: 'en-IN',
+    }]);
   });
 
   it('keeps output-policy correction instructions turn-local', async () => {
@@ -70,5 +89,26 @@ describe('processTurn persisted state', () => {
     expect(chatMock).toHaveBeenCalledTimes(1);
     const messages = chatMock.mock.calls[0][0] as { role: string; content: string }[];
     expect(messages.some((m) => m.role === 'system' && m.content.includes('LIVE PRODUCT CATALOG FOR THIS TURN'))).toBe(true);
+  });
+
+  it('grounds a terse WhatsApp product selection in fresh website and admin data', async () => {
+    chatMock.mockResolvedValueOnce({
+      kind: 'message',
+      content: 'Alpha is in stock at ₹90 and has approved information about immunity support.',
+    });
+
+    const outcome = await processTurn('controller-test', createInitialState(), 'Alpha', 'text');
+
+    expect(outcome.replyText).toContain('₹90');
+    expect(outcome.replyText).not.toContain("don't have a confirmed answer");
+    expect(productRepositoryMocks.listActiveProducts).toHaveBeenCalledTimes(1);
+    expect(productRepositoryMocks.getProductById).toHaveBeenCalledWith('alpha-id');
+    expect(knowledgeRepositoryMocks.getAllApprovedKnowledge).toHaveBeenCalledWith('alpha-id');
+    const messages = chatMock.mock.calls[0][0] as { role: string; content: string }[];
+    expect(messages.some((message) => message.role === 'system' && message.content.includes('LIVE WEBSITE DETAILS'))).toBe(true);
+    expect(messages.some((message) => message.role === 'system' && message.content.includes('LIVE ADMIN-APPROVED KNOWLEDGE'))).toBe(true);
+    expect(outcome.state.currentTurnFacts.map((fact) => fact.toolName)).toEqual([
+      'list_products', 'get_product_details', 'get_product_knowledge',
+    ]);
   });
 });
