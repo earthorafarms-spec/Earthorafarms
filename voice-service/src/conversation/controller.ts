@@ -148,11 +148,38 @@ const PRODUCT_NUMBER_PROMPTS: Record<ConversationState['currentLanguage'], strin
   gu: '\u0AAA\u0ACD\u0AB0\u0ACB\u0AA1\u0A95\u0ACD\u0A9F \u0AAA\u0AB8\u0A82\u0AA6 \u0A95\u0AB0\u0AB5\u0ABE \u0AA4\u0AC7\u0AA8\u0ACB \u0AA8\u0A82\u0AAC\u0AB0 \u0AAE\u0ACB\u0A95\u0AB2\u0ACB.',
 };
 
+const WHATSAPP_MENU_GREETINGS: Record<ConversationState['currentLanguage'], string> = {
+  en: 'Hello!',
+  hi: 'नमस्ते!',
+  gu: 'નમસ્તે!',
+};
+
 function lastAssistantReply(messages: ConversationMessage[]): string | null {
   for (let index = messages.length - 1; index >= 0; index--) {
     if (messages[index].role === 'assistant') return messages[index].content;
   }
   return null;
+}
+
+function shouldShowWhatsAppMenu(userText: string, state: ConversationState): boolean {
+  const explicitMenuRequest = /\b(?:main\s+menu|menu|available\s+options?)\b|(?:मुख्य\s+)?मेन्यू|उपलब्ध\s+विकल्प|(?:મુખ્ય\s+)?મેનુ|ઉપલબ્ધ\s+વિકલ્પ/iu.test(userText);
+  if (explicitMenuRequest) return true;
+
+  const standaloneGreeting = /^(?:hi|hello|hey|good\s+(?:morning|afternoon|evening)|namaste|namaskar|नमस्ते|नमस्कार|નમસ્તે|નમસ્કાર)[\s!.?,🙏]*$/iu.test(userText.trim());
+  if (!standaloneGreeting) return false;
+
+  const hasCheckoutProgress = state.cart.length > 0 || Object.entries(state.checkoutFields)
+    .some(([field, value]) => field !== 'phone' && value !== undefined && value !== '');
+  const previousReply = lastAssistantReply(state.messages);
+  const awaitingProductOrQuantity = Boolean(previousReply && (
+    Object.values(PRODUCT_NUMBER_PROMPTS).some((prompt) => previousReply.includes(prompt)) ||
+    /\b(?:how many|quantity|units?)\b|कितन(?:ा|ी|े)|यूनिट|માત્રા|કેટલ(?:ા|ી)|યુનિટ/iu.test(previousReply)
+  ));
+  return !hasCheckoutProgress && !awaitingProductOrQuantity;
+}
+
+function buildWhatsAppMenuReply(language: ConversationState['currentLanguage']): string {
+  return `${WHATSAPP_MENU_GREETINGS[language]}\n\n${WHATSAPP_MENU}`;
 }
 
 function isProductMenuSelection(userText: string, messages: ConversationMessage[]): boolean {
@@ -367,6 +394,12 @@ export async function processTurn(
       : { items: state.cart };
     state.currentTurnFacts.push({ toolName: 'get_cart', resultJson: JSON.stringify(cartResult) });
     const replyText = directCartReply(state);
+    state.messages.push({ role: 'assistant', content: replyText });
+    return { state, replyText, policyViolations: [], outboundActions };
+  }
+
+  if (channel === 'text' && shouldShowWhatsAppMenu(userText, state)) {
+    const replyText = buildWhatsAppMenuReply(state.currentLanguage);
     state.messages.push({ role: 'assistant', content: replyText });
     return { state, replyText, policyViolations: [], outboundActions };
   }

@@ -64,6 +64,44 @@ describe('processTurn persisted state', () => {
     expect(shouldPrefetchProductCatalog(question)).toBe(true);
   });
 
+  it('returns the WhatsApp menu deterministically for a text greeting', async () => {
+    const outcome = await processTurn('controller-test', createInitialState(), 'Hi', 'text');
+
+    expect(outcome.replyText).toBe(`Hello!\n\n${WHATSAPP_MENU}`);
+    expect(chatMock).not.toHaveBeenCalled();
+    expect(productRepositoryMocks.listActiveProducts).not.toHaveBeenCalled();
+  });
+
+  it('returns the WhatsApp menu for an explicit menu request in the current language', async () => {
+    const outcome = await processTurn('controller-test', createInitialState(), 'મુખ્ય મેનુ બતાવો', 'text');
+
+    expect(outcome.replyText).toBe(`નમસ્તે!\n\n${WHATSAPP_MENU}`);
+    expect(chatMock).not.toHaveBeenCalled();
+    expect(productRepositoryMocks.listActiveProducts).not.toHaveBeenCalled();
+  });
+
+  it('does not replace an active quantity flow with the menu for a greeting', async () => {
+    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'How many units would you like?' });
+    const state = createInitialState();
+    state.messages.push({ role: 'assistant', content: 'You selected Alpha. How many units would you like?' });
+
+    const outcome = await processTurn('controller-test', state, 'Hi', 'text');
+
+    expect(outcome.replyText).toBe('How many units would you like?');
+    expect(outcome.replyText).not.toContain(WHATSAPP_MENU);
+    expect(chatMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves voice greeting handling in the LLM flow', async () => {
+    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'Hello! How can I help you today?' });
+
+    const outcome = await processTurn('controller-test', createInitialState(), 'Hi', 'voice');
+
+    expect(outcome.replyText).toBe('Hello! How can I help you today?');
+    expect(outcome.replyText).not.toContain(WHATSAPP_MENU);
+    expect(chatMock).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps output-policy correction instructions turn-local', async () => {
     chatMock
       .mockResolvedValueOnce({ kind: 'message', content: 'It costs ₹5000.' })
