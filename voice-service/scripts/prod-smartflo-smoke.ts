@@ -59,7 +59,10 @@ async function main(): Promise<void> {
       }));
       await sleep(100);
     }
-    for (let i = 0; i < 7; i++) {
+    // Production waits 1.1s of trailing silence before finalizing a turn so
+    // natural pauses and grouped phone digits are not split. Send a little
+    // more than that here so this probe exercises the real boundary.
+    for (let i = 0; i < 12; i++) {
       ws.send(JSON.stringify({
         event: 'media', streamSid,
         media: { payload: Buffer.alloc(800, 0xff).toString('base64'), chunk: String(inboundChunk++), timestamp: String(callerMulaw.length / 8 + i * 100) },

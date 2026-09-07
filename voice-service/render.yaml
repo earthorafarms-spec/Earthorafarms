@@ -60,7 +60,7 @@ services:
       - key: VOICE_TTS_TIMEOUT_MS
         value: "15000"
       - key: VOICE_SPEECH_RMS_THRESHOLD
-        value: "600"
+        value: "700"
       # Canonical public telephony socket, for example:
       # wss://earthora-voice-service.onrender.com/ws/voice/smartflo
       - key: VOICE_STREAM_PUBLIC_WSS_URL

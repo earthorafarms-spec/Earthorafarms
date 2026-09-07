@@ -73,7 +73,7 @@ const optionalSchema = z.object({
   VOICE_STT_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(15_000),
   VOICE_LLM_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(30_000),
   VOICE_TTS_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(15_000),
-  VOICE_SPEECH_RMS_THRESHOLD: z.coerce.number().int().min(50).max(5_000).default(600),
+  VOICE_SPEECH_RMS_THRESHOLD: z.coerce.number().int().min(50).max(5_000).default(700),
   // Public bot socket advertised to the voice platform's dynamic resolver.
   // Example: wss://voice.example.com/ws/voice/smartflo
   VOICE_STREAM_PUBLIC_WSS_URL: z.string().url().refine((url) => url.startsWith('wss://'), {
