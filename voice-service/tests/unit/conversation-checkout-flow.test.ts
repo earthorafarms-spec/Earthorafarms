@@ -63,8 +63,34 @@ describe('conversation checkout regressions', () => {
     expect(mocks.send).toHaveBeenCalledTimes(1);
     expect(mocks.send).toHaveBeenCalledWith('+919876543210', expect.stringContaining('/voice-checkout/'));
     expect(result.replyText).toContain('review or edit');
+    expect(result.replyText).toContain('say yes');
+    expect(result.state.awaitingReviewReceiptConfirmation).toBe(true);
+    expect(result.callShouldEnd).not.toBe(true);
     expect(JSON.stringify(result.state)).not.toContain(mocks.send.mock.calls[0][1]);
     expect(result.state.currentTurnFacts.some(f => f.toolName === 'create_verification_link' && JSON.parse(f.resultJson).ok)).toBe(true);
+  });
+
+  it('ends only after the caller confirms receiving the WhatsApp review link', async () => {
+    const state = checkoutState();
+    state.awaitingReviewReceiptConfirmation = true;
+
+    const result = await processTurn('flow', state, 'Yes, I received it');
+
+    expect(result.callShouldEnd).toBe(true);
+    expect(result.state.awaitingReviewReceiptConfirmation).toBe(false);
+    expect(result.replyText).toContain('Thank you for confirming');
+    expect(mocks.chat).not.toHaveBeenCalled();
+  });
+
+  it('does not treat "not received" as a positive review-link confirmation', async () => {
+    const state = checkoutState();
+    state.awaitingReviewReceiptConfirmation = true;
+    mocks.chat.mockResolvedValueOnce({ kind: 'message', content: 'I will keep the call open while we check it.' });
+
+    const result = await processTurn('flow', state, 'No, I have not received it');
+
+    expect(result.callShouldEnd).not.toBe(true);
+    expect(result.state.awaitingReviewReceiptConfirmation).toBe(true);
   });
 
   it('does not report success when WhatsApp fails', async () => {

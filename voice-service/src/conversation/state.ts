@@ -87,6 +87,8 @@ export interface ConversationState {
     tokenExpiresAt: string;
     checkoutFingerprint: string;
   };
+  /** Voice only: the WhatsApp form was delivered and the caller must confirm receipt before hangup. */
+  awaitingReviewReceiptConfirmation?: boolean;
   /**
    * Transport-level evidence for the most recent voice turns. This lives in
    * the existing JSONB conversation state, so delivery/cancellation latency

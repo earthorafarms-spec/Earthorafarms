@@ -138,10 +138,7 @@ export async function registerVoiceStreamRoutes(app: FastifyInstance): Promise<v
           // Run the full conversation turn (tool loop + LLM).
           const outcome = await processTurn(sessionId, session.conversationState, decision.text);
           const language = outcome.state.currentLanguage;
-          const callShouldEnd = outcome.state.currentTurnFacts.some((f) => {
-            if (f.toolName !== 'create_verification_link') return false;
-            try { return (JSON.parse(f.resultJson) as { ok?: boolean })?.ok === true; } catch { return false; }
-          });
+          const callShouldEnd = outcome.callShouldEnd === true;
 
           send(socket, { type: 'agent_reply_text', text: outcome.replyText, language });
 

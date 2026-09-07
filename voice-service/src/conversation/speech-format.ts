@@ -15,6 +15,19 @@ export const MAX_SPOKEN_REPLY_CHARS = 240;
  * errors without trying to rewrite or translate factual content.
  */
 export function normalizeIndicSpeechText(text: string, language: SupportedLanguage): string {
+  if (language === 'hi') {
+    return text
+      .replace(/करता\s+हूं/gu, 'करती हूँ')
+      .replace(/करता\s+हूँ/gu, 'करती हूँ')
+      .replace(/कर\s+दूँगा/gu, 'कर दूँगी')
+      .replace(/कर\s+दूंगा/gu, 'कर दूँगी')
+      .replace(/बताऊँगा/gu, 'बताऊँगी')
+      .replace(/बताऊंगा/gu, 'बताऊँगी')
+      .replace(/भेजूँगा/gu, 'भेजूँगी')
+      .replace(/भेजूंगा/gu, 'भेजूँगी')
+      .replace(/लूँगा/gu, 'लूँगी')
+      .replace(/लूंगा/gu, 'लूँगी');
+  }
   if (language === 'gu') {
     return text
       .replace(/અમારા પાસે/gu, 'અમારી પાસે')

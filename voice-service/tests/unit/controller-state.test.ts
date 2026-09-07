@@ -190,6 +190,36 @@ describe('processTurn persisted state', () => {
     expect(messages.some((message) => message.content.includes('numeric reply selected product option'))).toBe(false);
   });
 
+  it('answers cart quantity from durable state without relying on model memory', async () => {
+    const state = createInitialState();
+    state.currentLanguage = 'hi';
+    state.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 3, unitPrice: 90 }];
+
+    const outcome = await processTurn('controller-test', state, 'मेरे कार्ट में कितनी बॉटल हैं?');
+
+    expect(outcome.replyText).toContain('तीन Alpha');
+    expect(outcome.replyText).not.toContain('खाली');
+    expect(outcome.state.currentTurnFacts.map((fact) => fact.toolName)).toEqual(['get_cart']);
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it('always asks the next checkout question after adding an item', async () => {
+    chatMock
+      .mockResolvedValueOnce({
+        kind: 'tool_calls',
+        calls: [{ id: 'add-1', name: 'add_cart_item', argumentsJson: JSON.stringify({ productId: 'alpha-id', quantity: 3 }) }],
+      })
+      .mockResolvedValueOnce({
+        kind: 'message',
+        content: 'I added three packs to your cart. I will take a few delivery details.',
+      });
+
+    const outcome = await processTurn('controller-test', createInitialState(), 'I want three packs of Alpha');
+
+    expect(outcome.state.cart[0]).toMatchObject({ productId: 'alpha-id', quantity: 3 });
+    expect(outcome.replyText).toContain('What is your full name?');
+  });
+
   it('keeps detailed product questions in the model and tool loop', async () => {
     chatMock.mockResolvedValueOnce({ kind: 'message', content: 'Which product price would you like me to check?' });
 

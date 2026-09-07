@@ -14,7 +14,7 @@ import { createInitialState } from '../conversation/state.js';
 import { normalizeVoiceTranscript } from '../conversation/transcript.js';
 import { resetGuardState } from '../conversation/output-policy.js';
 import type { SupportedLanguage } from '../conversation/language.js';
-import { repeatPrompt } from '../conversation/voice-copy.js';
+import { repeatPrompt, silenceCheckPrompt } from '../conversation/voice-copy.js';
 import { AudioAccumulator, pcm16ToWav } from '../telephony/audio-accumulator.js';
 import { mulaw8kToPcm16k, wavToMulaw8k } from '../telephony/mulaw.js';
 import { config } from '../config.js';
@@ -58,6 +58,7 @@ const SOCKET_HIGH_WATER_BYTES = 512 * 1024;
 const SOCKET_BACKPRESSURE_TIMEOUT_MS = 2_000;
 const START_EVENT_TIMEOUT_MS = 15_000;
 const CALLER_SILENCE_HANGUP_MS = 7_000;
+const CALLER_SILENCE_FINAL_GRACE_MS = 3_000;
 const MAX_STORED_VOICE_METRICS = 100;
 const BETWEEN_SENTENCE_SILENCE = Buffer.alloc(640, 0xff); // 80 ms at 8 kHz mu-law
 
@@ -133,7 +134,10 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
     let activeMarkName: string | null = null;
     let activeMarkSentAt = 0;
     let endAfterPlaybackMarkName: string | null = null;
+    let silenceWarningMarkName: string | null = null;
+    let awaitingSilenceWarningResponse = false;
     let callerSilenceTimer: ReturnType<typeof setTimeout> | null = null;
+    let sessionStateQueue: Promise<void> = Promise.resolve();
     let outboundChunk = 1;
     let turnSequence = 0;
     let droppedTranscripts = 0;
@@ -158,6 +162,28 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
       callerSilenceTimer = null;
     }
 
+    function withSessionStateLock<T>(operation: () => Promise<T>): Promise<T> {
+      const result = sessionStateQueue.then(operation, operation);
+      sessionStateQueue = result.then(() => undefined, () => undefined);
+      return result;
+    }
+
+    function armFinalSilenceGraceTimer(): void {
+      clearCallerSilenceTimer();
+      if (closing || socket.readyState !== socket.OPEN) return;
+      callerSilenceTimer = setTimeout(() => {
+        callerSilenceTimer = null;
+        if (closing || socket.readyState !== socket.OPEN || !awaitingSilenceWarningResponse) return;
+        if (busy || playbackActive || activeMarkName !== null) {
+          armFinalSilenceGraceTimer();
+          return;
+        }
+        void finishSession('abandoned', 'caller_silence_after_warning_3s').finally(() => {
+          if (socket.readyState === socket.OPEN) socket.close(1000, 'caller silence after warning');
+        });
+      }, CALLER_SILENCE_FINAL_GRACE_MS);
+    }
+
     function armCallerSilenceTimer(): void {
       clearCallerSilenceTimer();
       if (closing || socket.readyState !== socket.OPEN) return;
@@ -170,9 +196,23 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
           armCallerSilenceTimer();
           return;
         }
-        void finishSession('abandoned', 'caller_silence_7s').finally(() => {
-          if (socket.readyState === socket.OPEN) socket.close(1000, 'caller silence');
-        });
+        awaitingSilenceWarningResponse = true;
+        const warningMarkName = `silence-warning-${Date.now()}`;
+        silenceWarningMarkName = warningMarkName;
+        void sendSpeech(silenceCheckPrompt(currentLanguage), currentLanguage, warningMarkName)
+          .then((speech) => {
+            if (!speech.sent && !closing) {
+              awaitingSilenceWarningResponse = false;
+              silenceWarningMarkName = null;
+              armCallerSilenceTimer();
+            }
+          })
+          .catch((err) => {
+            req.log.error({ err, ...logContext(), event: 'smartflo_silence_warning_failed' }, 'Silence warning TTS failed');
+            awaitingSilenceWarningResponse = false;
+            silenceWarningMarkName = null;
+            armCallerSilenceTimer();
+          });
       }, CALLER_SILENCE_HANGUP_MS);
     }
 
@@ -187,6 +227,8 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
       playbackActive = false;
       activeMarkName = null;
       endAfterPlaybackMarkName = null;
+      silenceWarningMarkName = null;
+      awaitingSilenceWarningResponse = false;
       if (sessionId) {
         resetGuardState(sessionId);
         try {
@@ -320,12 +362,14 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
     async function storeVoiceMetric(metric: VoiceTurnMetric): Promise<void> {
       if (!sessionId) return;
       try {
-        const latest = await getCallSession(sessionId);
-        if (!latest) return;
-        const metrics = [...(latest.conversationState.voiceTurnMetrics ?? []), metric]
-          .slice(-MAX_STORED_VOICE_METRICS);
-        latest.conversationState.voiceTurnMetrics = metrics;
-        await updateCallSessionState(sessionId, latest.conversationState);
+        await withSessionStateLock(async () => {
+          const latest = await getCallSession(sessionId!);
+          if (!latest) return;
+          const metrics = [...(latest.conversationState.voiceTurnMetrics ?? []), metric]
+            .slice(-MAX_STORED_VOICE_METRICS);
+          latest.conversationState.voiceTurnMetrics = metrics;
+          await updateCallSessionState(sessionId!, latest.conversationState);
+        });
       } catch (err) {
         req.log.error({ err, ...logContext(), event: 'smartflo_metric_store_failed' }, 'Smartflo turn metric persistence failed');
       }
@@ -336,15 +380,17 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
       if (!sessionId || !turnMatch) return;
       const routeTurnId = Number(turnMatch[1]);
       try {
-        const latest = await getCallSession(sessionId);
-        if (!latest) return;
-        const metric = [...(latest.conversationState.voiceTurnMetrics ?? [])]
-          .reverse()
-          .find((item) => item.routeTurnId === routeTurnId);
-        if (!metric) return;
-        metric.playbackCompletedAt = new Date().toISOString();
-        if (playbackMs !== null) metric.playbackMs = playbackMs;
-        await updateCallSessionState(sessionId, latest.conversationState);
+        await withSessionStateLock(async () => {
+          const latest = await getCallSession(sessionId!);
+          if (!latest) return;
+          const metric = [...(latest.conversationState.voiceTurnMetrics ?? [])]
+            .reverse()
+            .find((item) => item.routeTurnId === routeTurnId);
+          if (!metric) return;
+          metric.playbackCompletedAt = new Date().toISOString();
+          if (playbackMs !== null) metric.playbackMs = playbackMs;
+          await updateCallSessionState(sessionId!, latest.conversationState);
+        });
       } catch (err) {
         req.log.error({ err, ...logContext(), event: 'smartflo_metric_store_failed' }, 'Smartflo playback metric persistence failed');
       }
@@ -415,7 +461,7 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
 
         const llmStartedAt = Date.now();
         const result = await withTimeout(
-          processBrowserMessage(sessionId, decision.text),
+          withSessionStateLock(() => processBrowserMessage(sessionId!, decision.text)),
           config.VOICE_LLM_TIMEOUT_MS,
           'LLM turn'
         );
@@ -488,8 +534,8 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
             : speech.sent ? undefined : 'caller_barge_in_during_tts_or_send',
         });
         if (result.callShouldEnd && !speech.sent) {
-          await finishSession('ended', 'checkout_form_sent_without_final_audio');
-          if (socket.readyState === socket.OPEN) socket.close(1000, 'checkout form sent');
+          await finishSession('ended', 'review_receipt_confirmed_without_final_audio');
+          if (socket.readyState === socket.OPEN) socket.close(1000, 'review receipt confirmed');
         }
       } catch (err) {
         req.log.error({ err, ...logContext(), event: 'smartflo_turn_failed', turnId, audioMs }, 'Smartflo voice turn failed');
@@ -541,7 +587,13 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
       // utterance; keep the longer speech requirement only while audio is
       // actually playing to avoid treating a click as barge-in.
       allowShortUtterances: () => !playbackActive && activeMarkName === null,
-      onSpeechActivity: armCallerSilenceTimer,
+      onSpeechActivity: () => {
+        clearCallerSilenceTimer();
+        if (awaitingSilenceWarningResponse) {
+          awaitingSilenceWarningResponse = false;
+          silenceWarningMarkName = null;
+        }
+      },
       onSpeechStart: () => {
         // Once the form was delivered, let the short confirmation finish and
         // close the call; do not let a late noise burst start another turn.
@@ -671,6 +723,7 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
           if (message.mark?.name && message.mark.name === activeMarkName) {
             const completedMarkName = activeMarkName;
             const shouldEndCall = completedMarkName === endAfterPlaybackMarkName;
+            const wasSilenceWarning = completedMarkName === silenceWarningMarkName;
             const playbackMs = activeMarkSentAt ? Date.now() - activeMarkSentAt : null;
             req.log.info({
               ...logContext(),
@@ -681,10 +734,13 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
             playbackActive = false;
             activeMarkName = null;
             if (shouldEndCall) endAfterPlaybackMarkName = null;
+            if (wasSilenceWarning) silenceWarningMarkName = null;
             await markVoiceMetricPlaybackCompleted(completedMarkName, playbackMs);
             if (shouldEndCall) {
-              await finishSession('ended', 'checkout_form_sent');
-              if (socket.readyState === socket.OPEN) socket.close(1000, 'checkout form sent');
+              await finishSession('ended', 'review_receipt_confirmed');
+              if (socket.readyState === socket.OPEN) socket.close(1000, 'review receipt confirmed');
+            } else if (wasSilenceWarning) {
+              armFinalSilenceGraceTimer();
             } else {
               armCallerSilenceTimer();
             }

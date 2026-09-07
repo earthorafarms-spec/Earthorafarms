@@ -6,7 +6,7 @@ export interface BrowserMessageResult {
   replyText: string;
   /** The conversation's language AFTER this turn — used by routes/voice.ts to pick the TTS voice for the reply. */
   language: SupportedLanguage;
-  /** True when create_verification_link succeeded this turn — caller should end the call after audio finishes. */
+  /** True only after the caller confirms receiving the review link. */
   callShouldEnd: boolean;
   /** Deterministic guard interventions applied to this reply. */
   policyViolations: string[];
@@ -28,15 +28,10 @@ export async function processBrowserMessage(callSessionId: string, text: string)
   const outcome = await processTurn(callSessionId, session.conversationState, text);
   await updateCallSessionState(callSessionId, outcome.state);
 
-  const callShouldEnd = outcome.state.currentTurnFacts.some((f) => {
-    if (f.toolName !== 'create_verification_link') return false;
-    try { return (JSON.parse(f.resultJson) as { ok?: boolean })?.ok === true; } catch { return false; }
-  });
-
   return {
     replyText: outcome.replyText,
     language: outcome.state.currentLanguage,
-    callShouldEnd,
+    callShouldEnd: outcome.callShouldEnd === true,
     policyViolations: outcome.policyViolations,
   };
 }

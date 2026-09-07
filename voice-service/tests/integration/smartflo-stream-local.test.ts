@@ -190,7 +190,7 @@ describe('Smartflo WebSocket local integration', () => {
     await collector.waitFor(() => mocks.updateStatus.mock.calls.some((call) => call[1] === 'ended'));
   });
 
-  it('ends the call after seven seconds of caller silence once playback finishes', async () => {
+  it('warns after seven silent seconds, then ends after three more silent seconds', async () => {
     const { ws, collector } = await connect();
     const closed = new Promise<number>((resolve) => ws.once('close', (code) => resolve(code)));
     sendStart(ws);
@@ -200,6 +200,18 @@ describe('Smartflo WebSocket local integration', () => {
     try {
       acknowledgeLatestMark(ws, collector);
       await vi.advanceTimersByTimeAsync(7_001);
+      expect(ws.readyState).toBe(WebSocket.OPEN);
+      expect(mocks.ttsMulaw).toHaveBeenCalledWith(
+        'Are you still there? Please say something if you would like to continue.',
+        'en',
+      );
+      const warningMark = [...collector.messages].reverse()
+        .find((message) => message.event === 'mark' && message.mark?.name?.startsWith('silence-warning-'));
+      expect(warningMark?.mark?.name).toBeTruthy();
+      ws.send(JSON.stringify({ event: 'mark', streamSid: 'stream-test', mark: { name: warningMark!.mark.name } }));
+      await vi.advanceTimersByTimeAsync(1);
+      expect(ws.readyState).toBe(WebSocket.OPEN);
+      await vi.advanceTimersByTimeAsync(3_001);
       vi.useRealTimers();
       await expect(closed).resolves.toBe(1000);
       expect(mocks.updateStatus).toHaveBeenCalledWith('session-test', 'abandoned');

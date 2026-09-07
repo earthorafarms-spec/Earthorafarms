@@ -4,7 +4,7 @@ import { WHATSAPP_MENU, WHATSAPP_SYSTEM_PROMPT } from '../../../whatsapp-chatbot
 import { enforceOutputPolicy } from './output-policy.js';
 import { limitSpokenReply, normalizeIndicSpeechText, toSpokenText } from './speech-format.js';
 import { detectLanguage, requestedLanguage, buildLanguageInstruction } from './language.js';
-import { turnFailurePrompt } from './voice-copy.js';
+import { reviewReceivedPrompt, turnFailurePrompt } from './voice-copy.js';
 import { buildCheckoutTurnInstruction } from './checkout-context.js';
 import { chatWithRouting } from '../providers.js';
 import { allTools, toolsByName } from '../tools/index.js';
@@ -24,13 +24,88 @@ function reviewFormReply(
       if (language === 'gu') return `તમારું ઓર્ડર રિવ્યૂ ફોર્મ તૈયાર છે:\n${reviewUrl}\n\nકૃપા કરીને વસ્તુઓ અને ડિલિવરીની વિગતો તપાસો અથવા બદલો, પછી ફોર્મ કન્ફર્મ કરો. હજી કોઈ પેમેન્ટ કે ઓર્ડર પૂર્ણ થયો નથી; કન્ફર્મ કર્યા પછી જ Razorpay ખુલશે.`;
       return `Your order-review form is ready:\n${reviewUrl}\n\nPlease check or edit the items and delivery details, then confirm the form. No order or payment has been completed yet; Razorpay opens only after your confirmation.`;
     }
-    if (language === 'hi') return 'आपके WhatsApp पर ऑर्डर रिव्यू फॉर्म भेज दिया है। उसमें जानकारी चेक या बदलकर कन्फर्म करें, उसके बाद ही Razorpay पेमेंट कर सकते हैं।';
-    if (language === 'gu') return 'તમારા WhatsApp પર ઓર્ડર રિવ્યુ ફોર્મ મોકલ્યું છે. વિગતો તપાસીને કે બદલીને કન્ફર્મ કરો, ત્યાર પછી જ Razorpay પેમેન્ટ કરી શકશો.';
-    return 'I’ve sent the order-review form to your WhatsApp. Please review or edit your details and confirm the form before continuing to Razorpay payment.';
+    if (language === 'hi') return 'आपके WhatsApp पर ऑर्डर रिव्यू फॉर्म भेज दिया है। WhatsApp चेक करें और लिंक मिलने पर हाँ कहें। पेमेंट से पहले फॉर्म चेक या एडिट कर सकते हैं।';
+    if (language === 'gu') return 'તમારા WhatsApp પર ઓર્ડર રિવ્યૂ ફોર્મ મોકલ્યું છે. WhatsApp તપાસો અને લિંક મળે પછી હા કહો. પેમેન્ટ પહેલાં ફોર્મ તપાસી અથવા બદલી શકો છો.';
+    return 'I’ve sent the order-review form to your WhatsApp. Check WhatsApp and say yes once it arrives. You can review or edit the form before payment.';
   }
   if (language === 'hi') return 'माफ़ कीजिए, अभी WhatsApp पर फॉर्म नहीं भेज पाई। आपका ऑर्डर या पेमेंट नहीं हुआ है; क्या आप फिर कोशिश करना चाहेंगे?';
   if (language === 'gu') return 'માફ કરશો, અત્યારે WhatsApp પર ફોર્મ મોકલી શકી નથી. તમારો ઓર્ડર કે પેમેન્ટ થયું નથી; ફરી પ્રયત્ન કરવો છે?';
   return 'Sorry, I couldn’t send the WhatsApp form. No order or payment has been completed; would you like me to try again?';
+}
+
+const RECEIPT_CONFIRMATION_PATTERN =
+  /\b(?:yes|yeah|yep|received|got it|i got|mil gaya|aa gaya)\b|हाँ|हां|मिल गया|आ गया|मिला है|હા|મળી ગઈ|મળી ગયો|આવી ગઈ|આવી ગયો/iu;
+const RECEIPT_NEGATION_PATTERN =
+  /\b(?:no|not|didn'?t|haven'?t|not received|did not receive)\b|नहीं|नही|નથી|નહીં/iu;
+
+function confirmedReviewReceipt(text: string): boolean {
+  return !RECEIPT_NEGATION_PATTERN.test(text) && RECEIPT_CONFIRMATION_PATTERN.test(text);
+}
+
+const CART_SUMMARY_PATTERN =
+  /\b(?:my cart|cart total|what(?:'s| is) in (?:my )?cart|how many (?:bottles?|packs?|items?)|what did i add|my bill|bill total)\b|मेरे? कार्ट|कार्ट में|कितनी? (?:बॉटल|पैक|आइटम)|मेरा बिल|કાર્ટમાં|માર[ુંા] કાર્ટ|કેટલ[ાી] (?:બોટલ|પેક|આઇટમ)|મારું બિલ/iu;
+
+const QUANTITY_WORDS: Record<ConversationState['currentLanguage'], string[]> = {
+  en: ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'],
+  hi: ['शून्य', 'एक', 'दो', 'तीन', 'चार', 'पाँच', 'छह', 'सात', 'आठ', 'नौ', 'दस'],
+  gu: ['શૂન્ય', 'એક', 'બે', 'ત્રણ', 'ચાર', 'પાંચ', 'છ', 'સાત', 'આઠ', 'નવ', 'દસ'],
+};
+
+function spokenQuantity(quantity: number, language: ConversationState['currentLanguage']): string {
+  return QUANTITY_WORDS[language][quantity] ?? String(quantity);
+}
+
+function directCartReply(state: ConversationState): string {
+  const { cart, currentLanguage: language } = state;
+  if (cart.length === 0) {
+    if (language === 'hi') return 'अभी आपका कार्ट खाली है।';
+    if (language === 'gu') return 'હાલમાં તમારું કાર્ટ ખાલી છે.';
+    return 'Your cart is currently empty.';
+  }
+  const lines = cart.map((line) => `${spokenQuantity(line.quantity, language)} ${line.productName}`);
+  const total = cart.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0).toLocaleString('en-IN');
+  if (language === 'hi') return `आपके कार्ट में ${lines.join(' और ')} हैं। अभी कुल ₹${total} है, जिसे फॉर्म पर दोबारा चेक किया जाएगा।`;
+  if (language === 'gu') return `તમારા કાર્ટમાં ${lines.join(' અને ')} છે. હાલનું કુલ ₹${total} છે, જે ફોર્મ પર ફરી ચકાસવામાં આવશે.`;
+  return `Your cart has ${lines.join(' and ')}. The provisional total is ₹${total}, which will be checked again on the form.`;
+}
+
+const CHECKOUT_FIELDS: (keyof ConversationState['checkoutFields'])[] = [
+  'name', 'email', 'phone', 'address', 'city', 'state', 'postalCode', 'country',
+];
+
+function nextCheckoutQuestion(state: ConversationState): string | null {
+  const field = CHECKOUT_FIELDS.find((key) => !state.checkoutFields[key]);
+  if (!field) return null;
+  const language = state.currentLanguage;
+  const questions: Record<string, Record<ConversationState['currentLanguage'], string>> = {
+    name: { en: 'What is your full name?', hi: 'आपका पूरा नाम क्या है?', gu: 'તમારું પૂરું નામ શું છે?' },
+    email: { en: 'What is your email address?', hi: 'आपका ईमेल एड्रेस क्या है?', gu: 'તમારું ઈમેલ એડ્રેસ શું છે?' },
+    phone: { en: 'What WhatsApp number should I use?', hi: 'आपका WhatsApp नंबर क्या है?', gu: 'તમારો WhatsApp નંબર શું છે?' },
+    address: { en: 'What is your street address?', hi: 'आपका पूरा स्ट्रीट एड्रेस क्या है?', gu: 'તમારું પૂરું સ્ટ્રીટ એડ્રેસ શું છે?' },
+    city: { en: 'Please tell me your city and state.', hi: 'अपना शहर और राज्य साथ में बताइए।', gu: 'તમારું શહેર અને રાજ્ય સાથે જણાવો.' },
+    state: { en: 'Which state is the delivery address in?', hi: 'डिलीवरी एड्रेस किस राज्य में है?', gu: 'ડિલિવરી એડ્રેસ કયા રાજ્યમાં છે?' },
+    postalCode: { en: 'What is your six-digit PIN code?', hi: 'आपका छह अंकों का पिन कोड क्या है?', gu: 'તમારો છ અંકનો પિન કોડ શું છે?' },
+    country: { en: 'Is the delivery address in India?', hi: 'क्या डिलीवरी एड्रेस भारत में है?', gu: 'શું ડિલિવરી એડ્રેસ ભારતમાં છે?' },
+  };
+  return questions[field]?.[language] ?? null;
+}
+
+function ensureCheckoutProgressQuestion(
+  reply: string,
+  state: ConversationState,
+): string {
+  const workflowAdvanced = state.currentTurnFacts.some((fact) => [
+    'add_cart_item', 'add_cart_items', 'update_cart_item',
+    'set_checkout_field', 'set_delivery_location',
+  ].includes(fact.toolName));
+  if (!workflowAdvanced || state.cart.length === 0 || /\?/u.test(reply)) return reply;
+  const question = nextCheckoutQuestion(state);
+  if (!question) return reply;
+  // Voice output is mechanically limited to two sentences. Keep one useful
+  // confirmation sentence plus the required next question, otherwise a
+  // two-sentence model preamble can push the checkout question past the cap.
+  const firstSentence = (reply.trim().match(/^[^.!?।]+[.!?।]?/u)?.[0] ?? reply).trim();
+  return `${firstSentence} ${question}`;
 }
 
 function formatWhatsAppReply(text: string): string {
@@ -231,6 +306,8 @@ export interface TurnOutcome {
   policyViolations: string[];
   productImage?: { url: string; caption: string };
   outboundActions?: OutboundAction[];
+  /** Voice transport closes only after this reply has fully played. */
+  callShouldEnd?: boolean;
 }
 
 /**
@@ -276,6 +353,24 @@ export async function processTurn(
     if (detected) state.currentLanguage = detected;
   }
 
+  if (channel === 'voice' && state.awaitingReviewReceiptConfirmation && confirmedReviewReceipt(userText)) {
+    state.awaitingReviewReceiptConfirmation = false;
+    const replyText = reviewReceivedPrompt(state.currentLanguage);
+    state.messages.push({ role: 'assistant', content: replyText });
+    return { state, replyText, policyViolations: [], outboundActions, callShouldEnd: true };
+  }
+
+  if (CART_SUMMARY_PATTERN.test(userText)) {
+    const cartTool = toolsByName.get_cart;
+    const cartResult = cartTool
+      ? await cartTool.handler({}, toolContext)
+      : { items: state.cart };
+    state.currentTurnFacts.push({ toolName: 'get_cart', resultJson: JSON.stringify(cartResult) });
+    const replyText = directCartReply(state);
+    state.messages.push({ role: 'assistant', content: replyText });
+    return { state, replyText, policyViolations: [], outboundActions };
+  }
+
   // The language instruction is folded into the PRIMARY system message,
   // rebuilt fresh every turn from state.currentLanguage — not pushed as a
   // separate system-role message into state.messages. Empirically, a
@@ -309,6 +404,15 @@ export async function processTurn(
   // Preload the live catalog deterministically for obvious product questions
   // so both the answer and the safety policy have same-turn grounding.
   const turnContextMessages: ConversationMessage[] = [];
+  turnContextMessages.push({
+    role: 'system',
+    content:
+      `DURABLE ORDER STATE (authoritative, persisted outside chat history): cart=${JSON.stringify(state.cart)}, ` +
+      `checkoutFields=${JSON.stringify(state.checkoutFields)}, ` +
+      `awaitingReviewReceiptConfirmation=${state.awaitingReviewReceiptConfirmation === true}. ` +
+      'Never describe a non-empty cart as empty. ' +
+      'Use get_cart for any cart question and use the checkout tools for changes.',
+  });
   const preloadedToolResults = new Map<string, unknown>();
   // WhatsApp is asynchronous and customers commonly answer with only a
   // product name or "yes". Fetching the small live catalog on every text turn
@@ -503,6 +607,7 @@ export async function processTurn(
             ? outboundActions.find((action) => action.type === 'checkout_review')?.url
             : undefined;
           const replyText = reviewFormReply(delivery.ok === true, state.currentLanguage, reviewUrl);
+          if (delivery.ok && channel === 'voice') state.awaitingReviewReceiptConfirmation = true;
           state.messages.push({ role: 'assistant', content: replyText });
           return { state, replyText, policyViolations: [], productImage, outboundActions };
         }
@@ -524,7 +629,8 @@ export async function processTurn(
       continue;
     }
 
-    const policyResult = enforceOutputPolicy(result.content, state.currentTurnFacts, callSessionId, state.currentLanguage);
+    const replyCandidate = ensureCheckoutProgressQuestion(result.content, state);
+    const policyResult = enforceOutputPolicy(replyCandidate, state.currentTurnFacts, callSessionId, state.currentLanguage);
 
     if (policyResult.action === 'regenerate' && regenerateAttempts < MAX_POLICY_REGENERATE_ATTEMPTS) {
       regenerateAttempts++;

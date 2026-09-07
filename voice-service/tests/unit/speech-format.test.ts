@@ -65,4 +65,11 @@ describe('normalizeIndicSpeechText', () => {
     expect(normalizeIndicSpeechText('We have one product.', 'en')).toBe('We have one product.');
     expect(normalizeIndicSpeechText('हमारे पास एक प्रोडक्ट है।', 'hi')).toBe('हमारे पास एक प्रोडक्ट है।');
   });
+
+  it('changes recurring male Hindi self-reference into the female voice persona', () => {
+    expect(normalizeIndicSpeechText('मैं मदद करता हूं और जानकारी लूंगा।', 'hi'))
+      .toBe('मैं मदद करती हूँ और जानकारी लूँगी।');
+    expect(normalizeIndicSpeechText('मैं यह कर दूंगा और फिर बताऊंगा।', 'hi'))
+      .toBe('मैं यह कर दूँगी और फिर बताऊँगी।');
+  });
 });
