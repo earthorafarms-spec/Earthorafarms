@@ -67,9 +67,24 @@ describe('processTurn persisted state', () => {
   it('returns the WhatsApp menu deterministically for a text greeting', async () => {
     const outcome = await processTurn('controller-test', createInitialState(), 'Hi', 'text');
 
-    expect(outcome.replyText).toBe(`Hello!\n\n${WHATSAPP_MENU}`);
+    expect(outcome.replyText).toBe(
+      `Hello! How can I assist you today? If you have any questions or need help with our products, feel free to ask!\n\n${WHATSAPP_MENU}`
+    );
     expect(chatMock).not.toHaveBeenCalled();
     expect(productRepositoryMocks.listActiveProducts).not.toHaveBeenCalled();
+  });
+
+  it('returns one complete welcome and menu again for a second text greeting', async () => {
+    const state = createInitialState();
+    await processTurn('controller-test', state, 'Hi', 'text');
+
+    const outcome = await processTurn('controller-test', state, 'Hi', 'text');
+
+    expect(outcome.replyText).toBe(
+      `Hello! How can I assist you today? If you have any questions or need help with our products, feel free to ask!\n\n${WHATSAPP_MENU}`
+    );
+    expect(outcome.replyText.split(WHATSAPP_MENU)).toHaveLength(2);
+    expect(chatMock).not.toHaveBeenCalled();
   });
 
   it('returns the WhatsApp menu for an explicit menu request in the current language', async () => {
@@ -80,16 +95,26 @@ describe('processTurn persisted state', () => {
     expect(productRepositoryMocks.listActiveProducts).not.toHaveBeenCalled();
   });
 
-  it('does not replace an active quantity flow with the menu for a greeting', async () => {
-    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'How many units would you like?' });
+  it('does not replace active quantity or checkout flows with the menu for a greeting', async () => {
+    chatMock
+      .mockResolvedValueOnce({ kind: 'message', content: 'How many units would you like?' })
+      .mockResolvedValueOnce({ kind: 'message', content: 'What is your full name?' });
     const state = createInitialState();
     state.messages.push({ role: 'assistant', content: 'You selected Alpha. How many units would you like?' });
 
-    const outcome = await processTurn('controller-test', state, 'Hi', 'text');
+    const quantityOutcome = await processTurn('controller-test', state, 'Hi', 'text');
 
-    expect(outcome.replyText).toBe('How many units would you like?');
-    expect(outcome.replyText).not.toContain(WHATSAPP_MENU);
-    expect(chatMock).toHaveBeenCalledTimes(1);
+    expect(quantityOutcome.replyText).toBe('How many units would you like?');
+    expect(quantityOutcome.replyText).not.toContain(WHATSAPP_MENU);
+
+    const checkoutState = createInitialState();
+    checkoutState.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 1, unitPrice: 90 }];
+    checkoutState.messages.push({ role: 'assistant', content: 'What is your full name?' });
+    const checkoutOutcome = await processTurn('checkout-controller-test', checkoutState, 'Hi', 'text');
+
+    expect(checkoutOutcome.replyText).toBe('What is your full name?');
+    expect(checkoutOutcome.replyText).not.toContain(WHATSAPP_MENU);
+    expect(chatMock).toHaveBeenCalledTimes(2);
   });
 
   it('leaves voice greeting handling in the LLM flow', async () => {

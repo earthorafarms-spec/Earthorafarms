@@ -149,7 +149,7 @@ const PRODUCT_NUMBER_PROMPTS: Record<ConversationState['currentLanguage'], strin
 };
 
 const WHATSAPP_MENU_GREETINGS: Record<ConversationState['currentLanguage'], string> = {
-  en: 'Hello!',
+  en: 'Hello! How can I assist you today? If you have any questions or need help with our products, feel free to ask!',
   hi: 'नमस्ते!',
   gu: 'નમસ્તે!',
 };
