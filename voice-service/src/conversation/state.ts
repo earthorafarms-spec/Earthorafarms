@@ -89,6 +89,11 @@ export interface ConversationState {
   };
   /** Voice only: the WhatsApp form was delivered and the caller must confirm receipt before hangup. */
   awaitingReviewReceiptConfirmation?: boolean;
+  /** Voice only: exact phone/PIN digits heard by STT, awaiting an explicit yes/no confirmation. */
+  pendingDigitConfirmation?: {
+    field: 'phone' | 'postalCode';
+    value: string;
+  };
   /**
    * Transport-level evidence for the most recent voice turns. This lives in
    * the existing JSONB conversation state, so delivery/cancellation latency

@@ -8,7 +8,7 @@ import { reviewReceivedPrompt, turnFailurePrompt } from './voice-copy.js';
 import { buildCheckoutTurnInstruction } from './checkout-context.js';
 import { chatWithRouting } from '../providers.js';
 import { allTools, toolsByName } from '../tools/index.js';
-import { isCheckoutReady } from '../tools/checkout.js';
+import { isCheckoutReady, normalizeSpokenDigitSequence, normalizeWhatsAppPhone } from '../tools/checkout.js';
 import { spokenProductNameMatches } from '../tools/products.js';
 import { getAllApprovedProductKnowledge } from '../tools/knowledge.js';
 import type { OutboundAction, ToolContext } from '../tools/types.js';
@@ -123,7 +123,51 @@ const MAX_TOOL_LOOP_ITERATIONS = 6;
 const MAX_POLICY_REGENERATE_ATTEMPTS = 1;
 
 export function shouldPrefetchProductCatalog(text: string): boolean {
-  return /\b(products?|available|availability|stock|sell|selling|catalog(?:ue)?|details?|info(?:rmation)?|tell me about|benefits?|uses?|dosage|dose|ingredients?|directions?|warnings?)\b|प्रोडक्ट|उत्पाद|अवेलेबल|उपलब्ध|स्टॉक|जानकारी|फायदे|लाभ|खुराक|सामग्री|इस्तेमाल|चेतावनी|પ્રોડક્ટ|ઉપલબ્ધ|સ્ટોક|માહિતી|ફાયદા|લાભ|માત્રા|ઘટકો|ઉપયોગ|ચેતવણી/iu.test(text);
+  return /\b(products?|available|availability|stock|sell|selling|catalog(?:ue)?|details?|info(?:rmation)?|tell me about|benefits?|uses?|dosage|dose|ingredients?|directions?|warnings?|pregnan(?:t|cy)|breastfeed(?:ing)?)\b|प्रोडक्ट|उत्पाद|अवेलेबल|उपलब्ध|स्टॉक|जानकारी|फायदे|लाभ|खुराक|सामग्री|इस्तेमाल|चेतावनी|गर्भवती|गर्भावस्था|स्तनपान|प्रेग्नेंट|પ્રોડક્ટ|ઉપલબ્ધ|સ્ટોક|માહિતી|ફાયદા|લાભ|માત્રા|ઘટકો|ઉપયોગ|ચેતવણી|ગર્ભવતી|ગર્ભાવસ્થા|સ્તનપાન|પ્રેગ્નન્ટ/iu.test(text);
+}
+
+const DIGIT_CONFIRM_YES = /\b(?:yes|yeah|yep|correct|right)\b|हाँ|हां|सही|હા|સાચું|બરાબર/iu;
+const DIGIT_CONFIRM_NO = /\b(?:no|nope|wrong|incorrect)\b|नहीं|नही|गलत|ના|નહીં|ખોટું/iu;
+const SPOKEN_DIGITS: Record<ConversationState['currentLanguage'], string[]> = {
+  en: ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'],
+  hi: ['शून्य', 'एक', 'दो', 'तीन', 'चार', 'पाँच', 'छह', 'सात', 'आठ', 'नौ'],
+  gu: ['શૂન્ય', 'એક', 'બે', 'ત્રણ', 'ચાર', 'પાંચ', 'છ', 'સાત', 'આઠ', 'નવ'],
+};
+
+function speakDigits(value: string, language: ConversationState['currentLanguage']): string {
+  return value.replace(/^\+91/, '').replace(/\D/g, '').split('')
+    .map((digit) => SPOKEN_DIGITS[language][Number(digit)]).join(', ');
+}
+
+function digitConfirmationPrompt(
+  field: 'phone' | 'postalCode',
+  value: string,
+  language: ConversationState['currentLanguage'],
+): string {
+  const digits = speakDigits(value, language);
+  if (language === 'hi') return `मैंने ${field === 'phone' ? 'WhatsApp नंबर' : 'पिन कोड'} ${digits} सुना है। क्या यह सही है?`;
+  if (language === 'gu') return `મેં તમારો ${field === 'phone' ? 'WhatsApp નંબર' : 'પિન કોડ'} ${digits} સાંભળ્યો છે. શું આ સાચું છે?`;
+  return `I heard your ${field === 'phone' ? 'WhatsApp number' : 'PIN code'} as ${digits}. Is that correct?`;
+}
+
+function invalidDigitPrompt(field: 'phone' | 'postalCode', language: ConversationState['currentLanguage']): string {
+  const length = field === 'phone' ? 10 : 6;
+  if (language === 'hi') return `यह ${field === 'phone' ? 'फोन नंबर' : 'पिन कोड'} पूरा नहीं है। कृपया सभी ${length === 10 ? 'दस' : 'छह'} अंक एक-एक करके दोबारा बोलें।`;
+  if (language === 'gu') return `આ ${field === 'phone' ? 'ફોન નંબર' : 'પિન કોડ'} પૂરું નથી. કૃપા કરીને બધા ${length === 10 ? 'દસ' : 'છ'} અંક એક પછી એક ફરી બોલો.`;
+  return `That ${field === 'phone' ? 'phone number' : 'PIN code'} is incomplete. Please repeat all ${length === 10 ? 'ten' : 'six'} digits one at a time.`;
+}
+
+function confirmationRequiredPrompt(language: ConversationState['currentLanguage']): string {
+  if (language === 'hi') return 'कृपया हाँ या नहीं में बताइए कि अंक सही हैं।';
+  if (language === 'gu') return 'અંક સાચા છે કે નહીં તે હા અથવા ના કહીને જણાવો.';
+  return 'Please say yes or no to confirm whether those digits are correct.';
+}
+
+function savedDigitReply(state: ConversationState): string {
+  const next = nextCheckoutQuestion(state);
+  if (state.currentLanguage === 'hi') return `धन्यवाद, अंक सेव हो गए हैं। ${next ?? ''}`.trim();
+  if (state.currentLanguage === 'gu') return `આભાર, અંક સેવ થઈ ગયા છે. ${next ?? ''}`.trim();
+  return `Thank you, I saved those digits. ${next ?? ''}`.trim();
 }
 
 export function shouldAnswerCatalogDirectly(text: string): boolean {
@@ -131,7 +175,7 @@ export function shouldAnswerCatalogDirectly(text: string): boolean {
   // Specific price, benefit, usage, and purchase questions still require
   // the normal tool/LLM loop. A plain "what do you sell?" does not: the live
   // list_products result is already the complete, grounded answer.
-  return !/\b(price|cost|how much|details?|info(?:rmation)?|tell me about|benefits?|uses?|dosage|dose|ingredients?|directions?|warnings?|buy|order|add|want|need)\b|जानकारी|कीमत|दाम|फायदे|लाभ|खुराक|सामग्री|इस्तेमाल|खरीद|ऑर्डर|જાણકારી|કિંમત|ફાયદા|ઉપયોગ|ખરીદ|ઓર્ડર/iu.test(text);
+  return !/\b(price|cost|how much|details?|info(?:rmation)?|tell me about|benefits?|uses?|dosage|dose|ingredients?|directions?|warnings?|pregnan(?:t|cy)|breastfeed(?:ing)?|buy|order|add|want|need)\b|जानकारी|कीमत|दाम|फायदे|लाभ|खुराक|सामग्री|इस्तेमाल|गर्भवती|गर्भावस्था|स्तनपान|प्रेग्नेंट|खरीद|ऑर्डर|જાણકારી|કિંમત|ફાયદા|ઉપયોગ|ગર્ભવતી|ગર્ભાવસ્થા|સ્તનપાન|પ્રેગ્નન્ટ|ખરીદ|ઓર્ડર/iu.test(text);
 }
 
 interface LiveCatalogProduct {
@@ -140,6 +184,35 @@ interface LiveCatalogProduct {
   price?: number;
   currency?: string;
   stockLabel?: string;
+}
+
+const MATERNAL_SAFETY_PATTERN =
+  /\b(?:pregnan(?:t|cy)|breastfeed(?:ing)?|nursing mother)\b|गर्भवती|गर्भावस्था|स्तनपान|प्रेग्नेंट|પ્રેગ્નન્ટ|ગર્ભવતી|ગર્ભાવસ્થા|સ્તનપાન/iu;
+
+function maternalSafetyReply(
+  knowledge: unknown,
+  productName: string,
+  language: ConversationState['currentLanguage'],
+): string {
+  const entries = knowledge && typeof knowledge === 'object' && Array.isArray((knowledge as { entries?: unknown }).entries)
+    ? (knowledge as { entries: { category?: unknown; content?: unknown }[] }).entries
+    : [];
+  const approvedWarning = entries.find((entry) =>
+    entry?.category === 'warnings' && typeof entry.content === 'string' && MATERNAL_SAFETY_PATTERN.test(entry.content));
+
+  if (!approvedWarning) {
+    if (language === 'hi') return `${productName} के लिए गर्भावस्था या स्तनपान से जुड़ी कन्फर्म जानकारी अभी उपलब्ध नहीं है। इसे लेने से पहले अपने डॉक्टर से सलाह लें।`;
+    if (language === 'gu') return `${productName} માટે ગર્ભાવસ્થા અથવા સ્તનપાન વિશે કન્ફર્મ માહિતી ઉપલબ્ધ નથી. તેને લેતા પહેલાં તમારા ડૉક્ટરની સલાહ લો.`;
+    return `I do not have approved pregnancy or breastfeeding guidance for ${productName}. Please consult your doctor before taking it.`;
+  }
+
+  if (language === 'hi') {
+    return `गर्भावस्था या स्तनपान के दौरान ${productName} लेने से पहले डॉक्टर से सलाह लें। अगर कोई स्वास्थ्य समस्या है या नियमित दवाइयाँ चल रही हैं, तो भी डॉक्टर से पूछें।`;
+  }
+  if (language === 'gu') {
+    return `ગર્ભાવસ્થા અથવા સ્તનપાન દરમિયાન ${productName} લેતા પહેલાં ડૉક્ટરની સલાહ લો. કોઈ સ્વાસ્થ્ય સમસ્યા હોય અથવા નિયમિત દવા લેતા હો, તો પણ ડૉક્ટરને પૂછો.`;
+  }
+  return `Please consult a doctor before taking ${productName} during pregnancy or breastfeeding. Also consult them if you have a health problem or take regular medicines.`;
 }
 
 const PRODUCT_NUMBER_PROMPTS: Record<ConversationState['currentLanguage'], string> = {
@@ -208,7 +281,7 @@ function liveCatalogProducts(catalog: unknown): LiveCatalogProduct[] {
 }
 
 function isProductInformationFollowUp(text: string): boolean {
-  return /\b(product|details?|info(?:rmation)?|tell me|what (?:do|does|is)|benefits?|uses?|dosage|dose|ingredients?|directions?|warnings?|price|cost|stock|buy|order|it|that|yes|yeah|sure)\b|प्रोडक्ट|जानकारी|फायदे|खुराक|सामग्री|कीमत|दाम|हाँ|હા|પ્રોડક્ટ|માહિતી|ફાયદા|માત્રા|ઘટકો|કિંમત/iu.test(text);
+  return /\b(product|details?|info(?:rmation)?|tell me|what (?:do|does|is)|benefits?|uses?|dosage|dose|ingredients?|directions?|warnings?|pregnan(?:t|cy)|breastfeed(?:ing)?|price|cost|stock|buy|order|it|that|yes|yeah|sure)\b|प्रोडक्ट|जानकारी|फायदे|खुराक|सामग्री|कीमत|दाम|गर्भवती|गर्भावस्था|स्तनपान|प्रेग्नेंट|हाँ|હા|પ્રોડક્ટ|માહિતી|ફાયદા|માત્રા|ઘટકો|ગર્ભવતી|ગર્ભાવસ્થા|સ્તનપાન|પ્રેગ્નન્ટ|કિંમત/iu.test(text);
 }
 
 function resolveProductForTurn(
@@ -387,6 +460,50 @@ export async function processTurn(
     return { state, replyText, policyViolations: [], outboundActions, callShouldEnd: true };
   }
 
+  if (channel === 'voice' && state.pendingDigitConfirmation) {
+    const pending = state.pendingDigitConfirmation;
+    if (DIGIT_CONFIRM_NO.test(userText)) {
+      delete state.pendingDigitConfirmation;
+      const replyText = invalidDigitPrompt(pending.field, state.currentLanguage);
+      state.messages.push({ role: 'assistant', content: replyText });
+      return { state, replyText, policyViolations: [], outboundActions };
+    }
+    if (!DIGIT_CONFIRM_YES.test(userText)) {
+      const replyText = confirmationRequiredPrompt(state.currentLanguage);
+      state.messages.push({ role: 'assistant', content: replyText });
+      return { state, replyText, policyViolations: [], outboundActions };
+    }
+    const toolResult = await toolsByName.set_checkout_field.handler(
+      { field: pending.field, value: pending.value }, toolContext);
+    state.currentTurnFacts.push({ toolName: 'set_checkout_field', resultJson: JSON.stringify(toolResult) });
+    if ((toolResult as { ok?: boolean }).ok) delete state.pendingDigitConfirmation;
+    const replyText = (toolResult as { ok?: boolean }).ok
+      ? savedDigitReply(state)
+      : invalidDigitPrompt(pending.field, state.currentLanguage);
+    state.messages.push({ role: 'assistant', content: replyText });
+    return { state, replyText, policyViolations: [], outboundActions };
+  }
+
+  if (channel === 'voice' && state.cart.length > 0) {
+    const expectedField = CHECKOUT_FIELDS.find((key) => !state.checkoutFields[key]);
+    if (expectedField === 'phone' || expectedField === 'postalCode') {
+      const digits = normalizeSpokenDigitSequence(userText);
+      if (digits) {
+        const storedValue = expectedField === 'phone' ? normalizeWhatsAppPhone(digits) : digits;
+        const valid = expectedField === 'phone' ? Boolean(storedValue) : /^\d{6}$/.test(digits);
+        if (!valid || !storedValue) {
+          const replyText = invalidDigitPrompt(expectedField, state.currentLanguage);
+          state.messages.push({ role: 'assistant', content: replyText });
+          return { state, replyText, policyViolations: [], outboundActions };
+        }
+        state.pendingDigitConfirmation = { field: expectedField, value: storedValue };
+        const replyText = digitConfirmationPrompt(expectedField, storedValue, state.currentLanguage);
+        state.messages.push({ role: 'assistant', content: replyText });
+        return { state, replyText, policyViolations: [], outboundActions };
+      }
+    }
+  }
+
   if (CART_SUMMARY_PATTERN.test(userText)) {
     const cartTool = toolsByName.get_cart;
     const cartResult = cartTool
@@ -522,6 +639,14 @@ export async function processTurn(
           const knowledgeJson = JSON.stringify(knowledge);
           state.currentTurnFacts.push({ toolName: 'get_product_details', resultJson: detailsJson });
           state.currentTurnFacts.push({ toolName: 'get_product_knowledge', resultJson: knowledgeJson });
+          if (MATERNAL_SAFETY_PATTERN.test(userText)) {
+            const groundedReply = maternalSafetyReply(knowledge, selectedProduct.name, state.currentLanguage);
+            const finalText = channel === 'voice'
+              ? limitSpokenReply(normalizeIndicSpeechText(toSpokenText(groundedReply), state.currentLanguage))
+              : groundedReply;
+            state.messages.push({ role: 'assistant', content: finalText });
+            return { state, replyText: finalText, policyViolations: [], productImage, outboundActions };
+          }
           if (details && typeof details === 'object') {
             const liveDetails = details as { found?: boolean; imageUrl?: unknown; name?: unknown };
             if (liveDetails.found && typeof liveDetails.imageUrl === 'string' && /^https:\/\//i.test(liveDetails.imageUrl)) {

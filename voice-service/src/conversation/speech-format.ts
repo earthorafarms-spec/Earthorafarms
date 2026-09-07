@@ -9,6 +9,18 @@ import type { SupportedLanguage } from './language.js';
 
 export const MAX_SPOKEN_REPLY_CHARS = 240;
 
+const DIGIT_WORDS: Record<'hi' | 'gu', string[]> = {
+  hi: ['शून्य', 'एक', 'दो', 'तीन', 'चार', 'पाँच', 'छह', 'सात', 'आठ', 'नौ'],
+  gu: ['શૂન્ય', 'એક', 'બે', 'ત્રણ', 'ચાર', 'પાંચ', 'છ', 'સાત', 'આઠ', 'નવ'],
+};
+
+function expandLongDigitSequences(text: string, language: 'hi' | 'gu'): string {
+  const asciiDigits = text.normalize('NFKC').replace(/[०-९૦-૯]/gu, (digit) =>
+    String(digit.charCodeAt(0) - (digit.charCodeAt(0) >= 0x0ae6 ? 0x0ae6 : 0x0966)));
+  return asciiDigits.replace(/\d(?:[\s,-]*\d){5,}/gu, (sequence) =>
+    sequence.replace(/\D/g, '').split('').map((digit) => DIGIT_WORDS[language][Number(digit)]).join(', '));
+}
+
 /**
  * Small deterministic corrections for recurring model artifacts observed in
  * real Indic calls. This is intentionally narrow: it fixes known grammar
@@ -16,7 +28,7 @@ export const MAX_SPOKEN_REPLY_CHARS = 240;
  */
 export function normalizeIndicSpeechText(text: string, language: SupportedLanguage): string {
   if (language === 'hi') {
-    return text
+    return expandLongDigitSequences(text, language)
       .replace(/करता\s+हूं/gu, 'करती हूँ')
       .replace(/करता\s+हूँ/gu, 'करती हूँ')
       .replace(/कर\s+दूँगा/gu, 'कर दूँगी')
@@ -29,7 +41,7 @@ export function normalizeIndicSpeechText(text: string, language: SupportedLangua
       .replace(/लूंगा/gu, 'लूँगी');
   }
   if (language === 'gu') {
-    return text
+    return expandLongDigitSequences(text, language)
       .replace(/અમારા પાસે/gu, 'અમારી પાસે')
       .replace(/તમારા પાસે/gu, 'તમારી પાસે')
       .replace(/આ ટેબ્લેટ્સ એ (?=[઀-૿A-Za-z])/gu, 'આ ટેબ્લેટ્સ ');

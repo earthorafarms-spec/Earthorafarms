@@ -20,17 +20,17 @@ const BYTES_PER_SAMPLE = 2;
 // Telephone speech is substantially quieter than browser microphone PCM.
 // Keep the default conservative but configurable per deployment, and retain
 // a short pre-roll so leading consonants below the gate are not clipped.
-const DEFAULT_SPEECH_RMS_THRESHOLD = 600;
+const DEFAULT_SPEECH_RMS_THRESHOLD = 700;
 // Keep interruption confirmation stricter than listening-window answers.
-// A telephone "yes"/"two" can have less than 200ms above the energy gate.
-const MIN_SPEECH_MS_BEFORE_FLUSH = 200;
+// A telephone "yes"/"two" can be brief while the agent is listening, but
+// interrupting active playback requires sustained energy so clicks, echo and
+// background sounds do not cut the agent off.
+const MIN_SPEECH_MS_BEFORE_FLUSH = 450;
 const SHORT_ANSWER_MIN_SPEECH_MS = 80;
-// 700ms of continuous silence after speech → flush. Natural intra-sentence
-// pauses (breath, hesitation between clauses) are typically 200-500ms, so
-// 700ms avoids splitting one thought into two turns while still feeling
-// responsive after the user actually finishes speaking. 300ms was too
-// aggressive — it was flushing mid-sentence pauses as if the turn had ended.
-const SILENCE_MS_TO_FLUSH = 700;
+// Give callers enough room for natural pauses and grouped phone/PIN digits.
+// The previous 700ms boundary split longer answers and let the agent begin a
+// reply while the caller was still continuing the same sentence.
+const SILENCE_MS_TO_FLUSH = 1_100;
 const MAX_UTTERANCE_MS = 20_000; // safety cap — force-flush a runaway utterance rather than buffer forever
 const PRE_ROLL_MS = 200;
 
@@ -108,7 +108,7 @@ export class AudioAccumulator {
       // Do not interrupt bot playback on the first loud packet. Telephone
       // clicks and brief line noise were previously treated as barge-in and
       // could clear a perfectly valid response halfway through. Confirm the
-      // stronger 200ms barge-in threshold even when listening accepts short answers.
+      // stronger 450ms barge-in threshold even when listening accepts short answers.
       if (!this.speechStartNotified && this.speechMs >= MIN_SPEECH_MS_BEFORE_FLUSH) {
         this.speechStartNotified = true;
         this.options.onSpeechStart?.();

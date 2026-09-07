@@ -39,4 +39,24 @@ describe('normalizeVoiceTranscript', () => {
     expect(normalizeVoiceTranscript({ text: '...?!' }))
       .toEqual({ accepted: false, reason: 'no_speech_content' });
   });
+
+  it('drops transcription-prompt leakage caused by silence or background noise', () => {
+    expect(normalizeVoiceTranscript({
+      text: 'An Earthora Farms ordering call in English, Hindi or Gujarati. Transcribe only audible speech, without translation.',
+      detectedLanguageCode: 'en-IN',
+    })).toEqual({ accepted: false, reason: 'prompt_leakage' });
+    expect(normalizeVoiceTranscript({
+      text: 'Earthora Farms का ऑर्डर कॉल। हिंदी, English या ગુજરાતી में कही गई बात ही लिखें। चुप्पी में शब्द न जोड़ें।',
+      detectedLanguageCode: 'hi-IN',
+    })).toEqual({ accepted: false, reason: 'prompt_leakage' });
+  });
+
+  it('quietly drops filler-only noise while preserving real short replies', () => {
+    expect(normalizeVoiceTranscript({ text: 'Um...' }))
+      .toEqual({ accepted: false, reason: 'filler_only' });
+    expect(normalizeVoiceTranscript({ text: 'Yes.' }))
+      .toEqual({ accepted: true, text: 'Yes.' });
+    expect(normalizeVoiceTranscript({ text: 'India.' }))
+      .toEqual({ accepted: true, text: 'India.' });
+  });
 });

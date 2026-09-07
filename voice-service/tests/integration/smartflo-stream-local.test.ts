@@ -79,10 +79,10 @@ function sendStart(ws: WebSocket): void {
 }
 
 function sendUtterance(ws: WebSocket): void {
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 5; i++) {
     ws.send(JSON.stringify({ event: 'media', media: { payload: mulawFrame(4_000).toString('base64') } }));
   }
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < 11; i++) {
     ws.send(JSON.stringify({ event: 'media', media: { payload: Buffer.alloc(800, 0xff).toString('base64') } }));
   }
 }
@@ -254,6 +254,24 @@ describe('Smartflo WebSocket local integration', () => {
     expect(mocks.ttsMulaw).toHaveBeenCalledWith("Sorry, I didn't catch that clearly. Please say it again.", 'en');
   });
 
+  it('quietly ignores transcription-prompt leakage caused by background noise', async () => {
+    mocks.stt.mockResolvedValue({
+      text: 'An Earthora Farms ordering call in English, Hindi or Gujarati. Transcribe only audible speech.',
+      detectedLanguageCode: 'en-IN',
+    });
+    const { ws, collector } = await connect();
+    sendStart(ws);
+    await collector.waitFor((messages) => messages.filter((m) => m.event === 'mark').length === 1);
+    acknowledgeLatestMark(ws, collector);
+    sendUtterance(ws);
+    await collector.waitFor(() => Boolean(session.voiceTurnMetrics?.some((metric) => metric.reason === 'prompt_leakage')));
+
+    expect(mocks.processMessage).not.toHaveBeenCalled();
+    expect(mocks.ttsMulaw).toHaveBeenCalledTimes(1);
+    expect(session.voiceTurnMetrics?.find((metric) => metric.reason === 'prompt_leakage'))
+      .toMatchObject({ status: 'transcript_rejected', responseSent: false });
+  });
+
   it.each(['yes', '2', 'Ahmedabad, Gujarat'])('passes a short listening-window answer (%s) through the phone pipeline', async (text) => {
     mocks.stt.mockResolvedValue({ text });
     const { ws, collector } = await connect();
@@ -261,7 +279,7 @@ describe('Smartflo WebSocket local integration', () => {
     await collector.waitFor((messages) => messages.some((m) => m.event === 'mark'));
     acknowledgeLatestMark(ws, collector);
     ws.send(JSON.stringify({ event: 'media', media: { payload: mulawFrame(4_000).toString('base64') } }));
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 11; i++) {
       ws.send(JSON.stringify({ event: 'media', media: { payload: Buffer.alloc(800, 0xff).toString('base64') } }));
     }
     await collector.waitFor(() => mocks.processMessage.mock.calls.length === 1);
@@ -322,7 +340,7 @@ describe('Smartflo WebSocket local integration', () => {
     await collector.waitFor(() => mocks.ttsMulaw.mock.calls.length === 1);
 
     ws.send(JSON.stringify({ event: 'media', media: { payload: mulawFrame(4_000).toString('base64') } }));
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 11; i++) {
       ws.send(JSON.stringify({ event: 'media', media: { payload: Buffer.alloc(800, 0xff).toString('base64') } }));
     }
     await new Promise((resolve) => setTimeout(resolve, 20));
@@ -343,7 +361,7 @@ describe('Smartflo WebSocket local integration', () => {
       const message = JSON.parse(raw.toString());
       if (message.event === 'media' && !sentSpeech) {
         sentSpeech = true;
-        for (let i = 0; i < 2; i++) {
+        for (let i = 0; i < 5; i++) {
           ws.send(JSON.stringify({ event: 'media', media: { payload: mulawFrame(4_000).toString('base64') } }));
         }
       }
@@ -412,7 +430,7 @@ describe('Smartflo WebSocket local integration', () => {
     await collector.waitFor((messages) => messages.filter((m) => m.event === 'mark').length === 2);
   });
 
-  it('queues caller speech during thinking without discarding the pending answer', async () => {
+  it('supersedes a pending answer when the caller continues speaking', async () => {
     mocks.stt
       .mockResolvedValueOnce({ text: 'Tell me about Alpha', detectedLanguageCode: 'en-IN', languageProbability: 0.99 })
       .mockResolvedValueOnce({ text: 'Hello', detectedLanguageCode: 'en-IN', languageProbability: 0.99 });
@@ -432,8 +450,11 @@ describe('Smartflo WebSocket local integration', () => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     resolveFirstTurn({ replyText: 'Alpha is available.', language: 'en', callShouldEnd: false, policyViolations: [] });
 
-    await collector.waitFor((messages) => messages.some((m) => m.event === 'mark' && m.mark?.name?.startsWith('reply-1-')));
+    await collector.waitFor(() => mocks.processMessage.mock.calls.length === 2);
+    await collector.waitFor((messages) => messages.some((m) => m.event === 'mark' && m.mark?.name?.startsWith('reply-2-')));
     expect(mocks.processMessage.mock.calls[0][1]).toBe('Tell me about Alpha');
+    expect(mocks.processMessage.mock.calls[1][1]).toBe('Hello');
+    expect(collector.messages.some((m) => m.event === 'mark' && m.mark?.name?.startsWith('reply-1-'))).toBe(false);
     expect(collector.messages.some((m) => m.event === 'clear')).toBe(false);
   });
 });

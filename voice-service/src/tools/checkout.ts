@@ -13,9 +13,28 @@ type AllowedField = (typeof ALLOWED_FIELDS)[number];
 
 const REQUIRED_FIELDS: AllowedField[] = ['name', 'email', 'phone', 'address', 'city', 'state', 'postalCode', 'country'];
 
-export function normalizeWhatsAppPhone(raw: string): string | null {
-  const normalized = raw.normalize('NFKC').replace(/[०-९૦-૯]/gu, (digit) =>
+const SPOKEN_DIGITS: Record<string, string> = {
+  zero: '0', oh: '0', o: '0', one: '1', two: '2', three: '3', four: '4', five: '5', six: '6', seven: '7', eight: '8', nine: '9',
+  'शून्य': '0', 'जीरो': '0', 'ज़ीरो': '0', 'एक': '1', 'दो': '2', 'तीन': '3', 'चार': '4', 'पांच': '5', 'पाँच': '5', 'छह': '6', 'छः': '6', 'सात': '7', 'आठ': '8', 'नौ': '9',
+  'શૂન્ય': '0', 'ઝીરો': '0', 'એક': '1', 'બે': '2', 'ત્રણ': '3', 'ચાર': '4', 'પાંચ': '5', 'છ': '6', 'સાત': '7', 'આઠ': '8', 'નવ': '9',
+};
+
+function normalizeNativeDigits(raw: string): string {
+  return raw.normalize('NFKC').replace(/[०-९૦-૯]/gu, (digit) =>
     String(digit.charCodeAt(0) - (digit.charCodeAt(0) >= 0x0ae6 ? 0x0ae6 : 0x0966)));
+}
+
+/** Converts a caller/LLM-provided digit-by-digit sequence without guessing a missing digit. */
+export function normalizeSpokenDigitSequence(raw: string): string | null {
+  const normalized = normalizeNativeDigits(raw).toLowerCase().trim();
+  if (/^[\d\s().,+-]+$/.test(normalized)) return normalized.replace(/\D/g, '');
+  const tokens = normalized.match(/[a-z]+|[\u0900-\u097f]+|[\u0a80-\u0aff]+|\d/gu) ?? [];
+  const digits = tokens.map((token) => /^\d$/.test(token) ? token : SPOKEN_DIGITS[token]).filter(Boolean);
+  return digits.length > 0 ? digits.join('') : null;
+}
+
+export function normalizeWhatsAppPhone(raw: string): string | null {
+  const normalized = normalizeNativeDigits(raw);
   if (!/^[+\d\s().-]+$/.test(normalized.trim())) return null;
   const digits = normalized.replace(/\D/g, '');
   if (/^[6-9]\d{9}$/.test(digits)) return `+91${digits}`;
@@ -102,8 +121,18 @@ function normalizeAndValidate(field: AllowedField, rawValue: unknown): { value: 
   }
   const value = String(rawValue ?? '').trim();
   if (field === 'phone') {
-    const phone = normalizeWhatsAppPhone(value);
+    const spokenDigits = normalizeSpokenDigitSequence(value);
+    const phone = normalizeWhatsAppPhone(spokenDigits ?? value);
     return phone ? { value: phone } : { value, error: 'Please provide a valid WhatsApp mobile number with country code if outside India.' };
+  }
+  if (field === 'postalCode') {
+    const postalCode = normalizeSpokenDigitSequence(value);
+    return postalCode && /^\d{6}$/.test(postalCode)
+      ? { value: postalCode }
+      : { value, error: 'Please provide an Indian PIN code with exactly 6 digits.' };
+  }
+  if (field === 'name' && /\b(?:bottles?|packs?|tablets?|order|want|need)\b|बॉटल|बोतल|बोटल|टैबलेट|ऑर्डर|चाहिए|બોટલ|ટેબ્લેટ|ઓર્ડર|જોઈએ/iu.test(value)) {
+    return { value, error: 'That sounds like an order request, not the customer name. Please ask for the full name again.' };
   }
   if (['name', 'address', 'city', 'state'].includes(field) && /^(?:yes|no|ok(?:ay)?|hello|hi|हाँ|हां|नहीं|હા|ના)[.!?]*$/iu.test(value)) {
     return { value, error: 'That is an acknowledgement, not the requested checkout detail. Use the preceding question to interpret it.' };

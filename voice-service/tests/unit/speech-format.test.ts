@@ -72,4 +72,11 @@ describe('normalizeIndicSpeechText', () => {
     expect(normalizeIndicSpeechText('मैं यह कर दूंगा और फिर बताऊंगा।', 'hi'))
       .toBe('मैं यह कर दूँगी और फिर बताऊँगी।');
   });
+
+  it('speaks phone numbers and PIN codes digit by digit in the active Indic language', () => {
+    expect(normalizeIndicSpeechText('आपका नंबर 7984-7694-72 है।', 'hi'))
+      .toBe('आपका नंबर सात, नौ, आठ, चार, सात, छह, नौ, चार, सात, दो है।');
+    expect(normalizeIndicSpeechText('તમારો પિન ૩૮૪૪૭૦ છે.', 'gu'))
+      .toBe('તમારો પિન ત્રણ, આઠ, ચાર, ચાર, સાત, શૂન્ય છે.');
+  });
 });

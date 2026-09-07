@@ -182,6 +182,26 @@ describe('processTurn persisted state', () => {
     expect(messages.some((message) => message.content.includes('LIVE ADMIN-APPROVED KNOWLEDGE'))).toBe(true);
   });
 
+  it('answers pregnancy questions directly from the live approved warning', async () => {
+    knowledgeRepositoryMocks.getAllApprovedKnowledge.mockResolvedValue([{
+      id: 'warning-1', productId: 'alpha-id', category: 'warnings', question: null,
+      content: 'Consult a doctor before using Alpha during pregnancy or breastfeeding, if you have health problems, or take regular medicines.',
+      version: 1, locale: 'en-IN',
+    }]);
+    const state = createInitialState();
+    state.currentLanguage = 'hi';
+    state.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 }];
+
+    const outcome = await processTurn('controller-test', state, 'क्या प्रेग्नेंट महिलाएं इसे ले सकती हैं?');
+
+    expect(outcome.replyText).toContain('डॉक्टर से सलाह लें');
+    expect(outcome.replyText).toContain('गर्भावस्था');
+    expect(outcome.state.currentTurnFacts.map((fact) => fact.toolName)).toEqual([
+      'list_products', 'get_product_details', 'get_product_knowledge',
+    ]);
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
   it('turns menu option 1 into a numbered live product list', async () => {
     productRepositoryMocks.listActiveProducts.mockResolvedValue([
       {
@@ -281,6 +301,47 @@ describe('processTurn persisted state', () => {
 
     expect(outcome.state.cart[0]).toMatchObject({ productId: 'alpha-id', quantity: 3 });
     expect(outcome.replyText).toContain('What is your full name?');
+  });
+
+  it('requires exact ten-digit phone confirmation before saving it', async () => {
+    const state = createInitialState();
+    state.currentLanguage = 'hi';
+    state.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 }];
+    state.checkoutFields = { name: 'Test User', email: 'test@example.com' };
+
+    const incomplete = await processTurn('controller-test', state, 'सात नौ चार सात छह नौ चार सात दो');
+    expect(incomplete.replyText).toContain('पूरा नहीं');
+    expect(incomplete.state.checkoutFields.phone).toBeUndefined();
+
+    const heard = await processTurn('controller-test', incomplete.state, 'सात नौ आठ चार सात छह नौ चार सात दो');
+    expect(heard.replyText).toContain('क्या यह सही है?');
+    expect(heard.state.pendingDigitConfirmation).toEqual({ field: 'phone', value: '+917984769472' });
+    expect(heard.state.checkoutFields.phone).toBeUndefined();
+
+    const confirmed = await processTurn('controller-test', heard.state, 'हाँ');
+    expect(confirmed.state.pendingDigitConfirmation).toBeUndefined();
+    expect(confirmed.state.checkoutFields.phone).toBe('+917984769472');
+    expect(confirmed.replyText).toContain('स्ट्रीट एड्रेस');
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it('requires exactly six confirmed PIN-code digits', async () => {
+    const state = createInitialState();
+    state.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 1, unitPrice: 90 }];
+    state.checkoutFields = {
+      name: 'Test User', email: 'test@example.com', phone: '+917984769472',
+      address: '1 Test Road', city: 'Ahmedabad', state: 'Gujarat',
+    };
+
+    const incomplete = await processTurn('controller-test', state, '38447');
+    expect(incomplete.replyText).toContain('six digits');
+    expect(incomplete.state.checkoutFields.postalCode).toBeUndefined();
+
+    const heard = await processTurn('controller-test', incomplete.state, '384470');
+    expect(heard.state.pendingDigitConfirmation).toEqual({ field: 'postalCode', value: '384470' });
+    const confirmed = await processTurn('controller-test', heard.state, 'yes');
+    expect(confirmed.state.checkoutFields.postalCode).toBe('384470');
+    expect(confirmed.replyText).toContain('delivery address in India');
   });
 
   it('keeps detailed product questions in the model and tool loop', async () => {

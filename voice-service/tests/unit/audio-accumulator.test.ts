@@ -24,7 +24,7 @@ describe('AudioAccumulator', () => {
     const onSpeechStart = vi.fn();
     const acc = new AudioAccumulator(onReady, { allowShortUtterances: () => true, onSpeechStart });
     acc.push(chunk(ms, true));
-    acc.push(chunk(700, false));
+    acc.push(chunk(1_100, false));
     expect(onReady).toHaveBeenCalledTimes(1);
     expect(onSpeechStart).not.toHaveBeenCalled();
   });
@@ -33,7 +33,7 @@ describe('AudioAccumulator', () => {
     const onReady = vi.fn();
     const acc = new AudioAccumulator(onReady, { allowShortUtterances: () => true });
     acc.push(chunk(20, true));
-    acc.push(chunk(700, false));
+    acc.push(chunk(1_100, false));
     expect(onReady).not.toHaveBeenCalled();
   });
 
@@ -44,7 +44,7 @@ describe('AudioAccumulator', () => {
     acc.push(chunk(500, false));
     expect(onReady).not.toHaveBeenCalled();
     acc.push(chunk(300, true));
-    acc.push(chunk(700, false));
+    acc.push(chunk(1_100, false));
     expect(onReady).toHaveBeenCalledTimes(1);
   });
   it('does not flush on silence alone (no speech ever started)', () => {
@@ -58,12 +58,12 @@ describe('AudioAccumulator', () => {
     const onReady = vi.fn();
     const acc = new AudioAccumulator(onReady);
 
-    // 500ms of speech (> MIN_SPEECH_MS_BEFORE_FLUSH=300ms)
+    // 500ms of speech (> MIN_SPEECH_MS_BEFORE_FLUSH=450ms)
     for (let i = 0; i < 5; i++) acc.push(chunk(100, true));
     expect(onReady).not.toHaveBeenCalled(); // no trailing silence yet
 
-    // 700ms of silence (> SILENCE_MS_TO_FLUSH=650ms) should trigger the flush
-    for (let i = 0; i < 7; i++) acc.push(chunk(100, false));
+    // 1100ms of silence reaches the production trailing-silence boundary.
+    for (let i = 0; i < 11; i++) acc.push(chunk(100, false));
     expect(onReady).toHaveBeenCalledTimes(1);
 
     const flushedBuffer = onReady.mock.calls[0][0] as Buffer;
@@ -73,8 +73,8 @@ describe('AudioAccumulator', () => {
   it('accepts quiet telephone speech above the production gate', () => {
     const onReady = vi.fn();
     const acc = new AudioAccumulator(onReady);
-    for (let i = 0; i < 4; i++) acc.push(amplitudeChunk(100, 700));
-    for (let i = 0; i < 7; i++) acc.push(chunk(100, false));
+    for (let i = 0; i < 5; i++) acc.push(amplitudeChunk(100, 700));
+    for (let i = 0; i < 11; i++) acc.push(chunk(100, false));
     expect(onReady).toHaveBeenCalledTimes(1);
   });
 
@@ -83,20 +83,20 @@ describe('AudioAccumulator', () => {
     const acc = new AudioAccumulator(onReady);
     acc.push(amplitudeChunk(100, 300));
     acc.push(amplitudeChunk(100, 300));
-    for (let i = 0; i < 3; i++) acc.push(amplitudeChunk(100, 800));
-    for (let i = 0; i < 7; i++) acc.push(chunk(100, false));
+    for (let i = 0; i < 5; i++) acc.push(amplitudeChunk(100, 800));
+    for (let i = 0; i < 11; i++) acc.push(chunk(100, false));
 
     const flushed = onReady.mock.calls[0][0] as Buffer;
     expect(Math.abs(flushed.readInt16LE(0))).toBe(300);
-    expect(flushed.length).toBeGreaterThanOrEqual(1_200 * 32);
+    expect(flushed.length).toBeGreaterThanOrEqual(1_600 * 32);
   });
 
   it('fires onSpeechStart once per utterance for barge-in handling', () => {
     const onReady = vi.fn();
     const onSpeechStart = vi.fn();
     const acc = new AudioAccumulator(onReady, { onSpeechStart });
-    for (let i = 0; i < 4; i++) acc.push(chunk(100, true));
-    for (let i = 0; i < 7; i++) acc.push(chunk(100, false));
+    for (let i = 0; i < 5; i++) acc.push(chunk(100, true));
+    for (let i = 0; i < 11; i++) acc.push(chunk(100, false));
     expect(onSpeechStart).toHaveBeenCalledTimes(1);
     expect(onReady).toHaveBeenCalledTimes(1);
   });
@@ -107,7 +107,7 @@ describe('AudioAccumulator', () => {
     const acc = new AudioAccumulator(onReady, { onSpeechStart });
 
     acc.push(chunk(100, true));
-    for (let i = 0; i < 7; i++) acc.push(chunk(100, false));
+    for (let i = 0; i < 11; i++) acc.push(chunk(100, false));
 
     expect(onSpeechStart).not.toHaveBeenCalled();
     expect(onReady).not.toHaveBeenCalled();
@@ -118,7 +118,7 @@ describe('AudioAccumulator', () => {
     const acc = new AudioAccumulator(onReady);
 
     for (let i = 0; i < 5; i++) acc.push(chunk(100, true)); // 500ms speech
-    for (let i = 0; i < 3; i++) acc.push(chunk(100, false)); // only 300ms silence — below 650ms threshold
+    for (let i = 0; i < 7; i++) acc.push(chunk(100, false)); // 700ms is still below the 1100ms threshold
     expect(onReady).not.toHaveBeenCalled();
 
     // Resume speaking — the brief pause should NOT have flushed prematurely
@@ -130,8 +130,8 @@ describe('AudioAccumulator', () => {
     const onReady = vi.fn();
     const acc = new AudioAccumulator(onReady);
 
-    acc.push(chunk(100, true)); // only 100ms of "speech" — below 300ms minimum
-    for (let i = 0; i < 10; i++) acc.push(chunk(100, false)); // plenty of silence after
+    acc.push(chunk(100, true)); // only 100ms of "speech" — below 450ms minimum
+    for (let i = 0; i < 12; i++) acc.push(chunk(100, false)); // plenty of silence after
     expect(onReady).not.toHaveBeenCalled();
   });
 

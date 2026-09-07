@@ -444,16 +444,22 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
 
         if (!decision.accepted) {
           droppedTranscripts++;
-          const repeat = await sendRepeatPrompt(utterance.inputEpoch);
+          // Prompt leakage and filler-only output are provider hallucinations
+          // caused by silence/noise, not customer turns. Ignore them quietly;
+          // speaking a repeat prompt in response to background noise makes the
+          // agent appear to interrupt the caller and can create an echo loop.
+          const quietDrop = ['prompt_leakage', 'filler_only', 'no_speech_content'].includes(decision.reason);
+          const repeat = quietDrop ? null : await sendRepeatPrompt(utterance.inputEpoch);
+          if (quietDrop) armCallerSilenceTimer();
           await storeVoiceMetric({
             routeTurnId: turnId,
             recordedAt: new Date().toISOString(),
             status: 'transcript_rejected',
             audioMs,
             sttMs,
-            firstAudioMs: repeat.firstAudioAt === null ? undefined : repeat.firstAudioAt - totalStartedAt,
+            firstAudioMs: !repeat || repeat.firstAudioAt === null ? undefined : repeat.firstAudioAt - totalStartedAt,
             totalMs: Date.now() - totalStartedAt,
-            responseSent: repeat.sent,
+            responseSent: repeat?.sent ?? false,
             reason: decision.reason,
           });
           return;
@@ -608,19 +614,23 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
           return;
         }
         // If the bot is already audible, this is a real barge-in and should
-        // stop playback immediately. If it is only thinking/synthesizing,
-        // keep the pending answer and queue the new utterance. Previously a
-        // caller saying "hello" during a silent 5-8 second wait discarded the
-        // finished answer before a single audio byte was sent.
+        // stop playback immediately. If it is still thinking/synthesizing,
+        // sustained new speech supersedes that pending answer so the bot does
+        // not begin talking over the caller's continuation.
         if (playbackActive || activeMarkName !== null) {
           inputEpoch++;
           interruptPlayback('caller_speech');
         } else if (busy) {
+          // The caller is continuing or correcting an utterance while STT/LLM
+          // is still working. Supersede that incomplete turn so its answer can
+          // never start over the caller; the newly buffered utterance becomes
+          // the authoritative latest input.
+          inputEpoch++;
           req.log.info({
             ...logContext(),
             event: 'smartflo_caller_speech_while_thinking',
             pendingTurn: turnSequence,
-          }, 'Caller speech queued while a response was preparing');
+          }, 'Caller speech superseded the response that was preparing');
         }
       },
     });

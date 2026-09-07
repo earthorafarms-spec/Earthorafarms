@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createInitialState } from '../../src/conversation/state.js';
-import { createVerificationLinkTool, setCheckoutFieldTool, setDeliveryLocationTool, normalizeWhatsAppPhone } from '../../src/tools/checkout.js';
+import { createVerificationLinkTool, setCheckoutFieldTool, setDeliveryLocationTool, normalizeSpokenDigitSequence, normalizeWhatsAppPhone } from '../../src/tools/checkout.js';
 import { createPaymentLinkBodySchema } from '../../src/schemas/checkout.js';
 
 describe('checkout field validation', () => {
@@ -9,6 +9,37 @@ describe('checkout field validation', () => {
   });
   it.each(['1234', '+91919876543210', 'yes', '9876543210 garbage'])('rejects an invalid WhatsApp number: %s', (phone) => {
     expect(normalizeWhatsAppPhone(phone)).toBeNull();
+  });
+
+  it('converts English, Hindi and Gujarati spoken digits without inventing missing digits', () => {
+    expect(normalizeSpokenDigitSequence('seven nine eight four seven six nine four seven two')).toBe('7984769472');
+    expect(normalizeSpokenDigitSequence('सात नौ आठ चार सात छह नौ चार सात दो')).toBe('7984769472');
+    expect(normalizeSpokenDigitSequence('સાત નવ આઠ ચાર સાત છ નવ ચાર સાત બે')).toBe('7984769472');
+  });
+
+  it('requires exactly ten Indian mobile digits and six PIN-code digits', async () => {
+    const state = createInitialState();
+    const ctx = { callSessionId: 'test', state, channel: 'voice' as const, outboundActions: [] };
+    expect(await setCheckoutFieldTool.handler({ field: 'phone', value: 'सात नौ चार सात छह नौ चार सात दो' }, ctx))
+      .toMatchObject({ ok: false, reason: 'invalid_value' });
+    expect(await setCheckoutFieldTool.handler({ field: 'phone', value: 'सात नौ आठ चार सात छह नौ चार सात दो' }, ctx))
+      .toMatchObject({ ok: true });
+    expect(state.checkoutFields.phone).toBe('+917984769472');
+    expect(await setCheckoutFieldTool.handler({ field: 'postalCode', value: '38447' }, ctx))
+      .toMatchObject({ ok: false, reason: 'invalid_value' });
+    expect(await setCheckoutFieldTool.handler({ field: 'postalCode', value: 'तीन आठ चार चार सात शून्य' }, ctx))
+      .toMatchObject({ ok: true });
+    expect(state.checkoutFields.postalCode).toBe('384470');
+  });
+
+  it('does not save a quantity/order sentence as the customer name', async () => {
+    const state = createInitialState();
+    const result = await setCheckoutFieldTool.handler(
+      { field: 'name', value: 'दो बॉटल चाहिए मुझे' },
+      { callSessionId: 'test', state, channel: 'voice', outboundActions: [] },
+    );
+    expect(result).toMatchObject({ ok: false, reason: 'invalid_value' });
+    expect(state.checkoutFields.name).toBeUndefined();
   });
   it('does not save an acknowledgement as an address', async () => {
     const state = createInitialState();
