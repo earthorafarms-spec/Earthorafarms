@@ -1,6 +1,19 @@
 import { useState, type ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 
+async function getFunctionErrorMessage(error: unknown, fallback: string): Promise<string> {
+  const context = (error as { context?: Response } | null)?.context;
+  if (context && typeof context.json === 'function') {
+    try {
+      const payload = await context.json();
+      if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error;
+    } catch {
+      // Fall through to the user-safe fallback below.
+    }
+  }
+  return fallback;
+}
+
 interface GateProps {
   children: ReactNode;
   storageKey: string;
@@ -44,19 +57,21 @@ export function Gate({
       const { data, error: fnError } = await supabase.functions.invoke('send-otp', {
         body: { password, domain },
       });
-      if (fnError) throw fnError;
-      if (data?.ok) {
+      if (fnError) {
+        throw new Error(await getFunctionErrorMessage(fnError, 'Verification failed. Please try again.'));
+      }
+      if (data?.ok && data?.sent) {
         sessionStorage.setItem(passwordKey, password);
         setStep('otp');
         setResent(false);
       } else {
         setError(true);
-        setErrorMsg(data?.error || 'Incorrect password');
-        setPassword('');
+        setErrorMsg(data?.error || 'The OTP email could not be sent. Please try again.');
+        if (!data?.ok) setPassword('');
       }
-    } catch {
+    } catch (err) {
       setError(true);
-      setErrorMsg('Connection error. Please try again.');
+      setErrorMsg(err instanceof Error ? err.message : 'Connection error. Please try again.');
       setPassword('');
     } finally {
       setLoading(false);
@@ -72,7 +87,9 @@ export function Gate({
       const { data, error: fnError } = await supabase.functions.invoke('verify-otp', {
         body: { otp, domain },
       });
-      if (fnError) throw fnError;
+      if (fnError) {
+        throw new Error(await getFunctionErrorMessage(fnError, 'Failed to resend OTP'));
+      }
       if (data?.ok) {
         sessionStorage.setItem(storageKey, 'true');
         setIsAuthenticated(true);
@@ -81,9 +98,9 @@ export function Gate({
         setErrorMsg(data?.error || 'Invalid OTP');
         setOtp('');
       }
-    } catch {
+    } catch (err) {
       setError(true);
-      setErrorMsg('Verification failed. Please try again.');
+      setErrorMsg(err instanceof Error ? err.message : 'Verification failed. Please try again.');
       setOtp('');
     } finally {
       setLoading(false);
@@ -94,12 +111,24 @@ export function Gate({
     setLoading(true);
     setError(false);
     setErrorMsg('');
-    setResent(true);
+    setResent(false);
     try {
       const pwd = sessionStorage.getItem(passwordKey) || password;
-      await supabase.functions.invoke('send-otp', { body: { password: pwd, domain } });
-    } catch {
-      setErrorMsg('Failed to resend OTP');
+      const { data, error: fnError } = await supabase.functions.invoke('send-otp', {
+        body: { password: pwd, domain },
+      });
+      if (fnError) {
+        throw new Error(await getFunctionErrorMessage(fnError, 'Connection error. Please try again.'));
+      }
+      if (data?.ok && data?.sent) {
+        setResent(true);
+      } else {
+        setError(true);
+        setErrorMsg(data?.error || 'The OTP email could not be resent. Please try again.');
+      }
+    } catch (err) {
+      setError(true);
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to resend OTP');
     } finally {
       setLoading(false);
     }

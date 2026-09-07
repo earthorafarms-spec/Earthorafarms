@@ -7,6 +7,19 @@ import {
 import { Link } from 'wouter';
 import leavesImg from '@assets/generated_images/hero_leaves_2.jpg';
 
+async function getFunctionErrorMessage(error: unknown, fallback: string): Promise<string> {
+  const context = (error as { context?: Response } | null)?.context;
+  if (context && typeof context.json === 'function') {
+    try {
+      const payload = await context.json();
+      if (typeof payload?.error === 'string' && payload.error.trim()) return payload.error;
+    } catch {
+      // Fall through to the user-safe fallback below.
+    }
+  }
+  return fallback;
+}
+
 interface KaccGateProps {
   children: ReactNode;
   storageKey?: string;
@@ -46,20 +59,22 @@ export function KaccGate({
       const { data, error: fnError } = await supabase.functions.invoke('send-otp', {
         body: { email, password, domain: 'kacc' },
       });
-      if (fnError) throw fnError;
-      if (data?.ok) {
+      if (fnError) {
+        throw new Error(await getFunctionErrorMessage(fnError, 'Verification failed. Please try again.'));
+      }
+      if (data?.ok && data?.sent) {
         sessionStorage.setItem(emailKey, email);
         sessionStorage.setItem(passwordKey, password);
         setStep('otp');
         setResent(false);
       } else {
         setError(true);
-        setErrorMsg(data?.error || 'Incorrect password or unauthorized key account');
-        setPassword('');
+        setErrorMsg(data?.error || 'The OTP email could not be sent. Please try again.');
+        if (!data?.ok) setPassword('');
       }
-    } catch {
+    } catch (err) {
       setError(true);
-      setErrorMsg('Connection error. Please check network and try again.');
+      setErrorMsg(err instanceof Error ? err.message : 'Connection error. Please check network and try again.');
       setPassword('');
     } finally {
       setLoading(false);
@@ -75,7 +90,9 @@ export function KaccGate({
       const { data, error: fnError } = await supabase.functions.invoke('verify-otp', {
         body: { otp, domain: 'kacc' },
       });
-      if (fnError) throw fnError;
+      if (fnError) {
+        throw new Error(await getFunctionErrorMessage(fnError, 'Failed to resend OTP'));
+      }
       if (data?.ok) {
         sessionStorage.setItem(storageKey, 'true');
         setIsAuthenticated(true);
@@ -84,9 +101,9 @@ export function KaccGate({
         setErrorMsg(data?.error || 'Invalid OTP verification code');
         setOtp('');
       }
-    } catch {
+    } catch (err) {
       setError(true);
-      setErrorMsg('Verification failed. Please try again.');
+      setErrorMsg(err instanceof Error ? err.message : 'Verification failed. Please try again.');
       setOtp('');
     } finally {
       setLoading(false);
@@ -97,15 +114,25 @@ export function KaccGate({
     setLoading(true);
     setError(false);
     setErrorMsg('');
-    setResent(true);
+    setResent(false);
     try {
       const storedEmail = sessionStorage.getItem(emailKey) || email;
       const pwd = sessionStorage.getItem(passwordKey) || password;
-      await supabase.functions.invoke('send-otp', {
+      const { data, error: fnError } = await supabase.functions.invoke('send-otp', {
         body: { email: storedEmail, password: pwd, domain: 'kacc' },
       });
-    } catch {
-      setErrorMsg('Failed to resend OTP');
+      if (fnError) {
+        throw new Error(await getFunctionErrorMessage(fnError, 'Connection error. Please check network and try again.'));
+      }
+      if (data?.ok && data?.sent) {
+        setResent(true);
+      } else {
+        setError(true);
+        setErrorMsg(data?.error || 'The OTP email could not be resent. Please try again.');
+      }
+    } catch (err) {
+      setError(true);
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to resend OTP');
     } finally {
       setLoading(false);
     }

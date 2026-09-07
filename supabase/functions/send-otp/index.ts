@@ -104,8 +104,8 @@ async function sendEmail(otp: string, domain: string, recipientEmail?: string): 
   const targetEmail = (recipientEmail && recipientEmail.trim()) ? recipientEmail.trim() : "earthorafarms@gmail.com";
 
   if (!apiKey) {
-    // No email provider configured — OTP not delivered via email
-    return { success: true };
+    console.error(`[send-otp] No Resend API key configured for ${domain}`);
+    return { success: false, resendError: "Email provider is not configured" };
   }
 
   const domainLabel = domain === "kacc" ? "Key Accounts Portal" : "Admin Portal";
@@ -136,7 +136,7 @@ async function sendEmail(otp: string, domain: string, recipientEmail?: string): 
 
     if (!res.ok) {
       const errText = await res.text();
-      console.error(`[send-otp] Resend API error for ${domain}: ${res.status}`);
+      console.error(`[send-otp] Resend API error for ${domain}: ${res.status} ${errText.slice(0, 500)}`);
       return { success: false, resendError: errText };
     }
     return { success: true };
@@ -275,11 +275,31 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     const mailResult = await sendEmail(otp, domain, email);
 
+    if (!mailResult.success) {
+      // Do not leave behind a valid OTP that the user never received.
+      await supabase
+        .from("otp_codes")
+        .delete()
+        .eq("otp", otpHash)
+        .eq("domain", domain);
+
+      return new Response(
+        JSON.stringify({
+          ok: false,
+          sent: false,
+          error: "We couldn't send the OTP email. Please try again in a moment.",
+        }),
+        {
+          status: 502,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
+
     return new Response(
       JSON.stringify({
         ok: true,
-        sent: mailResult.success,
-        resendError: mailResult.resendError || null,
+        sent: true,
       }),
       {
         status: 200,
