@@ -23,6 +23,7 @@ vi.mock('../../src/repositories/knowledge.repository.js', async (importOriginal)
 }));
 
 import { processTurn, shouldPrefetchProductCatalog } from '../../src/conversation/controller.js';
+import { WHATSAPP_MENU } from '../../../whatsapp-chatbot/prompt.js';
 
 describe('processTurn persisted state', () => {
   beforeEach(() => {
@@ -116,6 +117,77 @@ describe('processTurn persisted state', () => {
     ]);
     const messages = chatMock.mock.calls[0][0] as { role: string; content: string }[];
     expect(messages.some((message) => message.content.includes('LIVE ADMIN-APPROVED KNOWLEDGE'))).toBe(true);
+  });
+
+  it('turns menu option 1 into a numbered live product list', async () => {
+    productRepositoryMocks.listActiveProducts.mockResolvedValue([
+      {
+        id: 'alpha-id', slug: 'alpha', name: 'Alpha', mrp: 100, price: 90,
+        status: 'active', stockQty: 10, stockLabel: 'In Stock', tag: '', badge: '',
+        description: '', highlights: [], imageUrl: 'https://cdn.example.com/alpha.png',
+      },
+      {
+        id: 'beta-id', slug: 'beta', name: 'Beta', mrp: 120, price: 110,
+        status: 'active', stockQty: 4, stockLabel: 'Low Stock', tag: '', badge: '',
+        description: '', highlights: [], imageUrl: 'https://cdn.example.com/beta.png',
+      },
+    ]);
+    const state = createInitialState();
+    state.messages.push({ role: 'assistant', content: `Hello!\n\n${WHATSAPP_MENU}` });
+
+    const outcome = await processTurn('controller-test', state, '1', 'text');
+
+    expect(outcome.replyText).toContain('1. Alpha — ₹90 — In Stock');
+    expect(outcome.replyText).toContain('2. Beta — ₹110 — Low Stock');
+    expect(outcome.replyText).toContain('Reply with the product number.');
+    expect(productRepositoryMocks.listActiveProducts).toHaveBeenCalledTimes(1);
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it('resolves a numbered product reply and exposes its native image', async () => {
+    const products = [
+      {
+        id: 'alpha-id', slug: 'alpha', name: 'Alpha', mrp: 100, price: 90,
+        status: 'active', stockQty: 10, stockLabel: 'In Stock', tag: '', badge: '',
+        description: '', highlights: [], imageUrl: 'https://cdn.example.com/alpha.png',
+      },
+      {
+        id: 'beta-id', slug: 'beta', name: 'Beta', mrp: 120, price: 110,
+        status: 'active', stockQty: 4, stockLabel: 'Low Stock', tag: '', badge: '',
+        description: 'Beta details', highlights: [], imageUrl: 'https://cdn.example.com/beta.png',
+      },
+    ];
+    productRepositoryMocks.listActiveProducts.mockResolvedValue([products[1], products[0]]);
+    productRepositoryMocks.getProductById.mockImplementation(async (id: string) =>
+      products.find((product) => product.id === id) ?? null
+    );
+    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'You selected Beta. How many units would you like?' });
+    const state = createInitialState();
+    state.messages.push({
+      role: 'assistant',
+      content: '1. Alpha — ₹90 — In Stock\n2. Beta — ₹110 — Low Stock\n\nReply with the product number.',
+    });
+
+    const outcome = await processTurn('controller-test', state, '2', 'text');
+
+    expect(productRepositoryMocks.getProductById).toHaveBeenCalledWith('beta-id');
+    expect(outcome.productImage).toEqual({ url: 'https://cdn.example.com/beta.png', caption: 'Beta' });
+    expect(outcome.replyText).toContain('How many');
+    const messages = chatMock.mock.calls[0][0] as { role: string; content: string }[];
+    expect(messages.some((message) => message.content.includes('numeric reply selected product option 2, Beta'))).toBe(true);
+  });
+
+  it('does not treat a quantity as a product selection', async () => {
+    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'I will add one Alpha to your cart.' });
+    const state = createInitialState();
+    state.messages.push({ role: 'assistant', content: 'You selected Alpha. How many units would you like?' });
+
+    const outcome = await processTurn('controller-test', state, '1', 'text');
+
+    expect(productRepositoryMocks.getProductById).not.toHaveBeenCalled();
+    expect(outcome.productImage).toBeUndefined();
+    const messages = chatMock.mock.calls[0][0] as { role: string; content: string }[];
+    expect(messages.some((message) => message.content.includes('numeric reply selected product option'))).toBe(false);
   });
 
   it('keeps detailed product questions in the model and tool loop', async () => {

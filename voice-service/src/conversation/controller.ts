@@ -1,6 +1,6 @@
 import type { ConversationState, ConversationMessage } from './state.js';
 import { SYSTEM_PROMPT } from './prompt.js';
-import { WHATSAPP_SYSTEM_PROMPT } from '../../../whatsapp-chatbot/prompt.js';
+import { WHATSAPP_MENU, WHATSAPP_SYSTEM_PROMPT } from '../../../whatsapp-chatbot/prompt.js';
 import { enforceOutputPolicy } from './output-policy.js';
 import { limitSpokenReply, normalizeIndicSpeechText, toSpokenText } from './speech-format.js';
 import { detectLanguage, requestedLanguage, buildLanguageInstruction } from './language.js';
@@ -62,6 +62,36 @@ export function shouldAnswerCatalogDirectly(text: string): boolean {
 interface LiveCatalogProduct {
   id: string;
   name: string;
+  price?: number;
+  currency?: string;
+  stockLabel?: string;
+}
+
+const PRODUCT_NUMBER_PROMPTS: Record<ConversationState['currentLanguage'], string> = {
+  en: 'Reply with the product number.',
+  hi: 'प्रोडक्ट चुनने के लिए उसका नंबर भेजें।',
+  gu: '\u0AAA\u0ACD\u0AB0\u0ACB\u0AA1\u0A95\u0ACD\u0A9F \u0AAA\u0AB8\u0A82\u0AA6 \u0A95\u0AB0\u0AB5\u0ABE \u0AA4\u0AC7\u0AA8\u0ACB \u0AA8\u0A82\u0AAC\u0AB0 \u0AAE\u0ACB\u0A95\u0AB2\u0ACB.',
+};
+
+function lastAssistantReply(messages: ConversationMessage[]): string | null {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index].role === 'assistant') return messages[index].content;
+  }
+  return null;
+}
+
+function isProductMenuSelection(userText: string, messages: ConversationMessage[]): boolean {
+  return userText.trim() === '1' && (lastAssistantReply(messages)?.includes(WHATSAPP_MENU) ?? false);
+}
+
+function numberedProductSelectionNumber(userText: string, messages: ConversationMessage[]): number | null {
+  const selection = userText.trim();
+  if (!/^\d+$/.test(selection)) return null;
+  const previousReply = lastAssistantReply(messages);
+  if (!previousReply || !Object.values(PRODUCT_NUMBER_PROMPTS).some((prompt) => previousReply.includes(prompt))) {
+    return null;
+  }
+  return Number.parseInt(selection, 10);
 }
 
 function liveCatalogProducts(catalog: unknown): LiveCatalogProduct[] {
@@ -144,6 +174,57 @@ function buildDirectCatalogReply(
   return `Our current products are ${spokenNames}${more}. Which one would you like to know about?`;
 }
 
+function resolveNumberedProductSelection(
+  products: LiveCatalogProduct[],
+  selectionNumber: number,
+  messages: ConversationMessage[],
+): LiveCatalogProduct | null {
+  const previousReply = lastAssistantReply(messages);
+  if (!previousReply || selectionNumber < 1) return null;
+  const prefix = `${selectionNumber}. `;
+  const displayedLine = previousReply.split(/\r?\n/).find((line) => line.startsWith(prefix));
+  if (!displayedLine) return null;
+  return products.find((product) =>
+    displayedLine === `${prefix}${product.name}` || displayedLine.startsWith(`${prefix}${product.name} — `)
+  ) ?? null;
+}
+
+function buildNumberedCatalogReply(
+  catalog: unknown,
+  language: ConversationState['currentLanguage'],
+  invalidSelection = false,
+): string {
+  if (!catalog || typeof catalog !== 'object' || 'error' in catalog) {
+    if (language === 'hi') return 'माफ़ कीजिए, अभी प्रोडक्ट लोड नहीं हो पाए। कृपया फिर कोशिश करें।';
+    if (language === 'gu') return '\u0AAE\u0ABE\u0AAB \u0A95\u0AB0\u0AB6\u0ACB, \u0AB9\u0ABE\u0AB2 \u0AAA\u0ACD\u0AB0\u0ACB\u0AA1\u0A95\u0ACD\u0A9F\u0ACD\u0AB8 \u0AB2\u0ACB\u0AA1 \u0AA5\u0A88 \u0AB6\u0A95\u0AC0 \u0AA8\u0AA5\u0AC0. \u0A95\u0AC3\u0AAA\u0ABE \u0A95\u0AB0\u0AC0\u0AA8\u0AC7 \u0AAB\u0AB0\u0AC0 \u0AAA\u0ACD\u0AB0\u0AAF\u0ABE\u0AB8 \u0A95\u0AB0\u0ACB.';
+    return 'Sorry, I could not load the products right now. Please try again.';
+  }
+
+  const products = liveCatalogProducts(catalog);
+  if (products.length === 0) {
+    if (language === 'hi') return `अभी कोई प्रोडक्ट उपलब्ध नहीं है।\n\n${WHATSAPP_MENU}`;
+    if (language === 'gu') return `\u0AB9\u0ABE\u0AB2 \u0A95\u0ACB\u0A88 \u0AAA\u0ACD\u0AB0\u0ACB\u0AA1\u0A95\u0ACD\u0A9F \u0A89\u0AAA\u0AB2\u0AAC\u0ACD\u0AA7 \u0AA8\u0AA5\u0AC0.\n\n${WHATSAPP_MENU}`;
+    return `No products are available right now.\n\n${WHATSAPP_MENU}`;
+  }
+
+  const lines = products.map((product, index) => {
+    const parts = [`${index + 1}. ${product.name}`];
+    if (typeof product.price === 'number' && Number.isFinite(product.price)) {
+      parts.push(`${product.currency === 'INR' || !product.currency ? '₹' : `${product.currency} `}${product.price}`);
+    }
+    if (typeof product.stockLabel === 'string' && product.stockLabel.trim()) parts.push(product.stockLabel.trim());
+    return parts.join(' — ');
+  });
+  const invalid = invalidSelection
+    ? language === 'hi'
+      ? 'यह मान्य प्रोडक्ट नंबर नहीं है।\n\n'
+      : language === 'gu'
+        ? '\u0A86 \u0AAE\u0ABE\u0AA8\u0ACD\u0AAF \u0AAA\u0ACD\u0AB0\u0ACB\u0AA1\u0A95\u0ACD\u0A9F \u0AA8\u0A82\u0AAC\u0AB0 \u0AA8\u0AA5\u0AC0.\n\n'
+        : 'That is not a valid product number.\n\n'
+    : '';
+  return `${invalid}${lines.join('\n')}\n\n${PRODUCT_NUMBER_PROMPTS[language]}`;
+}
+
 export interface TurnOutcome {
   state: ConversationState;
   replyText: string;
@@ -167,6 +248,10 @@ export async function processTurn(
   const outboundActions: OutboundAction[] = [];
   const toolContext: ToolContext = { callSessionId, state, channel, outboundActions };
   let productImage: TurnOutcome['productImage'];
+  const productMenuSelected = channel === 'text' && isProductMenuSelection(userText, state.messages);
+  const selectedProductNumber = channel === 'text'
+    ? numberedProductSelectionNumber(userText, state.messages)
+    : null;
   state.turnCount += 1;
   // Cleared every turn — see conversation/state.ts TurnToolFact doc comment.
   // A fact from a previous turn is not a fact the model may rely on; it
@@ -246,6 +331,22 @@ export async function processTurn(
       state.currentTurnFacts.push({ toolName: 'list_products', resultJson });
       preloadedToolResults.set('list_products:{"query":null}', productCatalog);
 
+      if (productMenuSelected) {
+        const finalText = buildNumberedCatalogReply(productCatalog, state.currentLanguage);
+        state.messages.push({ role: 'assistant', content: finalText });
+        return { state, replyText: finalText, policyViolations: [], outboundActions };
+      }
+
+      const currentProducts = liveCatalogProducts(productCatalog);
+      const numberedProduct = selectedProductNumber !== null
+        ? resolveNumberedProductSelection(currentProducts, selectedProductNumber, state.messages)
+        : null;
+      if (selectedProductNumber !== null && !numberedProduct) {
+        const finalText = buildNumberedCatalogReply(productCatalog, state.currentLanguage, true);
+        state.messages.push({ role: 'assistant', content: finalText });
+        return { state, replyText: finalText, policyViolations: [], outboundActions };
+      }
+
       if (shouldAnswerCatalogDirectly(userText)) {
         const directReply = buildDirectCatalogReply(productCatalog, state.currentLanguage);
         if (directReply) {
@@ -265,11 +366,9 @@ export async function processTurn(
           'ingredients, directions, or warnings, still call get_product_knowledge with the matching product ID.',
       });
 
-      const selectedProduct = resolveProductForTurn(
-        liveCatalogProducts(productCatalog),
-        userText,
-        state.messages,
-      );
+      const selectedProduct = channel === 'text' && selectedProductNumber !== null
+        ? numberedProduct
+        : resolveProductForTurn(currentProducts, userText, state.messages);
       // Product details and every admin-approved knowledge category are also
       // deterministic for voice. Previously this prefetch happened only in
       // WhatsApp, leaving phone answers dependent on optional model tool use.
@@ -300,6 +399,9 @@ export async function processTurn(
             content:
               `LIVE WEBSITE DETAILS FOR THE SELECTED PRODUCT (freshly fetched this turn): ${detailsJson}. ` +
               `LIVE ADMIN-APPROVED KNOWLEDGE FOR THE SAME PRODUCT (freshly fetched this turn): ${knowledgeJson}. ` +
+              (selectedProductNumber !== null
+                ? `The customer's numeric reply selected product option ${selectedProductNumber}, ${selectedProduct.name}. Ask how many units they want; do not interpret this number as a quantity. `
+                : '') +
               'Answer the customer directly from these current records. Use only the categories relevant to their question. ' +
               'Treat the records as factual notes: synthesize them into polished, natural customer-facing sentences instead of ' +
               'copying field labels or knowledge entries. Never replace these records with remembered or general product claims.',
