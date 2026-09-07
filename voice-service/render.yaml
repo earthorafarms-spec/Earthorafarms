@@ -49,6 +49,10 @@ services:
         value: "0.6"
       - key: SARVAM_TTS_SPEAKER
         value: neha
+      - key: SARVAM_TTS_HINDI_SPEAKER
+        value: priya
+      - key: SARVAM_TTS_GUJARATI_SPEAKER
+        value: priya
       - key: VOICE_STT_TIMEOUT_MS
         value: "15000"
       - key: VOICE_LLM_TIMEOUT_MS

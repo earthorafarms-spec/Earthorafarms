@@ -1,6 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ transcribe: vi.fn(), convert: vi.fn(), chat: vi.fn() }));
+
+function silentPcm16Wav(): Buffer {
+  const wav = Buffer.alloc(46);
+  wav.write('RIFF', 0); wav.writeUInt32LE(38, 4); wav.write('WAVE', 8);
+  wav.write('fmt ', 12); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22); wav.writeUInt32LE(24000, 24); wav.writeUInt32LE(48000, 28);
+  wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36);
+  wav.writeUInt32LE(2, 40); wav.writeInt16LE(0, 44);
+  return wav;
+}
 vi.mock('sarvamai', () => ({
   SarvamAIClient: class {
     constructor(private options: { apiSubscriptionKey: string }) {}
@@ -22,7 +32,7 @@ const quota = { statusCode: 402, body: { error: { code: 'insufficient_quota_erro
 describe('Sarvam adapter failover', () => {
   it('retries the same audio and shares the exhausted key state with TTS and chat', async () => {
     mocks.transcribe.mockRejectedValueOnce(quota).mockResolvedValue({ transcript: 'hello', language_code: 'en-IN', language_probability: 0.99 });
-    mocks.convert.mockResolvedValue({ audios: [Buffer.from('audio').toString('base64')] });
+    mocks.convert.mockResolvedValue({ audios: [silentPcm16Wav().toString('base64')] });
     mocks.chat.mockResolvedValue({ choices: [{ message: { content: 'reply' } }] });
     const { SarvamSttAdapter } = await import('../../src/adapters/sarvam-stt.js');
     const { SarvamTtsAdapter } = await import('../../src/adapters/sarvam-tts.js');
@@ -55,11 +65,32 @@ describe('Sarvam adapter failover', () => {
   });
 
   it.each(['synthesize', 'synthesizeMulaw8k'] as const)('rotates credits failures during %s', async (method) => {
-    mocks.convert.mockRejectedValueOnce(quota).mockResolvedValue({ audios: [Buffer.from('audio').toString('base64')] });
+    const wav = silentPcm16Wav();
+    mocks.convert.mockRejectedValueOnce(quota).mockResolvedValue({ audios: [wav.toString('base64')] });
     const { SarvamTtsAdapter } = await import('../../src/adapters/sarvam-tts.js');
-    expect(await new SarvamTtsAdapter()[method]('Hello.', 'gu')).toEqual(Buffer.from('audio'));
+    const audio = await new SarvamTtsAdapter()[method]('Hello.', 'gu');
+    if (method === 'synthesize') expect(audio).toEqual(wav);
+    else expect(audio.length).toBeGreaterThan(0);
     expect(mocks.convert.mock.calls.map(([key]) => key)).toEqual(['fake-one', 'fake-two']);
     expect(mocks.convert.mock.calls[1][1]).toEqual(mocks.convert.mock.calls[0][1]);
+  });
+
+  it('uses clear native-speed Indic settings and converts native WAV for telephony', async () => {
+    const wav = silentPcm16Wav();
+    mocks.convert.mockResolvedValue({ audios: [wav.toString('base64')] });
+
+    const { SarvamTtsAdapter } = await import('../../src/adapters/sarvam-tts.js');
+    await new SarvamTtsAdapter().synthesize('यह एक साफ़ जवाब है।', 'hi');
+    await new SarvamTtsAdapter().synthesizeMulaw8k('આ એક સ્પષ્ટ જવાબ છે.', 'gu');
+
+    expect(mocks.convert.mock.calls[0][1]).toMatchObject({
+      language_code: 'hi-IN', speaker: 'priya', pace: 0.92,
+      speech_sample_rate: 24000, output_audio_codec: 'wav',
+    });
+    expect(mocks.convert.mock.calls[1][1]).toMatchObject({
+      language_code: 'gu-IN', speaker: 'priya', pace: 0.88,
+      speech_sample_rate: 24000, output_audio_codec: 'wav',
+    });
   });
 
   it('preserves chat tool calls after failover', async () => {

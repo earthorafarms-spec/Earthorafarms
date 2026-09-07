@@ -63,11 +63,13 @@ const optionalSchema = z.object({
   // Pin STT instead of inheriting a moving SDK/server default.
   SARVAM_STT_MODEL: z.enum(['saaras:v3', 'saaras:v4']).default('saaras:v4'),
   SARVAM_STT_MIN_LANGUAGE_PROBABILITY: z.coerce.number().min(0).max(1).default(0.6),
-  // Voice name for Sarvam TTS (bulbul:v3). Defaults to "neha" rather than
-  // Sarvam's own default ("shubh") — "neha" is the voice a reference project
-  // (D:\Work\Sun\Agent) landed on after direct comparison; override here to
-  // try another (e.g. "shubh", "priya", "rahul").
+  // Default voice for Sarvam TTS (bulbul:v3), used for English or as a
+  // compatibility fallback. Hindi and Gujarati use the overrides below.
   SARVAM_TTS_SPEAKER: z.string().default('neha'),
+  // Per-language voices can be tuned independently instead of forcing the
+  // legacy English/default choice onto Hindi and Gujarati calls.
+  SARVAM_TTS_HINDI_SPEAKER: z.string().default('priya'),
+  SARVAM_TTS_GUJARATI_SPEAKER: z.string().default('priya'),
   VOICE_STT_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(15_000),
   VOICE_LLM_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(30_000),
   VOICE_TTS_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(15_000),

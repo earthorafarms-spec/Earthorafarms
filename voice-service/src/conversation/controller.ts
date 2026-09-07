@@ -48,7 +48,7 @@ const MAX_TOOL_LOOP_ITERATIONS = 6;
 const MAX_POLICY_REGENERATE_ATTEMPTS = 1;
 
 export function shouldPrefetchProductCatalog(text: string): boolean {
-  return /\b(products?|available|availability|stock|sell|selling|catalog(?:ue)?)\b|प्रोडक्ट|उत्पाद|अवेलेबल|उपलब्ध|स्टॉक|પ્રોડક્ટ|ઉપલબ્ધ|સ્ટોક/iu.test(text);
+  return /\b(products?|available|availability|stock|sell|selling|catalog(?:ue)?|details?|info(?:rmation)?|tell me about|benefits?|uses?|dosage|dose|ingredients?|directions?|warnings?)\b|प्रोडक्ट|उत्पाद|अवेलेबल|उपलब्ध|स्टॉक|जानकारी|फायदे|लाभ|खुराक|सामग्री|इस्तेमाल|चेतावनी|પ્રોડક્ટ|ઉપલબ્ધ|સ્ટોક|માહિતી|ફાયદા|લાભ|માત્રા|ઘટકો|ઉપયોગ|ચેતવણી/iu.test(text);
 }
 
 export function shouldAnswerCatalogDirectly(text: string): boolean {
@@ -121,6 +121,13 @@ function buildDirectCatalogReply(
     if (language === 'hi') return 'अभी कोई प्रोडक्ट लिस्ट नहीं है। कृपया थोड़ी देर बाद फिर पूछें।';
     if (language === 'gu') return 'હમણાં કોઈ પ્રોડક્ટ લિસ્ટમાં નથી. કૃપા કરીને થોડી વાર પછી ફરી પૂછો.';
     return 'No products are listed right now. Please check again shortly.';
+  }
+
+  if (names.length === 1) {
+    const name = names[0];
+    if (language === 'hi') return `अभी हमारे पास ${name} है। क्या आप इसके बारे में जानना चाहते हैं या इसे ऑर्डर करना चाहते हैं?`;
+    if (language === 'gu') return `હાલમાં અમારી પાસે ${name} છે. તમે તેના વિશે જાણવા માંગો છો કે તેને ઓર્ડર કરવા માંગો છો?`;
+    return `We currently offer ${name}. Would you like to hear about it or order it?`;
   }
 
   const spokenNames = names.slice(0, 4).join(', ');
@@ -221,8 +228,12 @@ export async function processTurn(
   // WhatsApp is asynchronous and customers commonly answer with only a
   // product name or "yes". Fetching the small live catalog on every text turn
   // makes current website/admin data deterministic instead of optional model
-  // behaviour. Voice keeps the narrower latency-sensitive prefetch rule.
-  if (channel === 'text' || shouldPrefetchProductCatalog(userText)) {
+  // behaviour. Voice does the same before checkout and for explicit product
+  // questions, while avoiding an unnecessary lookup for each delivery field.
+  // Before checkout starts, fetch the small live catalog on every turn. This
+  // lets a brand-name-only question ("Morilife+ ke fayde?") resolve without
+  // depending on the model to decide that it should call list_products.
+  if (channel === 'text' || !checkoutStarted || shouldPrefetchProductCatalog(userText)) {
     const listTool = toolsByName.list_products;
     if (listTool) {
       let productCatalog: unknown;
@@ -254,14 +265,17 @@ export async function processTurn(
           'ingredients, directions, or warnings, still call get_product_knowledge with the matching product ID.',
       });
 
-      if (channel === 'text') {
-        const selectedProduct = resolveProductForTurn(
-          liveCatalogProducts(productCatalog),
-          userText,
-          state.messages,
-        );
+      const selectedProduct = resolveProductForTurn(
+        liveCatalogProducts(productCatalog),
+        userText,
+        state.messages,
+      );
+      // Product details and every admin-approved knowledge category are also
+      // deterministic for voice. Previously this prefetch happened only in
+      // WhatsApp, leaving phone answers dependent on optional model tool use.
+      if (selectedProduct) {
         const detailsTool = toolsByName.get_product_details;
-        if (selectedProduct && detailsTool) {
+        if (detailsTool) {
           const [details, knowledge] = await Promise.all([
             detailsTool.handler({ productId: selectedProduct.id }, toolContext)
               .catch((err) => ({ error: 'tool_execution_failed', message: (err as Error).message })),

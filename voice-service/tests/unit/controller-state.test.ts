@@ -22,7 +22,7 @@ vi.mock('../../src/repositories/knowledge.repository.js', async (importOriginal)
   ...knowledgeRepositoryMocks,
 }));
 
-import { processTurn } from '../../src/conversation/controller.js';
+import { processTurn, shouldPrefetchProductCatalog } from '../../src/conversation/controller.js';
 
 describe('processTurn persisted state', () => {
   beforeEach(() => {
@@ -54,6 +54,15 @@ describe('processTurn persisted state', () => {
     }]);
   });
 
+  it.each([
+    'Tell me about Morilife+',
+    'What are its benefits?',
+    'इसके फायदे क्या हैं?',
+    'તેના ફાયદા શું છે?',
+  ])('recognizes product-knowledge wording for deterministic prefetch: %s', (question) => {
+    expect(shouldPrefetchProductCatalog(question)).toBe(true);
+  });
+
   it('keeps output-policy correction instructions turn-local', async () => {
     chatMock
       .mockResolvedValueOnce({ kind: 'message', content: 'It costs ₹5000.' })
@@ -75,11 +84,38 @@ describe('processTurn persisted state', () => {
     const outcome = await processTurn('controller-test', state, 'आपके पास कौन से प्रोडक्ट्स उपलब्ध हैं?');
 
     expect(outcome.replyText).toContain('Alpha');
-    expect(outcome.replyText).toContain('किस प्रोडक्ट');
+    expect(outcome.replyText).not.toContain('किस प्रोडक्ट');
+    expect(outcome.replyText).toContain('ऑर्डर');
     expect(outcome.policyViolations).toEqual([]);
     expect(productRepositoryMocks.listActiveProducts).toHaveBeenCalledTimes(1);
     expect(chatMock).not.toHaveBeenCalled();
     expect(outcome.state.currentTurnFacts[0]?.toolName).toBe('list_products');
+  });
+
+  it('uses singular English wording when only one live product exists', async () => {
+    const outcome = await processTurn('controller-test', createInitialState(), 'What products do you sell?');
+
+    expect(outcome.replyText).toBe('We currently offer Alpha. Would you like to hear about it or order it?');
+    expect(outcome.replyText.toLowerCase()).not.toContain('which one');
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it('deterministically grounds a voice product-information question in website and admin data', async () => {
+    chatMock.mockResolvedValueOnce({
+      kind: 'message',
+      content: 'Alpha has approved information about immunity support.',
+    });
+
+    const outcome = await processTurn('controller-test', createInitialState(), 'Tell me about Alpha');
+
+    expect(outcome.replyText).toContain('approved information');
+    expect(productRepositoryMocks.getProductById).toHaveBeenCalledWith('alpha-id');
+    expect(knowledgeRepositoryMocks.getAllApprovedKnowledge).toHaveBeenCalledWith('alpha-id');
+    expect(outcome.state.currentTurnFacts.map((fact) => fact.toolName)).toEqual([
+      'list_products', 'get_product_details', 'get_product_knowledge',
+    ]);
+    const messages = chatMock.mock.calls[0][0] as { role: string; content: string }[];
+    expect(messages.some((message) => message.content.includes('LIVE ADMIN-APPROVED KNOWLEDGE'))).toBe(true);
   });
 
   it('keeps detailed product questions in the model and tool loop', async () => {
