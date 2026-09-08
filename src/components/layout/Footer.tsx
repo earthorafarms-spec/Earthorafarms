@@ -7,6 +7,15 @@ import { useToast } from "@/hooks/use-toast";
 import { fetchPublicProducts } from "@/lib/api";
 import type { Product } from "@/types";
 
+/** Strip brand prefix tokens so long product names are short in the footer */
+function shortenName(name: string): string {
+  // Remove known prefix words (brand name etc.) — keep last meaningful words
+  return name
+    .replace(/^morilife\+?\s*/i, '')
+    .replace(/\bmoringa\b/i, 'Moringa')
+    .trim();
+}
+
 
 const exploreLinks = [
   { label: "Our Story", href: "/our-story" },
@@ -112,12 +121,12 @@ export function Footer() {
               <ul className="space-y-3">
                 {products.map((product) => (
                   <li key={product.id}>
-                    <Link
-                      href="/our-product"
+                    <a
+                      href={`/our-product?open=${product.id}`}
                       className="font-inter text-sm text-white/50 hover:text-white transition-colors tracking-[-0.01em]"
                     >
-                      {product.name}
-                    </Link>
+                      {shortenName(product.name)}
+                    </a>
                   </li>
                 ))}
                 {products.length === 0 && (

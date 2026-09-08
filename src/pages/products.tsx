@@ -55,6 +55,21 @@ export default function Products() {
       });
   }, [user]);
 
+  // Auto-open modal when navigated to with ?open=<productId>
+  useEffect(() => {
+    if (!rawProducts.length) return;
+    const params = new URLSearchParams(window.location.search);
+    const openId = params.get('open');
+    if (!openId) return;
+    const target = rawProducts.find((p) => p.id === openId);
+    if (target) {
+      setSelectedProduct(target);
+      setModalImage(target.imageMain);
+      // Clean the query param from the URL without a page reload
+      window.history.replaceState({}, '', '/our-product');
+    }
+  }, [rawProducts]);
+
   const { data: dbReviews = [], refetch: refetchReviews } = useQuery<any[]>({
     queryKey: ['product-reviews'],
     queryFn: fetchReviews,
