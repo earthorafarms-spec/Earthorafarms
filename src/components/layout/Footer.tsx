@@ -1,14 +1,12 @@
 import { useState } from "react";
-import { Instagram, Facebook, ArrowUpRight, Leaf, Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Instagram, Facebook, Leaf, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
+import { fetchPublicProducts } from "@/lib/api";
+import type { Product } from "@/types";
 
-const shopLinks = [
-  { label: "Moringa Powder", href: "/our-product" },
-  { label: "Moringa Tablets", href: "/our-product" },
-  { label: "Wellness Bundles", href: "/our-product" },
-];
 
 const exploreLinks = [
   { label: "Our Story", href: "/our-story" },
@@ -32,6 +30,12 @@ export function Footer() {
   const [newsletterEmail, setNewsletterEmail] = useState("");
   const [newsletterLoading, setNewsletterLoading] = useState(false);
   const { toast } = useToast();
+
+  const { data: products = [] } = useQuery<Product[]>({
+    queryKey: ["public-products"],
+    queryFn: fetchPublicProducts,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const handleNewsletter = async () => {
     const email = newsletterEmail.trim();
@@ -100,22 +104,32 @@ export function Footer() {
 
           {/* Links Columns */}
           <div className="lg:col-span-7 grid grid-cols-2 sm:grid-cols-3 gap-10 lg:pt-2">
-            {/* Shop */}
+            {/* Shop — dynamically populated from live product catalogue */}
             <div>
               <h4 className="font-dm font-medium text-sm text-white mb-5 tracking-[0.03em] uppercase">
                 Shop
               </h4>
               <ul className="space-y-3">
-                {shopLinks.map(({ label, href }) => (
-                  <li key={label}>
+                {products.map((product) => (
+                  <li key={product.id}>
                     <Link
-                      href={href}
+                      href="/our-product"
                       className="font-inter text-sm text-white/50 hover:text-white transition-colors tracking-[-0.01em]"
                     >
-                      {label}
+                      {product.name}
                     </Link>
                   </li>
                 ))}
+                {products.length === 0 && (
+                  <li>
+                    <Link
+                      href="/our-product"
+                      className="font-inter text-sm text-white/50 hover:text-white transition-colors tracking-[-0.01em]"
+                    >
+                      View All Products
+                    </Link>
+                  </li>
+                )}
               </ul>
             </div>
 
