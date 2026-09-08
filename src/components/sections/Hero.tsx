@@ -1,10 +1,10 @@
 import { ArrowUpRight } from "lucide-react";
 import { Link } from "wouter";
 import terraHeroBg from "@assets/generated_images/terra_hero_bg.webp";
-import terraBottle from "@assets/generated_images/user_bottle.png";
+import morilifeHeroProduct from "@assets/generated_images/morilife_hero_product.png";
 
 const BG_IMAGE_URL = terraHeroBg;
-const PRODUCT_BOTTLE_URL = terraBottle;
+const PRODUCT_BOTTLE_URL = morilifeHeroProduct;
 
 export function Hero() {
   return (
