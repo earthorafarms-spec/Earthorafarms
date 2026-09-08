@@ -45,6 +45,25 @@ const ROMAN_GU_WORDS = new Set([
   'mane', 'tamaru', 'tamne', 'saru', 'thay', 'pachi', 'malse', 'kya', 'haji',
 ]);
 
+// Field values must not change the language of the conversation. In real
+// Smartflo transcripts, callers often spell an email address or say English
+// digit names rendered in Devanagari/Gujarati script (for example
+// "थ्री एट टू" or "થ્રી એટ ટુ"). Those are data, not a request to switch
+// languages.
+const SPOKEN_DIGIT_TOKENS = new Set([
+  'zero', 'oh', 'o', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine',
+  'शून्य', 'जीरो', 'ज़ीरो', 'वन', 'टू', 'थ्री', 'फोर', 'फाइव', 'सिक्स', 'सेवन', 'सैवन', 'एट', 'आर्ट', 'नाइन',
+  'एक', 'दो', 'तीन', 'चार', 'पांच', 'पाँच', 'छह', 'छः', 'सात', 'आठ', 'नौ',
+  'શૂન્ય', 'ઝીરો', 'વન', 'ટુ', 'ટૂ', 'થ્રી', 'ફોર', 'ફાઇવ', 'સિક્સ', 'સેવન', 'એટ', 'એઇટ', 'નાઇન',
+  'એક', 'બે', 'ત્રણ', 'ચાર', 'પાંચ', 'છ', 'સાત', 'આઠ', 'નવ',
+]);
+
+function isFieldValueOnly(text: string): boolean {
+  if (/@|https?:\/\//iu.test(text)) return true;
+  const tokens = text.toLowerCase().match(/[a-z]+|[\u0900-\u097f]+|[\u0a80-\u0aff]+|\d+/gu) ?? [];
+  return tokens.length > 0 && tokens.every((token) => /^\d+$/u.test(token) || SPOKEN_DIGIT_TOKENS.has(token));
+}
+
 /**
  * Returns the detected language code, or null if it can't be determined
  * with reasonable confidence from this one utterance (too short, ambiguous
@@ -53,6 +72,7 @@ const ROMAN_GU_WORDS = new Set([
 export function detectLanguage(text: string): SupportedLanguage | null {
   const t = text.trim();
   if (!t || t.length < 3) return null;
+  if (isFieldValueOnly(t)) return null;
 
   const guChars = (t.match(/[઀-૿]/g) ?? []).length; // Gujarati Unicode block
   const hiChars = (t.match(/[ऀ-ॿ]/g) ?? []).length; // Devanagari Unicode block

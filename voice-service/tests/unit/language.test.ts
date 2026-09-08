@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectLanguageHint, requestedLanguage, replyMatchesLanguage } from '../../src/conversation/language.js';
+import { detectLanguage, detectLanguageHint, requestedLanguage, replyMatchesLanguage } from '../../src/conversation/language.js';
 
 describe('detectLanguageHint', () => {
   it('recognizes explicit language preferences, not place names', () => {
@@ -44,6 +44,14 @@ describe('detectLanguageHint', () => {
   it('returns null for very short/ambiguous text', () => {
     expect(detectLanguageHint('ok')).toBeNull();
     expect(detectLanguageHint('')).toBeNull();
+  });
+
+  it('treats checkout email and spoken-digit values as language-neutral', () => {
+    expect(detectLanguage('kaly3zero6@gmail.com')).toBeNull();
+    expect(detectLanguage('थ्री एट टू फोर सेवन ज़ीरो')).toBeNull();
+    expect(detectLanguage('થ્રી એટ ટુ ફોર સેવન ઝીરો')).toBeNull();
+    expect(detectLanguage('three eight two four seven zero')).toBeNull();
+    expect(detectLanguage('382470')).toBeNull();
   });
 
   it('always instructs the model that facts must still come from tool results', () => {

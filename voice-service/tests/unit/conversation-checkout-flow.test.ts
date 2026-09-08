@@ -150,12 +150,12 @@ describe('conversation checkout regressions', () => {
     expect(mocks.send).not.toHaveBeenCalled();
   });
 
-  it('does not switch to Hindi when the first checkout name is transcribed in Devanagari', async () => {
+  it('switches to the confidently detected language even during checkout', async () => {
     const state = checkoutState();
     state.checkoutFields = {};
-    mocks.chat.mockResolvedValueOnce({ kind: 'message', content: 'What is your email address?' });
+    mocks.chat.mockResolvedValueOnce({ kind: 'message', content: 'आपका ईमेल एड्रेस क्या है?' });
     const result = await processTurn('flow', state, 'हेली');
-    expect(result.state.currentLanguage).toBe('en');
+    expect(result.state.currentLanguage).toBe('hi');
   });
 
   it('allows an explicit language change during checkout', async () => {

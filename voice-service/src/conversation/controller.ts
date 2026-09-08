@@ -45,6 +45,9 @@ function confirmedReviewReceipt(text: string): boolean {
 const CART_SUMMARY_PATTERN =
   /\b(?:my cart|cart total|what(?:'s| is) in (?:my )?cart|how many (?:bottles?|packs?|items?)|what did i add|my bill|bill total)\b|मेरे? कार्ट|कार्ट में|कितनी? (?:बॉटल|पैक|आइटम)|मेरा बिल|કાર્ટમાં|માર[ુંા] કાર્ટ|કેટલ[ાી] (?:બોટલ|પેક|આઇટમ)|મારું બિલ/iu;
 
+const CART_PRICING_PATTERN =
+  /\b(?:total(?:\s+(?:amount|price|cost))?|amount|subtotal|bill\s+total|cart\s+(?:price|cost))\b|टोटल|अमाउंट|कुल(?:\s+(?:कीमत|प्राइस|दाम))?|કુલ|રકમ/iu;
+
 const QUANTITY_WORDS: Record<ConversationState['currentLanguage'], string[]> = {
   en: ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'],
   hi: ['शून्य', 'एक', 'दो', 'तीन', 'चार', 'पाँच', 'छह', 'सात', 'आठ', 'नौ', 'दस'],
@@ -62,11 +65,32 @@ function directCartReply(state: ConversationState): string {
     if (language === 'gu') return 'હાલમાં તમારું કાર્ટ ખાલી છે.';
     return 'Your cart is currently empty.';
   }
-  const lines = cart.map((line) => `${spokenQuantity(line.quantity, language)} ${line.productName}`);
+  const money = (value: number) => value.toLocaleString('en-IN');
+  const lines = cart.map((line) => {
+    const quantity = spokenQuantity(line.quantity, language);
+    if (language === 'hi') return `${quantity} ${line.productName}, ₹${money(line.unitPrice)} प्रति पैक`;
+    if (language === 'gu') return `${quantity} ${line.productName}, પેક દીઠ ₹${money(line.unitPrice)}`;
+    return `${quantity} ${line.productName} at ₹${money(line.unitPrice)} each`;
+  });
   const total = cart.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0).toLocaleString('en-IN');
-  if (language === 'hi') return `आपके कार्ट में ${lines.join(' और ')} हैं। अभी कुल ₹${total} है, जिसे फॉर्म पर दोबारा चेक किया जाएगा।`;
-  if (language === 'gu') return `તમારા કાર્ટમાં ${lines.join(' અને ')} છે. હાલનું કુલ ₹${total} છે, જે ફોર્મ પર ફરી ચકાસવામાં આવશે.`;
-  return `Your cart has ${lines.join(' and ')}. The provisional total is ₹${total}, which will be checked again on the form.`;
+  if (language === 'hi') return `आपके कार्ट में ${lines.join(' और ')} हैं। सही कुल ₹${total} है।`;
+  if (language === 'gu') return `તમારા કાર્ટમાં ${lines.join(' અને ')} છે. સાચું કુલ ₹${total} છે.`;
+  return `Your cart has ${lines.join(' and ')}. The exact total is ₹${total}.`;
+}
+
+function cartMutationReply(state: ConversationState): string {
+  const summary = directCartReply(state);
+  if (state.cart.length === 0) return summary;
+  const nextQuestion = nextCheckoutQuestion(state);
+  if (!nextQuestion) return summary;
+  // Keep the exact backend-calculated total and the next checkout question
+  // inside the two-sentence voice limit. The LLM never verbalizes cart math.
+  const compactSummary = state.currentLanguage === 'hi'
+    ? summary.replace(' हैं। सही कुल', ' हैं, और सही कुल')
+    : state.currentLanguage === 'gu'
+      ? summary.replace(' છે. સાચું કુલ', ' છે, અને સાચું કુલ')
+      : summary.replace('. The exact total', ', and the exact total');
+  return `${compactSummary} ${nextQuestion}`;
 }
 
 const CHECKOUT_FIELDS: (keyof ConversationState['checkoutFields'])[] = [
@@ -437,18 +461,15 @@ export async function processTurn(
 
   state.messages.push({ role: 'user', content: userText });
 
-  // Deterministic, per-turn — see conversation/language.ts. Only updates
-  // state.currentLanguage when detection is confident; an ambiguous turn
-  // (e.g. a bare "yes") keeps whatever language the conversation already
-  // settled into.
-  // Language is locked once checkout field collection begins: short answers
-  // like city names ("Ahmedabad") or PIN codes are ambiguous and would
-  // incorrectly flip the conversation language mid-checkout.
+  // Deterministic and per-turn. Confident full Hindi, Gujarati, or English
+  // utterances switch the reply language even after the cart/checkout has
+  // started. Short ambiguous values such as "yes", a PIN, or "Ahmedabad"
+  // return null from detectLanguage and therefore keep the current language.
   const checkoutStarted = state.cart.length > 0 || Object.keys(state.checkoutFields).length > 0;
   const explicitLanguage = requestedLanguage(userText);
   if (explicitLanguage) {
     state.currentLanguage = explicitLanguage;
-  } else if (!checkoutStarted) {
+  } else {
     const detected = detectLanguage(userText);
     if (detected) state.currentLanguage = detected;
   }
@@ -504,7 +525,7 @@ export async function processTurn(
     }
   }
 
-  if (CART_SUMMARY_PATTERN.test(userText)) {
+  if (CART_SUMMARY_PATTERN.test(userText) || (state.cart.length > 0 && CART_PRICING_PATTERN.test(userText))) {
     const cartTool = toolsByName.get_cart;
     const cartResult = cartTool
       ? await cartTool.handler({}, toolContext)
@@ -701,6 +722,7 @@ export async function processTurn(
     );
 
     if (result.kind === 'tool_calls') {
+      const iterationResults: { name: string; value: unknown }[] = [];
       state.messages.push({
         role: 'assistant',
         content: '',
@@ -734,6 +756,7 @@ export async function processTurn(
         }
 
         const resultJson = JSON.stringify(resultObj);
+        iterationResults.push({ name: call.name, value: resultObj });
         state.currentTurnFacts.push({ toolName: call.name, resultJson });
         state.messages.push({ role: 'tool', content: resultJson, toolCallId: call.id, toolName: call.name });
       }
@@ -769,6 +792,19 @@ export async function processTurn(
           state.messages.push({ role: 'assistant', content: replyText });
           return { state, replyText, policyViolations: [], productImage, outboundActions };
         }
+      }
+
+      const successfulCartMutation = iterationResults.some(({ name, value }) =>
+        ['add_cart_item', 'add_cart_items', 'update_cart_item', 'remove_cart_item'].includes(name) &&
+        Boolean(value && typeof value === 'object' && (value as { ok?: boolean }).ok)
+      );
+      if (successfulCartMutation) {
+        const exactReply = cartMutationReply(state);
+        const replyText = channel === 'voice'
+          ? limitSpokenReply(normalizeIndicSpeechText(toSpokenText(exactReply), state.currentLanguage))
+          : formatWhatsAppReply(exactReply);
+        state.messages.push({ role: 'assistant', content: replyText });
+        return { state, replyText, policyViolations: [], productImage, outboundActions };
       }
 
       continue; // let the model see the tool results and respond

@@ -286,21 +286,47 @@ describe('processTurn persisted state', () => {
     expect(chatMock).not.toHaveBeenCalled();
   });
 
+  it('answers cart pricing with exact backend arithmetic instead of model-generated math', async () => {
+    const state = createInitialState();
+    state.currentLanguage = 'hi';
+    state.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 799 }];
+
+    const outcome = await processTurn('controller-test', state, 'टोटल अमाउंट कितना है?');
+
+    expect(outcome.replyText).toContain('₹799');
+    expect(outcome.replyText).toContain('₹1,598');
+    expect(outcome.replyText).not.toContain('1,518');
+    expect(outcome.state.currentTurnFacts.map((fact) => fact.toolName)).toEqual(['get_cart']);
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it('switches from Hindi to a confident English utterance during checkout', async () => {
+    const state = createInitialState();
+    state.currentLanguage = 'hi';
+    state.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 }];
+    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'What is your full name?' });
+
+    const outcome = await processTurn('controller-test', state, 'Okay, can you place my order?');
+
+    expect(outcome.state.currentLanguage).toBe('en');
+    expect(outcome.replyText).toBe('What is your full name?');
+    const messages = chatMock.mock.calls[0][0] as { role: string; content: string }[];
+    expect(messages[0].content).toContain('RESPONSE LANGUAGE FOR THIS REPLY: English');
+  });
+
   it('always asks the next checkout question after adding an item', async () => {
-    chatMock
-      .mockResolvedValueOnce({
-        kind: 'tool_calls',
-        calls: [{ id: 'add-1', name: 'add_cart_item', argumentsJson: JSON.stringify({ productId: 'alpha-id', quantity: 3 }) }],
-      })
-      .mockResolvedValueOnce({
-        kind: 'message',
-        content: 'I added three packs to your cart. I will take a few delivery details.',
-      });
+    chatMock.mockResolvedValueOnce({
+      kind: 'tool_calls',
+      calls: [{ id: 'add-1', name: 'add_cart_item', argumentsJson: JSON.stringify({ productId: 'alpha-id', quantity: 3 }) }],
+    });
 
     const outcome = await processTurn('controller-test', createInitialState(), 'I want three packs of Alpha');
 
     expect(outcome.state.cart[0]).toMatchObject({ productId: 'alpha-id', quantity: 3 });
+    expect(outcome.replyText).toContain('₹90');
+    expect(outcome.replyText).toContain('₹270');
     expect(outcome.replyText).toContain('What is your full name?');
+    expect(chatMock).toHaveBeenCalledTimes(1);
   });
 
   it('requires exact ten-digit phone confirmation before saving it', async () => {

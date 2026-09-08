@@ -67,7 +67,7 @@ const PRODUCT_HEALTH_CLAIM_PATTERN =
   /\b(benefits?|dosage|ingredients?|contraindications?|side effects?|recommended dose|take\s+\d+|contains?|made from|treats?|cures?|prevents?|safe\s+for\s+(?:kids?|children)|reduces?\s+(?:pain|sugar|weight|cholesterol)|supports?\s+(?:immunity|digestion|health|wellness))\b|खुराक|सामग्री|फायदे|लाभ|बच्चों?\s+के\s+लिए\s+सुरक्षित|ચેતવણી|માત્રા|ઘટકો|ફાયદા/gi;
 
 const PRICE_GROUNDING_TOOLS = new Set([
-  'list_products', 'get_product_details', 'get_cart', 'add_cart_item',
+  'list_products', 'get_product_details', 'get_cart', 'add_cart_item', 'add_cart_items',
   'update_cart_item', 'remove_cart_item', 'create_verification_link',
 ]);
 const AVAILABILITY_GROUNDING_TOOLS = new Set(['list_products', 'get_product_details']);

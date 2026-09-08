@@ -18,14 +18,12 @@ const SUPPORTED_TO_BCP47: Record<SupportedLanguage, 'en-IN' | 'hi-IN' | 'gu-IN'>
   gu: 'gu-IN',
 };
 
-// Keep Indic replies measured on a narrow-band phone call. Sarvam documents
-// 1.0 as its natural conversational speed; the old 1.15/1.20 values were in
-// the fast/IVR range and made Gujarati consonants especially hard to follow
-// after the audio was reduced to 8 kHz telephony quality.
+// Use Sarvam's natural conversational pace. Slowing Indic output below 1.0
+// made ordinary checkout prompts noticeably drawn out on real phone calls.
 const PACE_BY_LANGUAGE: Record<SupportedLanguage, number> = {
   en: 1.0,
-  hi: 0.92,
-  gu: 0.88,
+  hi: 1.0,
+  gu: 1.0,
 };
 
 // Lower temperature = more stable/consistent output, fewer word-mixing

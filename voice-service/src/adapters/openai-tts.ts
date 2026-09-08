@@ -16,8 +16,8 @@ const SILENCE_GAP_MS = 80;
 
 const DELIVERY_INSTRUCTIONS: Record<SupportedLanguage, string> = {
   en: 'Speak as a warm female customer-service agent in clear Indian English at a calm, natural pace.',
-  hi: 'Speak as a native female Hindi speaker. Use a clear neutral Indian accent, careful consonants, natural Hindi rhythm, and a slightly slow pace. Read every number exactly as written.',
-  gu: 'Speak as a native female Gujarati speaker. Use a clear neutral Gujarati accent, careful consonants, natural Gujarati rhythm, and a slightly slow pace. Read every number exactly as written.',
+  hi: 'Speak as a native female Hindi speaker. Use a clear neutral Indian accent, careful consonants, and a natural conversational pace. Do not draw out words or syllables. Read every number exactly as written.',
+  gu: 'Speak as a native female Gujarati speaker. Use a clear neutral Gujarati accent, careful consonants, and a natural conversational pace. Do not draw out words or syllables. Read every number exactly as written.',
 };
 
 let singleton: OpenAI | null = null;
@@ -32,7 +32,7 @@ async function synthesizeOne(text: string, language: SupportedLanguage): Promise
     voice: TTS_VOICE,
     input: text,
     instructions: DELIVERY_INSTRUCTIONS[language],
-    speed: language === 'en' ? 1 : 0.9,
+    speed: language === 'en' ? 1 : 1.08,
     response_format: 'wav',
   });
   return Buffer.from(await response.arrayBuffer());

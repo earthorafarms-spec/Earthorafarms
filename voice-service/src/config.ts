@@ -12,7 +12,9 @@ const requiredSchema = z.object({
 
   OPENAI_API_KEY: z.string().min(1),
   OPENAI_MODEL: z.string().default('gpt-4o-mini'),
-  OPENAI_STT_MODEL: z.string().default('gpt-4o-mini-transcribe'),
+  // Full GPT-4o transcription is materially more accurate than the mini
+  // model on noisy, narrow-band multilingual phone audio.
+  OPENAI_STT_MODEL: z.string().default('gpt-4o-transcribe'),
 
   // Vendor-neutral provider seams — see src/providers.ts. Selecting by env
   // var (rather than importing a vendor SDK directly wherever it's used)

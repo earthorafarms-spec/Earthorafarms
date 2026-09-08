@@ -84,11 +84,11 @@ describe('Sarvam adapter failover', () => {
     await new SarvamTtsAdapter().synthesizeMulaw8k('આ એક સ્પષ્ટ જવાબ છે.', 'gu');
 
     expect(mocks.convert.mock.calls[0][1]).toMatchObject({
-      language_code: 'hi-IN', speaker: 'priya', pace: 0.92,
+      language_code: 'hi-IN', speaker: 'priya', pace: 1,
       speech_sample_rate: 24000, output_audio_codec: 'wav',
     });
     expect(mocks.convert.mock.calls[1][1]).toMatchObject({
-      language_code: 'gu-IN', speaker: 'priya', pace: 0.88,
+      language_code: 'gu-IN', speaker: 'priya', pace: 1,
       speech_sample_rate: 24000, output_audio_codec: 'wav',
     });
   });

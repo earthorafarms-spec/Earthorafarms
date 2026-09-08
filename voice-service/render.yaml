@@ -30,7 +30,7 @@ services:
       - key: OPENAI_MODEL
         value: gpt-4o-mini
       - key: OPENAI_STT_MODEL
-        value: gpt-4o-mini-transcribe
+        value: gpt-4o-transcribe
       - key: SARVAM_API_KEY
         sync: false
       - key: SARVAM_API_KEYS

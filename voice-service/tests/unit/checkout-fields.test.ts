@@ -15,6 +15,9 @@ describe('checkout field validation', () => {
     expect(normalizeSpokenDigitSequence('seven nine eight four seven six nine four seven two')).toBe('7984769472');
     expect(normalizeSpokenDigitSequence('सात नौ आठ चार सात छह नौ चार सात दो')).toBe('7984769472');
     expect(normalizeSpokenDigitSequence('સાત નવ આઠ ચાર સાત છ નવ ચાર સાત બે')).toBe('7984769472');
+    expect(normalizeSpokenDigitSequence('थ्री एट टू फोर सेवन ज़ीरो')).toBe('382470');
+    expect(normalizeSpokenDigitSequence('થ્રી એટ ટુ ફોર સેવન ઝીરો')).toBe('382470');
+    expect(normalizeSpokenDigitSequence('three eight two four seven टू')).toBe('382472');
   });
 
   it('requires exactly ten Indian mobile digits and six PIN-code digits', async () => {
