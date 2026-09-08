@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Sparkles, Filter } from 'lucide-react';
+import { ChevronDown, Sprout, Filter } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { ProductCard } from '@/components/products/ProductCard';
@@ -177,7 +177,7 @@ export default function Products() {
                 animate={{ opacity: 1, y: 0 }}
                 className="mb-4 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/5 border border-black/10 font-dm font-medium text-xs text-black/70 uppercase tracking-wider"
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                <Sprout className="w-3.5 h-3.5 text-emerald-700" />
                 <span>Harvest Catalog</span>
               </motion.div>
 

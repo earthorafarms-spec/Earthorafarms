@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Instagram, Youtube, Twitter, ArrowUpRight, Leaf, Loader2 } from "lucide-react";
+import { Instagram, Facebook, ArrowUpRight, Leaf, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
@@ -25,8 +25,7 @@ const supportLinks = [
 
 const socialLinks = [
   { Icon: Instagram, label: "Instagram", href: "https://www.instagram.com/earthorafarms" },
-  { Icon: Youtube,   label: "YouTube",   href: "https://www.youtube.com/@earthorafarms" },
-  { Icon: Twitter,   label: "Twitter / X", href: "https://x.com/earthorafarms" },
+  { Icon: Facebook,  label: "Facebook",  href: "https://www.facebook.com/earthorafarms" },
 ];
 
 export function Footer() {
@@ -80,37 +79,7 @@ export function Footer() {
               Pure, shade-dried Moringa oleifera grown in volcanic soil. No additives. No compromises. Just the ancient tree of life, reimagined for your modern wellness ritual.
             </p>
 
-            {/* Newsletter */}
-            <div className="mb-8">
-              <p className="font-dm font-medium text-sm text-white/80 mb-3 tracking-wide">
-                Join the wellness community
-              </p>
-              <div className="flex items-stretch gap-2 max-w-sm">
-                <input
-                  type="email"
-                  placeholder="Your email address"
-                  value={newsletterEmail}
-                  onChange={(e) => setNewsletterEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleNewsletter()}
-                  className="flex-1 bg-white/8 border border-white/15 rounded-xl px-4 py-3 font-inter text-sm text-white placeholder:text-white/35 focus:outline-none focus:border-white/35 transition-colors"
-                />
-                <button
-                  type="button"
-                  onClick={handleNewsletter}
-                  disabled={newsletterLoading}
-                  className="bg-white text-black px-5 rounded-xl font-inter font-medium text-sm hover:bg-white/90 transition-colors shrink-0 flex items-center gap-1.5 group disabled:opacity-60"
-                >
-                  {newsletterLoading ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <>
-                      <span>Join</span>
-                      <ArrowUpRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
+
 
             {/* Social Icons */}
             <div className="flex items-center gap-3">

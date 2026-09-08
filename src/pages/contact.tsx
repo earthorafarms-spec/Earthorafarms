@@ -312,7 +312,7 @@ export default function Contact() {
                         className="mt-0.5 w-4 h-4 rounded border-black/10 text-black focus:ring-black/30 accent-emerald-800 cursor-pointer"
                       />
                       <span className="text-xs text-black/60 leading-relaxed font-inter">
-                        Keep me updated via WhatsApp & SMS with exclusive farm offers, new harvest announcements, and wellness recipes.
+                        Keep me updated via WhatsApp, SMS & RCS with exclusive farm offers, new harvest announcements, and wellness recipes.
                       </span>
                     </label>
                   </div>

@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { ArrowUpRight, Sparkles, Star } from "lucide-react";
+import { ArrowUpRight, Grid2X2, Star } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchPublicProducts } from "@/lib/api";
 import type { Product } from "@/types";
@@ -44,7 +44,7 @@ export function Products() {
             className="max-w-2xl"
           >
             <div className="mb-4 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-black/5 border border-black/10 font-dm font-medium text-xs sm:text-sm text-black/80 tracking-[0.05em] uppercase">
-              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+              <Grid2X2 className="w-3.5 h-3.5 text-black/60" />
               <span>The Collection</span>
             </div>
 
