@@ -185,9 +185,10 @@ export default function Recipes() {
         <div className="container mx-auto px-6 sm:px-10 max-w-[1400px]">
           <div className="grid lg:grid-cols-12 gap-8 items-center">
             <div className="lg:col-span-7">
-              <span className="font-inter text-xs uppercase tracking-widest text-emerald-800 font-semibold mb-3 block">
-                Earthora Kitchen
-              </span>
+              <div className="mb-4 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-black/5 border border-black/10 font-dm font-medium text-xs text-black/70 uppercase tracking-wider">
+                <UtensilsCrossed className="w-3.5 h-3.5 text-emerald-700" />
+                <span>Earthora Kitchen</span>
+              </div>
               <h1 className="font-dm font-normal tracking-[-0.05em] text-[40px] leading-[42px] sm:text-[60px] sm:leading-[56px] lg:text-[76px] lg:leading-[70px] text-black mb-4">
                 Nourish your body, <br />
                 <span className="text-black/40">one recipe at a time.</span>
