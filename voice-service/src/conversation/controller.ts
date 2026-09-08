@@ -14,6 +14,7 @@ import { getAllApprovedProductKnowledge } from '../tools/knowledge.js';
 import type { OutboundAction, ToolContext } from '../tools/types.js';
 import {
   parseProductActionInput,
+  parseProductActionFromText,
   type WhatsAppProductCard,
 } from '../../../whatsapp-chatbot/product-card.js';
 
@@ -276,21 +277,34 @@ function lastAssistantReply(messages: ConversationMessage[]): string | null {
   return null;
 }
 
-function shouldShowWhatsAppMenu(userText: string, state: ConversationState): boolean {
-  const explicitMenuRequest = /\b(?:main\s+menu|menu|available\s+options?)\b|(?:मुख्य\s+)?मेन्यू|उपलब्ध\s+विकल्प|(?:મુખ્ય\s+)?મેનુ|ઉપલબ્ધ\s+વિકલ્પ/iu.test(userText);
-  if (explicitMenuRequest) return true;
+export const EXPLICIT_MENU_PATTERN =
+  /^(?:0|menu|main\s+menu|back|वापस|पाछा|મેનુ|મુખ્ય\s+મેનુ|मेन्यू|मुख्य\s+मेन्यू)[\s!.?,🙏]*$/iu;
 
-  const standaloneGreeting = /^(?:hi|hello|hey|good\s+(?:morning|afternoon|evening)|namaste|namaskar|नमस्ते|नमस्कार|નમસ્તે|નમસ્કાર)[\s!.?,🙏]*$/iu.test(userText.trim());
-  if (!standaloneGreeting) return false;
+export function isExplicitMenuRequest(userText: string): boolean {
+  const trimmed = userText.trim();
+  if (EXPLICIT_MENU_PATTERN.test(trimmed)) return true;
+  return /\b(?:main\s+menu|menu|available\s+options?)\b|(?:मुख्य\s+)?मेन्यू|उपलब्ध\s+विकल्प|(?:મુખ્ય\s+)?મેનુ|ઉપલબ્ધ\s+વિકલ્પ/iu.test(trimmed);
+}
+
+export const COMMON_GREETING_PATTERN =
+  /^(?:hi(?:i+)?|he(?:l+)?o(?:o+)?|hey(?:y+)?|hi\s+there|hello\s+there|hey\s+there|hey\s+bot|good\s+(?:morning|afternoon|evening|day)|namaste(?:\s+ji)?|namaskar(?:\s+ji)?|kem\s+ch(?:h)?o|kemcho|नमस्ते(?:\s+जी)?|नमस्कार|प्रणाम|નમસ્તે|નમસ્કાર|કેમ\s+છો)[\s!.?,🙏]*$/iu;
+
+export function isCommonGreeting(userText: string): boolean {
+  return COMMON_GREETING_PATTERN.test(userText.trim());
+}
+
+export function shouldShowWhatsAppMenu(userText: string, state: ConversationState): boolean {
+  if (isExplicitMenuRequest(userText)) return true;
+  if (!isCommonGreeting(userText)) return false;
 
   const hasCheckoutProgress = state.cart.length > 0 || Object.entries(state.checkoutFields)
     .some(([field, value]) => field !== 'phone' && value !== undefined && value !== '');
   const previousReply = lastAssistantReply(state.messages);
-  const awaitingProductOrQuantity = Boolean(previousReply && (
-    Object.values(PRODUCT_NUMBER_PROMPTS).some((prompt) => previousReply.includes(prompt)) ||
-    /\b(?:how many|quantity|units?)\b|कितन(?:ा|ी|े)|यूनिट|માત્રા|કેટલ(?:ા|ી)|યુનિટ/iu.test(previousReply)
-  ));
-  return !hasCheckoutProgress && !awaitingProductOrQuantity;
+  const awaitingQuantity = Boolean(
+    state.whatsAppProductContext?.awaitingQuantity === true ||
+    (previousReply && /\b(?:how many|quantity|units?)\b|कितन(?:ा|ी|े)|यूनिट|માત્રા|કેટલ(?:ા|ી)|યુનિટ/iu.test(previousReply))
+  );
+  return !hasCheckoutProgress && !awaitingQuantity;
 }
 
 function buildWhatsAppMenuReply(language: ConversationState['currentLanguage']): string {
@@ -303,7 +317,7 @@ function isProductMenuSelection(userText: string, messages: ConversationMessage[
 
 function numberedProductSelectionNumber(userText: string, messages: ConversationMessage[]): number | null {
   const selection = userText.trim();
-  if (!/^\d+$/.test(selection)) return null;
+  if (!/^[1-9]\d*$/.test(selection)) return null;
   const previousReply = lastAssistantReply(messages);
   if (!previousReply || !Object.values(PRODUCT_NUMBER_PROMPTS).some((prompt) => previousReply.includes(prompt))) {
     return null;
@@ -330,10 +344,16 @@ function resolveProductForTurn(
   products: LiveCatalogProduct[],
   userText: string,
   messages: ConversationMessage[],
+  whatsAppProductContext?: ConversationState['whatsAppProductContext'],
 ): LiveCatalogProduct | null {
   const currentMatch = products.find((product) => spokenProductNameMatches(product.name, userText));
   if (currentMatch) return currentMatch;
   if (!isProductInformationFollowUp(userText)) return null;
+
+  if (whatsAppProductContext?.productId) {
+    const contextMatch = products.find((product) => product.id === whatsAppProductContext.productId);
+    if (contextMatch) return contextMatch;
+  }
 
   // Resolve terse follow-ups ("yes", "tell me more") from the most recent
   // product the customer themselves named. Never rely on an old tool result.
@@ -439,7 +459,7 @@ function buildNumberedCatalogReply(
         ? '\u0A86 \u0AAE\u0ABE\u0AA8\u0ACD\u0AAF \u0AAA\u0ACD\u0AB0\u0ACB\u0AA1\u0A95\u0ACD\u0A9F \u0AA8\u0A82\u0AAC\u0AB0 \u0AA8\u0AA5\u0AC0.\n\n'
         : 'That is not a valid product number.\n\n'
     : '';
-  return `${invalid}${lines.join('\n')}\n\n${PRODUCT_NUMBER_PROMPTS[language]}`;
+  return `${invalid}${lines.join('\n')}\n\n${PRODUCT_NUMBER_PROMPTS[language]}\nTo return to the main menu, type Menu.`;
 }
 
 function buildWhatsAppProductCard(details: LiveProductDetails, fallbackName: string): WhatsAppProductCard | null {
@@ -461,7 +481,7 @@ function buildWhatsAppProductCard(details: LiveProductDetails, fallbackName: str
   const shortDescription = compactDescription.length > 360
     ? `${compactDescription.slice(0, 357).trimEnd()}...`
     : compactDescription;
-  const body = [`*${name}*`, detailLine, shortDescription].filter(Boolean).join('\n');
+  const body = [`*${name}*`, detailLine, shortDescription, 'To return to the main menu, type Menu.'].filter(Boolean).join('\n');
   return { productId: details.id, imageUrl: details.imageUrl, name, body };
 }
 
@@ -504,7 +524,9 @@ export async function processTurn(
   const toolContext: ToolContext = { callSessionId, state, channel, outboundActions };
   let productImage: TurnOutcome['productImage'];
   let productCard: TurnOutcome['productCard'];
-  const productAction = channel === 'text' ? parseProductActionInput(userText) : null;
+  const productAction = channel === 'text'
+    ? (parseProductActionInput(userText) ?? parseProductActionFromText(userText, state.whatsAppProductContext?.productId))
+    : null;
   const productMenuSelected = channel === 'text' && isProductMenuSelection(userText, state.messages);
   const selectedProductNumber = channel === 'text'
     ? numberedProductSelectionNumber(userText, state.messages)
@@ -629,6 +651,7 @@ export async function processTurn(
   }
 
   if (channel === 'text' && shouldShowWhatsAppMenu(userText, state)) {
+    delete state.whatsAppProductContext;
     const replyText = buildWhatsAppMenuReply(state.currentLanguage);
     state.messages.push({ role: 'assistant', content: replyText });
     return { state, replyText, policyViolations: [], outboundActions };
@@ -677,6 +700,7 @@ export async function processTurn(
       'Use get_cart for any cart question and use the checkout tools for changes.',
   });
   const preloadedToolResults = new Map<string, unknown>();
+  let actionProduct: LiveCatalogProduct | null = null;
   // WhatsApp is asynchronous and customers commonly answer with only a
   // product name or "yes". Fetching the small live catalog on every text turn
   // makes current website/admin data deterministic instead of optional model
@@ -705,7 +729,7 @@ export async function processTurn(
       }
 
       const currentProducts = liveCatalogProducts(productCatalog);
-      const actionProduct = productAction
+      actionProduct = productAction
         ? currentProducts.find((product) => product.id === productAction.productId) ?? null
         : null;
       if (productAction && !actionProduct) {
@@ -756,7 +780,7 @@ export async function processTurn(
 
       const selectedProduct = actionProduct ?? (channel === 'text' && selectedProductNumber !== null
         ? numberedProduct
-        : resolveProductForTurn(currentProducts, userText, state.messages));
+        : resolveProductForTurn(currentProducts, userText, state.messages, state.whatsAppProductContext));
       // Product details and every admin-approved knowledge category are also
       // deterministic for voice. Previously this prefetch happened only in
       // WhatsApp, leaving phone answers dependent on optional model tool use.
@@ -824,7 +848,8 @@ export async function processTurn(
               content:
                 `The customer deterministically selected the ${productAction.action} button for ${actionProduct.name}. ` +
                 `Answer only their ${productAction.action === 'benefits' ? 'benefits' : 'dosage and usage'} request from the ` +
-                'live approved knowledge above. If that category is absent, use the existing approved-information fallback.',
+                `live approved knowledge above. If approved ${productAction.action} knowledge is not available or empty for ${actionProduct.name}, ` +
+                `state clearly that approved ${productAction.action} information is not available for ${actionProduct.name}; never assume, invent, or generalize claims.`,
             });
           }
           if (selectedProductNumber !== null && productCard) {
@@ -864,8 +889,20 @@ export async function processTurn(
     // Per-turn provider selection — see providers.ts. In LLM_PROVIDER=auto,
     // this is what actually routes Hindi/Gujarati to Sarvam and English to
     // OpenAI (with a same-turn fallback to OpenAI if Sarvam errors).
+    const turnMessages: ConversationMessage[] = [
+      systemMessage,
+      ...turnContextMessages,
+      ...state.messages,
+      ...(productAction && actionProduct ? [{
+        role: 'user' as const,
+        content: productAction.action === 'benefits'
+          ? `What are the benefits of ${actionProduct.name}?`
+          : `What is the dosage and directions for ${actionProduct.name}?`,
+      }] : []),
+      ...(transientCorrection ? [transientCorrection] : []),
+    ];
     const result = await chatWithRouting(
-      [systemMessage, ...turnContextMessages, ...state.messages, ...(transientCorrection ? [transientCorrection] : [])],
+      turnMessages,
       toolDefs,
       state.currentLanguage
     );

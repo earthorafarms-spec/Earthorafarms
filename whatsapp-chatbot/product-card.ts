@@ -28,7 +28,10 @@ export function productActionInputFromButtonId(buttonId: unknown): string | null
 }
 
 export function parseProductActionInput(input: string): { action: WhatsAppProductAction; productId: string } | null {
-  const match = input.match(/^__earthora_whatsapp_product_action__:(benefits|dosage|add_to_cart):(.+)$/u);
+  if (typeof input !== 'string') return null;
+  const match =
+    input.match(/^__earthora_whatsapp_product_action__:(benefits|dosage|add_to_cart):(.+)$/u) ??
+    input.match(/^earthora_product:(benefits|dosage|add_to_cart):(.+)$/u);
   if (!match) return null;
   try {
     const productId = decodeURIComponent(match[2]);
@@ -36,6 +39,28 @@ export function parseProductActionInput(input: string): { action: WhatsAppProduc
   } catch {
     return null;
   }
+}
+
+const BENEFITS_PATTERN = /^(?:benefits?|fayde|फायदे|लाभ|ફાયદા)[\s!.?,]*$/iu;
+const DOSAGE_PATTERN = /^(?:dosage|dose|directions?|uses?|khurak|खुराक|ખોરાક|मात्रा|માત્રા|ઉપયોગ)[\s!.?,]*$/iu;
+const ADD_TO_CART_PATTERN = /^(?:add\s+to\s+cart|buy|order|कार्ट\s+में\s+जोड़ें|કાર્ટમાં\s+ઉમેરો)[\s!.?,]*$/iu;
+
+export function parseProductActionFromText(
+  text: string,
+  contextProductId?: string,
+): { action: WhatsAppProductAction; productId: string } | null {
+  if (!contextProductId || typeof text !== 'string') return null;
+  const trimmed = text.trim();
+  if (BENEFITS_PATTERN.test(trimmed)) {
+    return { action: 'benefits', productId: contextProductId };
+  }
+  if (DOSAGE_PATTERN.test(trimmed)) {
+    return { action: 'dosage', productId: contextProductId };
+  }
+  if (ADD_TO_CART_PATTERN.test(trimmed)) {
+    return { action: 'add_to_cart', productId: contextProductId };
+  }
+  return null;
 }
 
 export function serializeProductCard(card: WhatsAppProductCard): string {

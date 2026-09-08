@@ -23,14 +23,27 @@ function metaMessageText(message: Record<string, any>): string | null {
   }
   if (message.type === 'interactive') {
     const actionInput = productActionInputFromButtonId(
-      message.interactive?.button_reply?.id ?? message.interactive?.list_reply?.id
+      message.interactive?.button_reply?.id ??
+      message.interactive?.buttonReply?.id ??
+      message.interactive?.list_reply?.id ??
+      message.interactive?.listReply?.id
     );
     if (actionInput) return actionInput;
-    const text = message.interactive?.button_reply?.title ?? message.interactive?.list_reply?.title;
+    const text =
+      message.interactive?.button_reply?.title ??
+      message.interactive?.buttonReply?.title ??
+      message.interactive?.list_reply?.title ??
+      message.interactive?.listReply?.title;
     return typeof text === 'string' ? text.trim() : null;
   }
-  if (message.type === 'button' && typeof message.button?.text === 'string') {
-    return message.button.text.trim();
+  if (message.type === 'button') {
+    const actionInput = productActionInputFromButtonId(
+      message.button?.payload ?? message.button?.id
+    );
+    if (actionInput) return actionInput;
+    if (typeof message.button?.text === 'string') {
+      return message.button.text.trim();
+    }
   }
   return null;
 }
@@ -92,7 +105,8 @@ function extractNormalizedProviderMessage(body: Record<string, any>): WhatsAppIn
     ].find((value) => typeof value === 'string' && value.length > 0) as string | undefined;
 
     const phone = normalizePhone(
-      message.from ?? message.source ?? envelope.from ?? envelope.source ?? sender?.phone ?? sender?.wa_id
+      message.from ?? message.source ?? envelope.from ?? envelope.source ??
+      sender?.phone ?? sender?.wa_id ?? envelope.contacts?.[0]?.wa_id ?? envelope.contacts?.[0]?.phone
     );
 
     const rawText =
@@ -102,16 +116,25 @@ function extractNormalizedProviderMessage(body: Record<string, any>): WhatsAppIn
       message.payload?.text ??
       message.payload?.title ??
       message.interactive?.button_reply?.title ??
+      message.interactive?.buttonReply?.title ??
       message.interactive?.list_reply?.title ??
+      message.interactive?.listReply?.title ??
       message.content?.buttonTitle ??
-      message.content?.listTitle;
+      message.content?.listTitle ??
+      message.button?.text;
     const actionInput = productActionInputFromButtonId(
       message.interactive?.button_reply?.id ??
+      message.interactive?.buttonReply?.id ??
       message.interactive?.list_reply?.id ??
+      message.interactive?.listReply?.id ??
       message.content?.buttonId ??
+      message.content?.button_id ??
       message.content?.listId ??
+      message.content?.list_id ??
       message.payload?.buttonId ??
-      message.button?.payload
+      message.payload?.button_id ??
+      message.button?.payload ??
+      message.button?.id
     );
     const text = actionInput ?? (typeof rawText === 'string' ? rawText.trim() : null);
 

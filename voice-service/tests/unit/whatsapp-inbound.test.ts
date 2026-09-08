@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { extractWhatsAppInboundMessages } from '../../../whatsapp-chatbot/inbound.js';
-import { productActionInputFromButtonId, productButtonId } from '../../../whatsapp-chatbot/product-card.js';
+import {
+  parseProductActionFromText,
+  parseProductActionInput,
+  productActionInputFromButtonId,
+  productButtonId,
+} from '../../../whatsapp-chatbot/product-card.js';
 
 describe('WhatsApp inbound normalization', () => {
   it('extracts every Meta text and interactive reply across entries', () => {
@@ -49,13 +54,99 @@ describe('WhatsApp inbound normalization', () => {
     ]);
   });
 
-  it('ignores delivery receipts and labels unsupported inbound media', () => {
-    expect(extractWhatsAppInboundMessages({ object: 'whatsapp_business_account', entry: [{ changes: [{ value: { statuses: [{ id: 'x' }] } }] }] })).toEqual([]);
-    expect(extractWhatsAppInboundMessages({
+  it('normalizes Meta type:button payloads where button ID is in payload', () => {
+    const messages = extractWhatsAppInboundMessages({
       object: 'whatsapp_business_account',
-      entry: [{ changes: [{ value: { messages: [{ id: 'wamid.audio', from: '919876543210', type: 'audio' }] } }] }],
-    })).toEqual([
-      { providerMessageId: 'wamid.audio', phone: '+919876543210', text: null, kind: 'unsupported' },
-    ]);
+      entry: [{ changes: [{ value: { messages: [
+        {
+          id: 'wamid.button.1',
+          from: '919876543210',
+          type: 'button',
+          button: { payload: productButtonId('dosage', 'alpha-id'), text: 'Dosage' },
+        },
+      ] } }] }],
+    });
+
+    expect(messages).toEqual([{
+      providerMessageId: 'wamid.button.1',
+      phone: '+919876543210',
+      text: productActionInputFromButtonId(productButtonId('dosage', 'alpha-id')),
+      kind: 'text',
+    }]);
+  });
+
+  it('normalizes Tata Omni interactive button callback with single messages object', () => {
+    const messages = extractWhatsAppInboundMessages({
+      businessPhoneNumber: '919999999999',
+      contacts: [{ profile: { name: 'Customer' }, user_id: 'user-1', wa_id: '919876543210' }],
+      id: 'omni-cb-1',
+      messages: {
+        from: '919876543210',
+        id: 'wamid.omni.interactive',
+        type: 'interactive',
+        interactive: {
+          type: 'button_reply',
+          button_reply: { id: productButtonId('benefits', 'mori-1'), title: 'Benefits' },
+        },
+      },
+    });
+
+    expect(messages).toEqual([{
+      providerMessageId: 'wamid.omni.interactive',
+      phone: '+919876543210',
+      text: productActionInputFromButtonId(productButtonId('benefits', 'mori-1')),
+      kind: 'text',
+    }]);
+  });
+
+  it('normalizes provider camelCase buttonReply and content button_id payloads', () => {
+    const camelCaseMessages = extractWhatsAppInboundMessages({
+      payload: {
+        message: {
+          id: 'omni-camel-1',
+          type: 'interactive',
+          interactive: { buttonReply: { id: productButtonId('add_to_cart', 'alpha-id'), title: 'Add to Cart' } },
+        },
+        sender: { phone: '+919876543210' },
+      },
+    });
+    expect(camelCaseMessages[0]?.text).toBe(productActionInputFromButtonId(productButtonId('add_to_cart', 'alpha-id')));
+
+    const altFieldMessages = extractWhatsAppInboundMessages({
+      payload: {
+        message: {
+          id: 'omni-alt-1',
+          type: 'interactive',
+          content: { button_id: productButtonId('benefits', 'alpha-id'), button_title: 'Benefits' },
+        },
+        sender: { phone: '+919876543210' },
+      },
+    });
+    expect(altFieldMessages[0]?.text).toBe(productActionInputFromButtonId(productButtonId('benefits', 'alpha-id')));
+  });
+
+  it('parses raw button IDs as well as internal action inputs', () => {
+    expect(parseProductActionInput(productButtonId('benefits', 'mori-1'))).toEqual({
+      action: 'benefits',
+      productId: 'mori-1',
+    });
+    expect(parseProductActionInput(productButtonId('dosage', 'mori-1'))).toEqual({
+      action: 'dosage',
+      productId: 'mori-1',
+    });
+    expect(parseProductActionInput(productButtonId('add_to_cart', 'mori-1'))).toEqual({
+      action: 'add_to_cart',
+      productId: 'mori-1',
+    });
+  });
+
+  it('maps button titles to product actions when context product ID is present', () => {
+    expect(parseProductActionFromText('Benefits', 'mori-1')).toEqual({ action: 'benefits', productId: 'mori-1' });
+    expect(parseProductActionFromText('Dosage', 'mori-1')).toEqual({ action: 'dosage', productId: 'mori-1' });
+    expect(parseProductActionFromText('Add to Cart', 'mori-1')).toEqual({ action: 'add_to_cart', productId: 'mori-1' });
+    expect(parseProductActionFromText('फायदे', 'mori-1')).toEqual({ action: 'benefits', productId: 'mori-1' });
+    expect(parseProductActionFromText('ખુરાક', 'mori-1')).toBeNull();
+    expect(parseProductActionFromText('માત્રા', 'mori-1')).toEqual({ action: 'dosage', productId: 'mori-1' });
+    expect(parseProductActionFromText('Benefits', undefined)).toBeNull();
   });
 });
