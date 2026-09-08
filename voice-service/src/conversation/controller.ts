@@ -316,9 +316,6 @@ export function isCommonGreeting(userText: string): boolean {
   return COMMON_GREETING_PATTERN.test(userText.trim());
 }
 
-const CHECKOUT_QUESTION_PATTERN =
-  /\b(?:full\s+name|email\s+address|street\s+address|delivery\s+address|city\s+and\s+state|six-digit\s+pin\s+code|pin\s*code|postal\s*code)\b|पूरा\s+नाम|ईमेल\s+एड्रेस|स्ट्रीट\s+एड्रेस|पिन\s+कोड|પૂરું\s+નામ|ઈમેલ\s+એડ્રેસ|સ્ટ્રીટ\s+એડ્રેસ|પિન\s+કોડ/iu;
-
 export function shouldShowWhatsAppMenu(userText: string, state: ConversationState): boolean {
   if (isExplicitMenuRequest(userText)) return true;
   if (!isCommonGreeting(userText)) return false;
@@ -328,10 +325,8 @@ export function shouldShowWhatsAppMenu(userText: string, state: ConversationStat
     state.whatsAppProductContext?.awaitingQuantity === true ||
     (previousReply && /\b(?:how many|quantity|units?)\b|कितन(?:ा|ी|े)|यूनिट|માત્રા|કેટલ(?:ા|ી)|યુનિટ/iu.test(previousReply))
   );
-  const activeCheckoutCollection = Boolean(
-    (state.cart.length > 0 && Object.entries(state.checkoutFields).some(([field, value]) => field !== 'phone' && value !== undefined && value !== '')) ||
-    (previousReply && CHECKOUT_QUESTION_PATTERN.test(previousReply))
-  );
+  const nextCheckoutPrompt = state.cart.length > 0 ? nextCheckoutQuestion(state) : null;
+  const activeCheckoutCollection = Boolean(nextCheckoutPrompt && previousReply?.includes(nextCheckoutPrompt));
   return !activeCheckoutCollection && !awaitingQuantity;
 }
 

@@ -154,12 +154,15 @@ describe('processTurn persisted state', () => {
     expect(chatMock).not.toHaveBeenCalled();
   });
 
-  it('returns the main menu for a greeting when a dormant cart exists without active checkout collection', async () => {
+  it.each(['Hi', 'Hello'])('returns the main menu for a dormant persisted cart on %s', async (greeting) => {
     const state = createInitialState();
     state.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 }];
-    state.messages.push({ role: 'assistant', content: 'Alpha has been added to your cart.' });
+    state.checkoutFields = { phone: '+919876543210', name: 'Test User' };
+    // This was the previous checkout prompt when name had not yet been saved.
+    // The current prompt is now email, so it must not suppress the main menu.
+    state.messages.push({ role: 'assistant', content: 'What is your full name?' });
 
-    const outcome = await processTurn('dormant-cart-test', state, 'Hi', 'text');
+    const outcome = await processTurn('dormant-cart-test', state, greeting, 'text');
 
     expect(outcome.replyText).toContain(WHATSAPP_MENU);
     expect(outcome.state.cart).toEqual([{ productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 }]);
@@ -295,6 +298,19 @@ describe('processTurn persisted state', () => {
     expect(outcome.replyText).toContain('1. Alpha — ₹90 — In Stock');
     expect(outcome.replyText).toContain('2. Beta — ₹110 — Low Stock');
     expect(outcome.replyText).toContain('Reply with the product number.');
+    expect(productRepositoryMocks.listActiveProducts).toHaveBeenCalledTimes(1);
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps greeting then menu option 1 deterministic', async () => {
+    const state = createInitialState();
+
+    const greeting = await processTurn('controller-test', state, 'Hello', 'text');
+    const catalog = await processTurn('controller-test', state, '1', 'text');
+
+    expect(greeting.replyText).toContain(WHATSAPP_MENU);
+    expect(catalog.replyText).toContain('1. Alpha — ₹90 — In Stock');
+    expect(catalog.replyText).toContain('Reply with the product number.');
     expect(productRepositoryMocks.listActiveProducts).toHaveBeenCalledTimes(1);
     expect(chatMock).not.toHaveBeenCalled();
   });
