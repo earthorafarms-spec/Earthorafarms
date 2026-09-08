@@ -164,7 +164,7 @@ export default function ShippingPolicy() {
                   <MapPin className="w-5 h-5 text-emerald-800" /> Address Adjustments
                 </h3>
                 <p className="font-inter text-sm text-black/65 leading-relaxed">
-                  Need to update your delivery address? If your order has not yet left our facility, contact our support team at <a href="mailto:contactus@earthorafarms.com" className="text-emerald-800 font-medium underline">contactus@earthorafarms.com</a> immediately.
+                  Once an order is placed, we are unable to modify or update the delivery address. If you have any concerns, please email us at <a href="mailto:earthorafarms@gmail.com" className="text-emerald-800 font-medium underline">earthorafarms@gmail.com</a> and our team will do their best to assist you.
                 </p>
               </div>
             </div>

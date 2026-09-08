@@ -87,7 +87,7 @@ const faqData: FAQItem[] = [
   {
     category: "orders",
     question: "Can I modify or cancel my order after placing it?",
-    answer: "Yes, you can modify or cancel your order anytime before dispatch (prior to 2:00 PM IST). You can cancel through your account dashboard or by contacting our support team.",
+    answer: "Once an order is placed, it cannot be modified or cancelled. If you have any concerns, please email us at earthorafarms@gmail.com and our team will do their best to assist you.",
   },
 ];
 
