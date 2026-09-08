@@ -4,9 +4,18 @@ import { SarvamSttAdapter } from '../src/adapters/sarvam-stt.js';
 import { SarvamTtsAdapter } from '../src/adapters/sarvam-tts.js';
 import { pcm16ToWav } from '../src/telephony/audio-accumulator.js';
 import { mulaw8kToPcm16k } from '../src/telephony/mulaw.js';
+import type { SupportedLanguage } from '../src/conversation/language.js';
 
 const socketUrl = process.env.SMOKE_WSS_URL ?? 'wss://earthorafarms.onrender.com/ws/voice/smartflo';
-const callerPhrase = 'What products are available at Earthora Farms?';
+const requestedSmokeLanguage = process.env.SMOKE_LANGUAGE;
+const callerLanguage: SupportedLanguage = requestedSmokeLanguage === 'hi' || requestedSmokeLanguage === 'gu'
+  ? requestedSmokeLanguage : 'en';
+const DEFAULT_CALLER_PHRASE: Record<SupportedLanguage, string> = {
+  en: 'What products are available at Earthora Farms?',
+  hi: 'Earthora Farms में कौन सा प्रोडक्ट उपलब्ध है?',
+  gu: 'Earthora Farms માં કયું પ્રોડક્ટ ઉપલબ્ધ છે?',
+};
+const callerPhrase = process.env.SMOKE_CALLER_PHRASE ?? DEFAULT_CALLER_PHRASE[callerLanguage];
 const speakBeforeGreeting = process.env.SMOKE_EARLY_SPEECH === 'true';
 const callSid = `codex-smoke-${Date.now()}`;
 const streamSid = `codex-stream-${Date.now()}`;
@@ -23,7 +32,7 @@ function waitForOpen(ws: WebSocket): Promise<void> {
 async function main(): Promise<void> {
   const tts = new SarvamTtsAdapter();
   const stt = new SarvamSttAdapter();
-  const callerMulaw = await tts.synthesizeMulaw8k(callerPhrase, 'en');
+  const callerMulaw = await tts.synthesizeMulaw8k(callerPhrase, callerLanguage);
   const ws = new WebSocket(socketUrl);
   const messages: Array<Record<string, any>> = [];
   ws.on('message', (raw) => messages.push({ ...JSON.parse(raw.toString()), receivedAt: Date.now() }));
@@ -98,10 +107,10 @@ async function main(): Promise<void> {
 
   if (responseMulaw.length === 0) throw new Error('No bot audio received');
   const botTranscript = await stt.transcribe(pcm16ToWav(mulaw8kToPcm16k(responseMulaw)), {
-    format: 'wav', languageHint: 'en',
+    format: 'wav', languageHint: callerLanguage,
   });
   console.log(JSON.stringify({
-    socketUrl, callSid, callerPhrase, speakBeforeGreeting, greetingAudioBytes,
+    socketUrl, callSid, callerLanguage, callerPhrase, speakBeforeGreeting, greetingAudioBytes,
     botMark: responseMark.mark.name,
     responseFirstAudioMs: firstResponseMediaAt === null || callerAudioFinishedAt === 0
       ? null
