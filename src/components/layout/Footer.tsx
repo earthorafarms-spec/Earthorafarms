@@ -9,10 +9,9 @@ import type { Product } from "@/types";
 
 /** Strip brand prefix tokens so long product names are short in the footer */
 function shortenName(name: string): string {
-  // Remove known prefix words (brand name etc.) — keep last meaningful words
   return name
-    .replace(/^morilife\+?\s*/i, '')
-    .replace(/\bmoringa\b/i, 'Moringa')
+    .replace(/^morilife\+?\s*/i, '')   // remove brand prefix
+    .replace(/\bleaf\b\s*/i, '')        // remove "Leaf"
     .trim();
 }
 
