@@ -59,9 +59,8 @@ export function Navbar() {
       return;
     }
     (supabase.from("favorite_details") as any)
-      .select("product_id, products!inner(status)")
+      .select("product_id")
       .eq("user_email", email)
-      .neq("products.status", "archived")
       .then(({ data }: { data: unknown[] | null }) => setFavoritesCount(data?.length || 0));
   }, [user]);
 
