@@ -10,8 +10,9 @@ import {
   type WhatsAppInboxEvent,
 } from './events.repository.js';
 import { processTurn } from '../voice-service/src/conversation/controller.js';
-import { sendWhatsAppImage, sendWhatsAppMessage, WhatsAppDeliveryError } from './provider.js';
+import { sendWhatsAppImage, sendWhatsAppMessage, sendWhatsAppProductCard, WhatsAppDeliveryError } from './provider.js';
 import { recordWhatsAppDiagnostic } from './diagnostics.js';
+import { parsePersistedProductCard } from './product-card.js';
 
 const POLL_INTERVAL_MS = 750;
 const MAX_EVENTS_PER_DRAIN = 10;
@@ -21,15 +22,28 @@ function phoneReference(phone: string): string {
   return createHash('sha256').update(phone).digest('hex').slice(0, 12);
 }
 
-async function processInboxEvent(event: WhatsAppInboxEvent): Promise<void> {
+export async function processInboxEvent(event: WhatsAppInboxEvent): Promise<void> {
   // A reply already stored means the state transition committed previously;
   // retry delivery only, never run the user's turn or cart mutation twice.
   if (event.replyText) {
-    if (event.mediaUrl && !event.mediaSentAt) {
-      await sendWhatsAppImage(event.phone, event.mediaUrl, event.mediaCaption ?? undefined);
-      await markWhatsAppMediaSent(event.id);
+    const productCard = parsePersistedProductCard(event.mediaCaption);
+    if (productCard) {
+      if (event.mediaUrl && !event.mediaSentAt) {
+        await sendWhatsAppProductCard(event.phone, productCard);
+        await markWhatsAppMediaSent(event.id);
+      }
+      if (!event.mediaSentAt && event.replyText !== productCard.body) {
+        await sendWhatsAppMessage(event.phone, event.replyText);
+      }
+    } else {
+      if (event.mediaUrl && !event.mediaSentAt) {
+        await sendWhatsAppImage(event.phone, event.mediaUrl, event.mediaCaption ?? undefined);
+        await markWhatsAppMediaSent(event.id);
+      }
+      if (!event.mediaSentAt) {
+        await sendWhatsAppMessage(event.phone, event.replyText);
+      }
     }
-    await sendWhatsAppMessage(event.phone, event.replyText);
     await markWhatsAppMessageProcessed(event.id);
     return;
   }
@@ -43,12 +57,24 @@ async function processInboxEvent(event: WhatsAppInboxEvent): Promise<void> {
 
   // Persist conversation/cart state and the exact outbound reply atomically.
   // If delivery fails, the next attempt resends replyText without reprocessing.
-  await saveWhatsAppTurn(event.id, voiceSessionId, outcome.state, outcome.replyText, outcome.productImage);
-  if (outcome.productImage) {
+  await saveWhatsAppTurn(
+    event.id,
+    voiceSessionId,
+    outcome.state,
+    outcome.replyText,
+    outcome.productImage,
+    outcome.productCard,
+  );
+  if (outcome.productCard) {
+    await sendWhatsAppProductCard(event.phone, outcome.productCard);
+    await markWhatsAppMediaSent(event.id);
+  } else if (outcome.productImage) {
     await sendWhatsAppImage(event.phone, outcome.productImage.url, outcome.productImage.caption);
     await markWhatsAppMediaSent(event.id);
   }
-  await sendWhatsAppMessage(event.phone, outcome.replyText);
+  if (!outcome.productCard || outcome.replyText !== outcome.productCard.body) {
+    await sendWhatsAppMessage(event.phone, outcome.replyText);
+  }
   await markWhatsAppMessageProcessed(event.id);
 }
 

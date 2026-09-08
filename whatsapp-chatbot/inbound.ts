@@ -1,3 +1,5 @@
+import { productActionInputFromButtonId } from './product-card.js';
+
 export interface WhatsAppInboundMessage {
   providerMessageId: string;
   phone: string;
@@ -20,6 +22,10 @@ function metaMessageText(message: Record<string, any>): string | null {
     return message.text.body.trim();
   }
   if (message.type === 'interactive') {
+    const actionInput = productActionInputFromButtonId(
+      message.interactive?.button_reply?.id ?? message.interactive?.list_reply?.id
+    );
+    if (actionInput) return actionInput;
     const text = message.interactive?.button_reply?.title ?? message.interactive?.list_reply?.title;
     return typeof text === 'string' ? text.trim() : null;
   }
@@ -94,8 +100,20 @@ function extractNormalizedProviderMessage(body: Record<string, any>): WhatsAppIn
       message.content?.text ??
       (typeof message.content === 'string' ? message.content : undefined) ??
       message.payload?.text ??
-      message.payload?.title;
-    const text = typeof rawText === 'string' ? rawText.trim() : null;
+      message.payload?.title ??
+      message.interactive?.button_reply?.title ??
+      message.interactive?.list_reply?.title ??
+      message.content?.buttonTitle ??
+      message.content?.listTitle;
+    const actionInput = productActionInputFromButtonId(
+      message.interactive?.button_reply?.id ??
+      message.interactive?.list_reply?.id ??
+      message.content?.buttonId ??
+      message.content?.listId ??
+      message.payload?.buttonId ??
+      message.button?.payload
+    );
+    const text = actionInput ?? (typeof rawText === 'string' ? rawText.trim() : null);
 
     if (!providerMessageId || !phone) continue;
     result.push({

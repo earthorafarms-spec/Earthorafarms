@@ -80,6 +80,13 @@ export interface ConversationState {
    * in the language the caller has actually been using, not a default.
    */
   currentLanguage: SupportedLanguage;
+  /** WhatsApp only: product behind the current interactive card and its quantity prompt. */
+  whatsAppProductContext?: {
+    productId: string;
+    productName: string;
+    awaitingQuantity: boolean;
+    lastAction?: 'benefits' | 'dosage' | 'add_to_cart';
+  };
   /** Reusable encrypted review token so "send the form again" does not create duplicate checkout sessions. */
   activeCheckoutReview?: {
     checkoutSessionId: string;

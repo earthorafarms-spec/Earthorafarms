@@ -1,4 +1,5 @@
 import { config } from '../voice-service/src/config.js';
+import { productButtonId, type WhatsAppProductCard } from './product-card.js';
 
 export class WhatsAppDeliveryError extends Error {
   constructor(readonly status: number) {
@@ -90,6 +91,43 @@ export function buildTataOmniImagePayload(
   };
 }
 
+function productCardInteractive(card: WhatsAppProductCard): Record<string, unknown> {
+  return {
+    type: 'button',
+    header: { type: 'image', image: { link: card.imageUrl } },
+    body: { text: card.body },
+    action: {
+      buttons: [
+        { type: 'reply', reply: { id: productButtonId('benefits', card.productId), title: 'Benefits' } },
+        { type: 'reply', reply: { id: productButtonId('dosage', card.productId), title: 'Dosage' } },
+        { type: 'reply', reply: { id: productButtonId('add_to_cart', card.productId), title: 'Add to Cart' } },
+      ],
+    },
+  };
+}
+
+export function buildTataOmniProductCardPayload(
+  to: string,
+  card: WhatsAppProductCard,
+): Record<string, unknown> {
+  const phone = to.startsWith('+') ? to : `+${to}`;
+  return { to: phone, type: 'interactive', source: 'external', interactive: productCardInteractive(card) };
+}
+
+export function buildMetaProductCardPayload(
+  to: string,
+  card: WhatsAppProductCard,
+): Record<string, unknown> {
+  const phone = to.startsWith('+') ? to.slice(1) : to;
+  return {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: phone,
+    type: 'interactive',
+    interactive: productCardInteractive(card),
+  };
+}
+
 async function sendTataOmniText(to: string, text: string): Promise<void> {
   if (!config.TATA_OMNI_ACCESS_TOKEN) throw new Error('Tata Omni WhatsApp delivery is not configured');
   const url = `${config.TATA_OMNI_API_BASE_URL.replace(/\/$/, '')}/whatsapp-cloud/messages`;
@@ -143,6 +181,26 @@ export async function sendWhatsAppImage(to: string, imageUrl: string, caption?: 
     type: 'image',
     image: { link: imageUrl, ...(caption ? { caption } : {}) },
   });
+}
+
+/** Sends one native image-header message with three deterministic reply buttons. */
+export async function sendWhatsAppProductCard(to: string, card: WhatsAppProductCard): Promise<void> {
+  if (!/^https:\/\//i.test(card.imageUrl)) throw new Error('WhatsApp image URL must use HTTPS');
+
+  if (config.WHATSAPP_PROVIDER === 'tata_omni') {
+    if (!config.TATA_OMNI_ACCESS_TOKEN) throw new Error('Tata Omni WhatsApp delivery is not configured');
+    const url = `${config.TATA_OMNI_API_BASE_URL.replace(/\/$/, '')}/whatsapp-cloud/messages`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: config.TATA_OMNI_ACCESS_TOKEN },
+      body: JSON.stringify(buildTataOmniProductCardPayload(to, card)),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) throw new WhatsAppDeliveryError(res.status);
+    return;
+  }
+
+  await sendWhatsAppPayload(buildMetaProductCardPayload(to, card));
 }
 
 /**

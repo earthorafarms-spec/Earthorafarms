@@ -12,6 +12,10 @@ import { isCheckoutReady, normalizeSpokenDigitSequence, normalizeWhatsAppPhone }
 import { spokenProductNameMatches } from '../tools/products.js';
 import { getAllApprovedProductKnowledge } from '../tools/knowledge.js';
 import type { OutboundAction, ToolContext } from '../tools/types.js';
+import {
+  parseProductActionInput,
+  type WhatsAppProductCard,
+} from '../../../whatsapp-chatbot/product-card.js';
 
 function reviewFormReply(
   sent: boolean,
@@ -239,6 +243,20 @@ function maternalSafetyReply(
   return `Please consult a doctor before taking ${productName} during pregnancy or breastfeeding. Also consult them if you have a health problem or take regular medicines.`;
 }
 
+interface LiveProductDetails {
+  found?: boolean;
+  id?: string;
+  name?: string;
+  description?: string;
+  highlights?: string[];
+  price?: number;
+  mrp?: number;
+  currency?: string;
+  stockLabel?: string;
+  inStock?: boolean;
+  imageUrl?: string;
+}
+
 const PRODUCT_NUMBER_PROMPTS: Record<ConversationState['currentLanguage'], string> = {
   en: 'Reply with the product number.',
   hi: 'प्रोडक्ट चुनने के लिए उसका नंबर भेजें।',
@@ -424,11 +442,47 @@ function buildNumberedCatalogReply(
   return `${invalid}${lines.join('\n')}\n\n${PRODUCT_NUMBER_PROMPTS[language]}`;
 }
 
+function buildWhatsAppProductCard(details: LiveProductDetails, fallbackName: string): WhatsAppProductCard | null {
+  if (!details.found || typeof details.id !== 'string' ||
+      typeof details.imageUrl !== 'string' || !/^https:\/\//i.test(details.imageUrl)) return null;
+
+  const name = typeof details.name === 'string' && details.name.trim() ? details.name.trim() : fallbackName;
+  const price = typeof details.price === 'number' && Number.isFinite(details.price)
+    ? `${details.currency === 'INR' || !details.currency ? '₹' : `${details.currency} `}${details.price.toLocaleString('en-IN')}`
+    : null;
+  const mrp = price && typeof details.mrp === 'number' && Number.isFinite(details.mrp) && details.mrp > (details.price ?? 0)
+    ? `MRP ₹${details.mrp.toLocaleString('en-IN')}`
+    : null;
+  const detailLine = [price, mrp, details.stockLabel].filter((value): value is string => Boolean(value)).join(' • ');
+  const rawDescription = typeof details.description === 'string' && details.description.trim()
+    ? details.description
+    : Array.isArray(details.highlights) ? details.highlights[0] ?? '' : '';
+  const compactDescription = rawDescription.replace(/\s+/g, ' ').trim();
+  const shortDescription = compactDescription.length > 360
+    ? `${compactDescription.slice(0, 357).trimEnd()}...`
+    : compactDescription;
+  const body = [`*${name}*`, detailLine, shortDescription].filter(Boolean).join('\n');
+  return { productId: details.id, imageUrl: details.imageUrl, name, body };
+}
+
+function productActionFailure(language: ConversationState['currentLanguage']): string {
+  if (language === 'hi') return 'माफ़ कीजिए, यह प्रोडक्ट अभी उपलब्ध नहीं है। कृपया प्रोडक्ट मेन्यू फिर से खोलें।';
+  if (language === 'gu') return 'માફ કરશો, આ પ્રોડક્ટ હાલમાં ઉપલબ્ધ નથી. કૃપા કરીને પ્રોડક્ટ મેનુ ફરી ખોલો.';
+  return 'Sorry, this product is not currently available. Please open the product menu again.';
+}
+
+function productQuantityPrompt(productName: string, language: ConversationState['currentLanguage']): string {
+  if (language === 'hi') return `आप ${productName} की कितनी यूनिट कार्ट में जोड़ना चाहते हैं?`;
+  if (language === 'gu') return `તમે ${productName} ના કેટલા યુનિટ કાર્ટમાં ઉમેરવા માંગો છો?`;
+  return `How many units of ${productName} would you like to add to your cart?`;
+}
+
 export interface TurnOutcome {
   state: ConversationState;
   replyText: string;
   policyViolations: string[];
   productImage?: { url: string; caption: string };
+  productCard?: WhatsAppProductCard;
   outboundActions?: OutboundAction[];
   /** Voice transport closes only after this reply has fully played. */
   callShouldEnd?: boolean;
@@ -449,6 +503,8 @@ export async function processTurn(
   const outboundActions: OutboundAction[] = [];
   const toolContext: ToolContext = { callSessionId, state, channel, outboundActions };
   let productImage: TurnOutcome['productImage'];
+  let productCard: TurnOutcome['productCard'];
+  const productAction = channel === 'text' ? parseProductActionInput(userText) : null;
   const productMenuSelected = channel === 'text' && isProductMenuSelection(userText, state.messages);
   const selectedProductNumber = channel === 'text'
     ? numberedProductSelectionNumber(userText, state.messages)
@@ -459,17 +515,19 @@ export async function processTurn(
   // must call the tool again this turn.
   state.currentTurnFacts = [];
 
-  state.messages.push({ role: 'user', content: userText });
+  if (!productAction) {
+    state.messages.push({ role: 'user', content: userText });
+  }
 
   // Deterministic and per-turn. Confident full Hindi, Gujarati, or English
   // utterances switch the reply language even after the cart/checkout has
   // started. Short ambiguous values such as "yes", a PIN, or "Ahmedabad"
   // return null from detectLanguage and therefore keep the current language.
   const checkoutStarted = state.cart.length > 0 || Object.keys(state.checkoutFields).length > 0;
-  const explicitLanguage = requestedLanguage(userText);
+  const explicitLanguage = productAction ? null : requestedLanguage(userText);
   if (explicitLanguage) {
     state.currentLanguage = explicitLanguage;
-  } else {
+  } else if (!productAction) {
     const detected = detectLanguage(userText);
     if (detected) state.currentLanguage = detected;
   }
@@ -532,6 +590,40 @@ export async function processTurn(
       : { items: state.cart };
     state.currentTurnFacts.push({ toolName: 'get_cart', resultJson: JSON.stringify(cartResult) });
     const replyText = directCartReply(state);
+    state.messages.push({ role: 'assistant', content: replyText });
+    return { state, replyText, policyViolations: [], outboundActions };
+  }
+
+  const pendingProduct = channel === 'text' && state.whatsAppProductContext?.awaitingQuantity
+    ? state.whatsAppProductContext
+    : null;
+  if (pendingProduct && /^\d+$/.test(userText.trim())) {
+    const quantity = Number.parseInt(userText.trim(), 10);
+    if (quantity < 1) {
+      const replyText = productQuantityPrompt(pendingProduct.productName, state.currentLanguage);
+      state.messages.push({ role: 'assistant', content: replyText });
+      return { state, replyText, policyViolations: [], outboundActions };
+    }
+    const addResult = await toolsByName.add_cart_item.handler(
+      { productId: pendingProduct.productId, quantity },
+      toolContext,
+    ).catch((err) => ({ ok: false, reason: (err as Error).message }));
+    state.currentTurnFacts.push({ toolName: 'add_cart_item', resultJson: JSON.stringify(addResult) });
+    const added = Boolean(addResult && typeof addResult === 'object' && (addResult as { ok?: boolean }).ok);
+    if (!added) {
+      const replyText = productActionFailure(state.currentLanguage);
+      pendingProduct.awaitingQuantity = false;
+      state.messages.push({ role: 'assistant', content: replyText });
+      return { state, replyText, policyViolations: [], outboundActions };
+    }
+    pendingProduct.awaitingQuantity = false;
+    const nextQuestion = nextCheckoutQuestion(state);
+    const confirmation = state.currentLanguage === 'hi'
+      ? `${pendingProduct.productName} कार्ट में जोड़ दिया है।`
+      : state.currentLanguage === 'gu'
+        ? `${pendingProduct.productName} કાર્ટમાં ઉમેર્યું છે.`
+        : `${pendingProduct.productName} has been added to your cart.`;
+    const replyText = nextQuestion ? `${confirmation} ${nextQuestion}` : confirmation;
     state.messages.push({ role: 'assistant', content: replyText });
     return { state, replyText, policyViolations: [], outboundActions };
   }
@@ -613,6 +705,27 @@ export async function processTurn(
       }
 
       const currentProducts = liveCatalogProducts(productCatalog);
+      const actionProduct = productAction
+        ? currentProducts.find((product) => product.id === productAction.productId) ?? null
+        : null;
+      if (productAction && !actionProduct) {
+        const replyText = productActionFailure(state.currentLanguage);
+        state.messages.push({ role: 'assistant', content: replyText });
+        return { state, replyText, policyViolations: [], outboundActions };
+      }
+      if (productAction?.action === 'add_to_cart' && actionProduct) {
+        state.whatsAppProductContext = {
+          productId: actionProduct.id,
+          productName: actionProduct.name,
+          awaitingQuantity: actionProduct.stockLabel !== 'Out of Stock',
+          lastAction: 'add_to_cart',
+        };
+        const replyText = actionProduct.stockLabel === 'Out of Stock'
+          ? productActionFailure(state.currentLanguage)
+          : productQuantityPrompt(actionProduct.name, state.currentLanguage);
+        state.messages.push({ role: 'assistant', content: replyText });
+        return { state, replyText, policyViolations: [], outboundActions };
+      }
       const numberedProduct = selectedProductNumber !== null
         ? resolveNumberedProductSelection(currentProducts, selectedProductNumber, state.messages)
         : null;
@@ -622,7 +735,7 @@ export async function processTurn(
         return { state, replyText: finalText, policyViolations: [], outboundActions };
       }
 
-      if (shouldAnswerCatalogDirectly(userText)) {
+      if (!productAction && shouldAnswerCatalogDirectly(userText)) {
         const directReply = buildDirectCatalogReply(productCatalog, state.currentLanguage);
         if (directReply) {
           const finalText = channel === 'voice'
@@ -641,9 +754,9 @@ export async function processTurn(
           'ingredients, directions, or warnings, still call get_product_knowledge with the matching product ID.',
       });
 
-      const selectedProduct = channel === 'text' && selectedProductNumber !== null
+      const selectedProduct = actionProduct ?? (channel === 'text' && selectedProductNumber !== null
         ? numberedProduct
-        : resolveProductForTurn(currentProducts, userText, state.messages);
+        : resolveProductForTurn(currentProducts, userText, state.messages));
       // Product details and every admin-approved knowledge category are also
       // deterministic for voice. Previously this prefetch happened only in
       // WhatsApp, leaving phone answers dependent on optional model tool use.
@@ -660,7 +773,7 @@ export async function processTurn(
           const knowledgeJson = JSON.stringify(knowledge);
           state.currentTurnFacts.push({ toolName: 'get_product_details', resultJson: detailsJson });
           state.currentTurnFacts.push({ toolName: 'get_product_knowledge', resultJson: knowledgeJson });
-          if (MATERNAL_SAFETY_PATTERN.test(userText)) {
+          if (!productAction && MATERNAL_SAFETY_PATTERN.test(userText)) {
             const groundedReply = maternalSafetyReply(knowledge, selectedProduct.name, state.currentLanguage);
             const finalText = channel === 'voice'
               ? limitSpokenReply(normalizeIndicSpeechText(toSpokenText(groundedReply), state.currentLanguage))
@@ -669,12 +782,22 @@ export async function processTurn(
             return { state, replyText: finalText, policyViolations: [], productImage, outboundActions };
           }
           if (details && typeof details === 'object') {
-            const liveDetails = details as { found?: boolean; imageUrl?: unknown; name?: unknown };
-            if (liveDetails.found && typeof liveDetails.imageUrl === 'string' && /^https:\/\//i.test(liveDetails.imageUrl)) {
+            const liveDetails = details as LiveProductDetails;
+            if (!productAction && liveDetails.found && typeof liveDetails.imageUrl === 'string' && /^https:\/\//i.test(liveDetails.imageUrl)) {
               productImage = {
                 url: liveDetails.imageUrl,
                 caption: typeof liveDetails.name === 'string' ? liveDetails.name : selectedProduct.name,
               };
+              if (channel === 'text') {
+                productCard = buildWhatsAppProductCard(liveDetails, selectedProduct.name) ?? undefined;
+                if (productCard) {
+                  state.whatsAppProductContext = {
+                    productId: productCard.productId,
+                    productName: productCard.name,
+                    awaitingQuantity: false,
+                  };
+                }
+              }
             }
           }
           turnContextMessages.push({
@@ -689,6 +812,32 @@ export async function processTurn(
               'Treat the records as factual notes: synthesize them into polished, natural customer-facing sentences instead of ' +
               'copying field labels or knowledge entries. Never replace these records with remembered or general product claims.',
           });
+          if (productAction && actionProduct) {
+            state.whatsAppProductContext = {
+              productId: actionProduct.id,
+              productName: actionProduct.name,
+              awaitingQuantity: false,
+              lastAction: productAction.action,
+            };
+            turnContextMessages.push({
+              role: 'system',
+              content:
+                `The customer deterministically selected the ${productAction.action} button for ${actionProduct.name}. ` +
+                `Answer only their ${productAction.action === 'benefits' ? 'benefits' : 'dosage and usage'} request from the ` +
+                'live approved knowledge above. If that category is absent, use the existing approved-information fallback.',
+            });
+          }
+          if (selectedProductNumber !== null && productCard) {
+            state.messages.push({ role: 'assistant', content: productCard.body });
+            return {
+              state,
+              replyText: productCard.body,
+              policyViolations: [],
+              productImage,
+              productCard,
+              outboundActions,
+            };
+          }
         }
       }
     }
@@ -790,7 +939,7 @@ export async function processTurn(
           const replyText = reviewFormReply(delivery.ok === true, state.currentLanguage, reviewUrl);
           if (delivery.ok && channel === 'voice') state.awaitingReviewReceiptConfirmation = true;
           state.messages.push({ role: 'assistant', content: replyText });
-          return { state, replyText, policyViolations: [], productImage, outboundActions };
+          return { state, replyText, policyViolations: [], productImage, productCard, outboundActions };
         }
       }
 
@@ -848,10 +997,10 @@ export async function processTurn(
       ? limitSpokenReply(normalizeIndicSpeechText(toSpokenText(policyResult.text), state.currentLanguage))
       : formatWhatsAppReply(policyResult.text);
     state.messages.push({ role: 'assistant', content: finalText });
-    return { state, replyText: finalText, policyViolations: policyResult.violations, productImage, outboundActions };
+    return { state, replyText: finalText, policyViolations: policyResult.violations, productImage, productCard, outboundActions };
   }
 
   const fallback = turnFailurePrompt(state.currentLanguage);
   state.messages.push({ role: 'assistant', content: fallback });
-  return { state, replyText: fallback, policyViolations: ['tool_loop_guard_exceeded'], productImage, outboundActions };
+  return { state, replyText: fallback, policyViolations: ['tool_loop_guard_exceeded'], productImage, productCard, outboundActions };
 }

@@ -1,6 +1,7 @@
 import { supabase } from '../voice-service/src/lib/supabaseClient.js';
 import type { ConversationState } from '../voice-service/src/conversation/state.js';
 import type { WhatsAppInboundMessage } from './inbound.js';
+import { serializeProductCard, type WhatsAppProductCard } from './product-card.js';
 
 export interface WhatsAppInboxEvent {
   id: string;
@@ -58,14 +59,18 @@ export async function saveWhatsAppTurn(
   state: ConversationState,
   replyText: string,
   media?: { url: string; caption: string },
+  productCard?: WhatsAppProductCard,
 ): Promise<void> {
+  const persistedMedia = productCard
+    ? { url: productCard.imageUrl, caption: serializeProductCard(productCard) }
+    : media;
   const { error } = await supabase.rpc('complete_whatsapp_message_turn_v2', {
     p_event_id: eventId,
     p_voice_session_id: voiceSessionId,
     p_conversation_state: state,
     p_reply_text: replyText,
-    p_outbound_media_url: media?.url ?? null,
-    p_outbound_media_caption: media?.caption ?? null,
+    p_outbound_media_url: persistedMedia?.url ?? null,
+    p_outbound_media_caption: persistedMedia?.caption ?? null,
   });
   if (error) throw new Error(`whatsapp: failed to save completed turn: ${error.message}`);
 }

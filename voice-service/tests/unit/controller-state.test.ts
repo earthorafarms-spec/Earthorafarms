@@ -24,6 +24,7 @@ vi.mock('../../src/repositories/knowledge.repository.js', async (importOriginal)
 
 import { processTurn, shouldPrefetchProductCatalog } from '../../src/conversation/controller.js';
 import { WHATSAPP_MENU } from '../../../whatsapp-chatbot/prompt.js';
+import { productActionInputFromButtonId, productButtonId } from '../../../whatsapp-chatbot/product-card.js';
 
 describe('processTurn persisted state', () => {
   beforeEach(() => {
@@ -227,7 +228,7 @@ describe('processTurn persisted state', () => {
     expect(chatMock).not.toHaveBeenCalled();
   });
 
-  it('resolves a numbered product reply and exposes its native image', async () => {
+  it('resolves a numbered product reply into a native interactive product card', async () => {
     const products = [
       {
         id: 'alpha-id', slug: 'alpha', name: 'Alpha', mrp: 100, price: 90,
@@ -244,7 +245,6 @@ describe('processTurn persisted state', () => {
     productRepositoryMocks.getProductById.mockImplementation(async (id: string) =>
       products.find((product) => product.id === id) ?? null
     );
-    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'You selected Beta. How many units would you like?' });
     const state = createInitialState();
     state.messages.push({
       role: 'assistant',
@@ -255,9 +255,96 @@ describe('processTurn persisted state', () => {
 
     expect(productRepositoryMocks.getProductById).toHaveBeenCalledWith('beta-id');
     expect(outcome.productImage).toEqual({ url: 'https://cdn.example.com/beta.png', caption: 'Beta' });
-    expect(outcome.replyText).toContain('How many');
+    expect(outcome.productCard).toEqual({
+      productId: 'beta-id',
+      imageUrl: 'https://cdn.example.com/beta.png',
+      name: 'Beta',
+      body: '*Beta*\n₹110 • MRP ₹120 • Low Stock\nBeta details',
+    });
+    expect(outcome.replyText).toBe(outcome.productCard?.body);
+    expect(outcome.state.whatsAppProductContext).toEqual({
+      productId: 'beta-id', productName: 'Beta', awaitingQuantity: false,
+    });
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it('handles the Benefits product-card button from approved product knowledge through the LLM and output policy', async () => {
+    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'Alpha helps support your immunity naturally.' });
+    const input = productActionInputFromButtonId(productButtonId('benefits', 'alpha-id'))!;
+
+    const outcome = await processTurn('controller-test', createInitialState(), input, 'text');
+
+    expect(outcome.replyText).toBe('Alpha helps support your immunity naturally.');
+    expect(knowledgeRepositoryMocks.getAllApprovedKnowledge).toHaveBeenCalledWith('alpha-id');
+    expect(outcome.state.currentTurnFacts.map((fact) => fact.toolName)).toEqual([
+      'list_products', 'get_product_details', 'get_product_knowledge',
+    ]);
+    expect(chatMock).toHaveBeenCalledTimes(1);
     const messages = chatMock.mock.calls[0][0] as { role: string; content: string }[];
-    expect(messages.some((message) => message.content.includes('numeric reply selected product option 2, Beta'))).toBe(true);
+    expect(messages.some((m) => m.content.includes('selected the benefits button for Alpha'))).toBe(true);
+    expect(messages.some((m) => m.content.includes('Admin-approved immunity support information'))).toBe(true);
+    expect(outcome.state.messages.some((m) => m.role === 'user')).toBe(false);
+    expect(outcome.state.whatsAppProductContext).toEqual({
+      productId: 'alpha-id', productName: 'Alpha', awaitingQuantity: false, lastAction: 'benefits',
+    });
+  });
+
+  it('handles the Dosage product-card button through the LLM and output policy', async () => {
+    knowledgeRepositoryMocks.getAllApprovedKnowledge.mockResolvedValueOnce([{
+      id: 'knowledge-dose', productId: 'alpha-id', category: 'dosage', question: null,
+      content: 'Take one capsule daily after food.', version: 1, locale: 'en-IN',
+    }]);
+    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'Take one capsule of Alpha daily after food.' });
+    const input = productActionInputFromButtonId(productButtonId('dosage', 'alpha-id'))!;
+
+    const outcome = await processTurn('controller-test', createInitialState(), input, 'text');
+
+    expect(outcome.replyText).toBe('Take one capsule of Alpha daily after food.');
+    expect(knowledgeRepositoryMocks.getAllApprovedKnowledge).toHaveBeenCalledWith('alpha-id');
+    expect(chatMock).toHaveBeenCalledTimes(1);
+    const messages = chatMock.mock.calls[0][0] as { role: string; content: string }[];
+    expect(messages.some((m) => m.content.includes('selected the dosage button for Alpha'))).toBe(true);
+    expect(outcome.state.messages.some((m) => m.role === 'user')).toBe(false);
+    expect(outcome.state.whatsAppProductContext).toEqual({
+      productId: 'alpha-id', productName: 'Alpha', awaitingQuantity: false, lastAction: 'dosage',
+    });
+  });
+
+  it('enforces output policy on Benefits button responses', async () => {
+    chatMock
+      .mockResolvedValueOnce({ kind: 'message', content: 'Alpha costs ₹9999 and gives great energy.' })
+      .mockResolvedValueOnce({ kind: 'message', content: 'Alpha provides approved immunity support.' });
+    const input = productActionInputFromButtonId(productButtonId('benefits', 'alpha-id'))!;
+
+    const outcome = await processTurn('controller-test', createInitialState(), input, 'text');
+
+    expect(outcome.replyText).toBe('Alpha provides approved immunity support.');
+    expect(chatMock).toHaveBeenCalledTimes(2);
+    expect(outcome.state.messages.some((m) => m.role === 'user')).toBe(false);
+  });
+
+  it('handles Add to Cart deterministically and keeps the next number in the quantity flow', async () => {
+    const state = createInitialState();
+    state.checkoutFields.phone = '+919876543210';
+    const input = productActionInputFromButtonId(productButtonId('add_to_cart', 'alpha-id'))!;
+
+    const buttonOutcome = await processTurn('controller-test', state, input, 'text');
+
+    expect(buttonOutcome.replyText).toBe('How many units of Alpha would you like to add to your cart?');
+    expect(buttonOutcome.state.whatsAppProductContext?.awaitingQuantity).toBe(true);
+    expect(buttonOutcome.state.whatsAppProductContext?.lastAction).toBe('add_to_cart');
+    expect(buttonOutcome.state.messages.some((m) => m.role === 'user')).toBe(false);
+    expect(chatMock).not.toHaveBeenCalled();
+
+    const quantityOutcome = await processTurn('controller-test', state, '2', 'text');
+
+    expect(quantityOutcome.state.cart).toEqual([
+      { productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 },
+    ]);
+    expect(quantityOutcome.replyText).toContain('What is your full name?');
+    expect(quantityOutcome.state.whatsAppProductContext?.awaitingQuantity).toBe(false);
+    expect(quantityOutcome.state.messages.some((m) => m.role === 'user' && m.content === '2')).toBe(true);
+    expect(chatMock).not.toHaveBeenCalled();
   });
 
   it('does not treat a quantity as a product selection', async () => {

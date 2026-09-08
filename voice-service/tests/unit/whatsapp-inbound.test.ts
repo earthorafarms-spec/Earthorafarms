@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { extractWhatsAppInboundMessages } from '../../../whatsapp-chatbot/inbound.js';
+import { productActionInputFromButtonId, productButtonId } from '../../../whatsapp-chatbot/product-card.js';
 
 describe('WhatsApp inbound normalization', () => {
   it('extracts every Meta text and interactive reply across entries', () => {
@@ -7,14 +8,34 @@ describe('WhatsApp inbound normalization', () => {
       object: 'whatsapp_business_account',
       entry: [{ changes: [{ value: { messages: [
         { id: 'wamid.1', from: '919876543210', type: 'text', text: { body: 'Two powders' } },
-        { id: 'wamid.2', from: '919876543210', type: 'interactive', interactive: { button_reply: { title: 'Yes' } } },
+        {
+          id: 'wamid.2', from: '919876543210', type: 'interactive',
+          interactive: { button_reply: { id: productButtonId('benefits', 'alpha-id'), title: 'Benefits' } },
+        },
       ] } }] }],
     });
 
     expect(messages).toEqual([
       { providerMessageId: 'wamid.1', phone: '+919876543210', text: 'Two powders', kind: 'text' },
-      { providerMessageId: 'wamid.2', phone: '+919876543210', text: 'Yes', kind: 'text' },
+      {
+        providerMessageId: 'wamid.2', phone: '+919876543210',
+        text: productActionInputFromButtonId(productButtonId('benefits', 'alpha-id')), kind: 'text',
+      },
     ]);
+  });
+
+  it('normalizes a provider interactive button ID for deterministic routing', () => {
+    const messages = extractWhatsAppInboundMessages({
+      payload: {
+        message: {
+          id: 'omni-button-1', type: 'interactive',
+          content: { buttonId: productButtonId('add_to_cart', 'alpha-id'), buttonTitle: 'Add to Cart' },
+        },
+        sender: { phone: '+91 98765 43210' },
+      },
+    });
+
+    expect(messages[0]?.text).toBe(productActionInputFromButtonId(productButtonId('add_to_cart', 'alpha-id')));
   });
 
   it('normalizes a flat/enveloped Omni callback without coupling downstream code to it', () => {
