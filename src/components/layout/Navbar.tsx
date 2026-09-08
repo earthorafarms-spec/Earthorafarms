@@ -6,6 +6,7 @@ import { ShoppingBag, Menu, X, Heart, Settings } from "lucide-react";
 import { useCart } from "@/contexts/cart-context";
 import { useAuth } from "@/contexts/auth-context";
 import { supabase } from "@/lib/supabase";
+import { fetchPublicProducts } from "@/lib/api";
 import { UserDashboardModal } from "@/components/user/UserDashboardModal";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import earthoraTextSvg from "@assets/generated_images/Earthora Text.svg";
@@ -58,10 +59,20 @@ export function Navbar() {
       setFavoritesCount(0);
       return;
     }
-    (supabase.from("favorite_details") as any)
-      .select("product_id")
-      .eq("user_email", email)
-      .then(({ data }: { data: unknown[] | null }) => setFavoritesCount(data?.length || 0));
+    Promise.all([
+      (supabase.from("favorite_details") as any)
+        .select("product_id")
+        .eq("user_email", email),
+      fetchPublicProducts(),
+    ]).then(([favoritesResult, publicProducts]) => {
+      if (favoritesResult.error) return;
+
+      const publicProductIds = new Set(publicProducts.map((product) => String(product.id)));
+      const visibleFavorites = (favoritesResult.data || []).filter(
+        (favorite: { product_id: string }) => publicProductIds.has(String(favorite.product_id)),
+      );
+      setFavoritesCount(visibleFavorites.length);
+    }).catch(() => setFavoritesCount(0));
   }, [user]);
 
   // Listen for optimistic wishlist changes from product cards
