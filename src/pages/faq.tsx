@@ -31,7 +31,7 @@ const faqData: FAQItem[] = [
   {
     category: "product",
     question: "What is the recommended daily dosage for Moringa Powder and Tablets?",
-    answer: "For Earthora Moringa Powder: Take 1 teaspoon (approx 3-5g) daily mixed into smoothies, warm water, juice, or warm meals. For Earthora Pressed Tablets: Take 2 tablets (1000mg total) daily with water, preferably after breakfast or lunch.",
+    answer: "For Earthora Moringa Tablets: Take 2 tablets before or after lunch and 2 tablets before or after dinner daily with water.",
   },
   {
     category: "product",
@@ -65,7 +65,7 @@ const faqData: FAQItem[] = [
   {
     category: "shipping",
     question: "Do you offer free shipping across India?",
-    answer: "Yes! We offer free standard express shipping on all prepaid orders across India with no minimum cart value required.",
+    answer: "Yes! We offer free shipping on all orders across Pan-India — any product, any order size, no minimum cart value required.",
   },
   {
     category: "shipping",
