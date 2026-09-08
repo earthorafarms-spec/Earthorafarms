@@ -111,7 +111,7 @@ export function Navbar() {
         animate={{ y: 0 }}
         transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
       >
-        <div className="container mx-auto px-6 sm:px-10 h-20 flex items-center justify-between">
+        <div className="w-full max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-10 h-20 flex items-center justify-between">
           <Link href="/" className="flex items-center cursor-pointer py-1">
             <img
               src={earthoraTextSvg}

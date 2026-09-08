@@ -127,12 +127,12 @@ export default function Contact() {
   };
 
   return (
-    <div className="min-h-[100dvh] flex flex-col bg-[#FAF9F5] text-black selection:bg-black/10">
+    <div className="min-h-[100dvh] flex flex-col bg-[#FAF9F5] text-black selection:bg-black/10 overflow-x-hidden">
       <Navbar />
 
       {/* ── UNIQUE HERO: Organic Clean Centered Header ── */}
       <section className="relative pt-36 lg:pt-40 pb-12 lg:pb-16 text-center">
-        <div className="container mx-auto px-6 max-w-3xl">
+        <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 lg:px-10">
           <motion.span
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
@@ -162,9 +162,9 @@ export default function Contact() {
       </section>
 
       {/* ── Main Contact Section ── */}
-      <section className="py-8 lg:py-16">
-        <div className="container mx-auto px-6 sm:px-10 max-w-[1400px]">
-          <div className="grid lg:grid-cols-12 gap-12 lg:gap-16">
+      <section className="py-8 lg:py-16 w-full overflow-hidden">
+        <div className="w-full max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-10">
+          <div className="grid lg:grid-cols-12 gap-10 lg:gap-16">
             {/* Info Cards Column */}
             <div className="lg:col-span-5 space-y-6">
               <div className="mb-4">
@@ -179,21 +179,21 @@ export default function Contact() {
               {contactInfo.map((info, idx) => (
                 <div
                   key={idx}
-                  className="bg-[#FEFDF9] rounded-2xl p-6 border border-black/5 flex items-start gap-5 shadow-sm"
+                  className="bg-[#FEFDF9] rounded-2xl p-5 sm:p-6 border border-black/5 flex items-start gap-4 sm:gap-5 shadow-sm max-w-full"
                 >
                   <div className="w-12 h-12 rounded-xl bg-black text-white flex items-center justify-center shrink-0">
                     <info.icon className="w-5 h-5" />
                   </div>
-                  <div>
-                    <span className="font-inter text-xs text-black/40 uppercase tracking-wider font-medium block mb-1">
+                  <div className="flex-1 min-w-0 break-words">
+                    <span className="font-inter text-xs text-black/40 uppercase tracking-wider font-medium block mb-1 truncate">
                       {info.label}
                     </span>
                     {info.href ? (
-                      <a href={info.href} className="font-dm text-xl text-black hover:text-emerald-800 transition-colors tracking-[-0.02em]">
+                      <a href={info.href} className="font-dm text-lg sm:text-xl text-black hover:text-emerald-800 transition-colors tracking-[-0.02em] block break-all sm:break-words">
                         {info.value}
                       </a>
                     ) : (
-                      <span className="font-dm text-xl text-black tracking-[-0.02em]">
+                      <span className="font-dm text-lg sm:text-xl text-black tracking-[-0.02em] block break-words">
                         {info.value}
                       </span>
                     )}
@@ -204,7 +204,7 @@ export default function Contact() {
 
             {/* Form Column */}
             <div className="lg:col-span-7">
-              <div className="bg-[#FEFDF9] rounded-3xl p-8 sm:p-12 border border-black/5 shadow-xl">
+              <div className="bg-[#FEFDF9] rounded-[24px] sm:rounded-3xl p-6 sm:p-10 border border-black/5 shadow-xl max-w-full">
                 <h2 className="font-dm font-normal text-3xl sm:text-4xl text-black tracking-[-0.04em] mb-2">
                   Send a Message
                 </h2>

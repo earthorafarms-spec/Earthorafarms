@@ -300,7 +300,7 @@ export function UserDashboardModal({ isOpen, onClose }: UserDashboardModalProps)
                       <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id as any)}
-                        className={`flex items-center gap-3.5 px-4 py-3 rounded-xl text-left whitespace-nowrap md:whitespace-normal transition-all duration-300 w-full group relative ${
+                        className={`flex items-center justify-center md:justify-start gap-3.5 px-4 py-3 rounded-xl text-left whitespace-nowrap md:whitespace-normal transition-all duration-300 w-full flex-1 md:flex-none group relative ${
                           isSelected
                             ? 'bg-white text-black shadow-lg'
                             : 'text-white/60 hover:bg-white/5 hover:text-white'

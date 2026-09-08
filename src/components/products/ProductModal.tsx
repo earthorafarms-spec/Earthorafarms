@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Star, ShoppingCart, Zap, X } from 'lucide-react';
+import { Star, ShoppingCart, CreditCard, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { Product } from '@/types';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
@@ -146,7 +146,7 @@ export const ProductModal = memo(function ProductModal({
                             <ShoppingCart className="w-4 h-4" strokeWidth={1.5} /> Add to Cart
                           </Button>
                           <Button variant="outline" className="flex-1 h-13 text-sm gap-2.5 border-primary/30 text-primary hover:bg-primary/5 rounded-xl" onClick={onBuyNow}>
-                            <Zap className="w-4 h-4" strokeWidth={1.5} /> Buy Now
+                            <CreditCard className="w-4 h-4" strokeWidth={1.5} /> Buy Now
                           </Button>
                         </>
                       )}
