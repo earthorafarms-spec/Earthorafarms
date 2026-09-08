@@ -92,9 +92,10 @@ export function buildTataOmniImagePayload(
 }
 
 function productCardInteractive(card: WhatsAppProductCard): Record<string, unknown> {
+  const hasValidImage = typeof card.imageUrl === 'string' && /^https:\/\//i.test(card.imageUrl);
   return {
     type: 'button',
-    header: { type: 'image', image: { link: card.imageUrl } },
+    ...(hasValidImage ? { header: { type: 'image', image: { link: card.imageUrl } } } : {}),
     body: { text: card.body },
     action: {
       buttons: [
@@ -185,7 +186,7 @@ export async function sendWhatsAppImage(to: string, imageUrl: string, caption?: 
 
 /** Sends one native image-header message with three deterministic reply buttons. */
 export async function sendWhatsAppProductCard(to: string, card: WhatsAppProductCard): Promise<void> {
-  if (!/^https:\/\//i.test(card.imageUrl)) throw new Error('WhatsApp image URL must use HTTPS');
+  if (card.imageUrl && !/^https:\/\//i.test(card.imageUrl)) throw new Error('WhatsApp image URL must use HTTPS');
 
   if (config.WHATSAPP_PROVIDER === 'tata_omni') {
     if (!config.TATA_OMNI_ACCESS_TOKEN) throw new Error('Tata Omni WhatsApp delivery is not configured');

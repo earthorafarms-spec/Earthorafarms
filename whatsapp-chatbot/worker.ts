@@ -28,7 +28,7 @@ export async function processInboxEvent(event: WhatsAppInboxEvent): Promise<void
   if (event.replyText) {
     const productCard = parsePersistedProductCard(event.mediaCaption);
     if (productCard) {
-      if (event.mediaUrl && !event.mediaSentAt) {
+      if (!event.mediaSentAt) {
         await sendWhatsAppProductCard(event.phone, productCard);
         await markWhatsAppMediaSent(event.id);
       }

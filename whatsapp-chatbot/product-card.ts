@@ -2,7 +2,7 @@ export type WhatsAppProductAction = 'benefits' | 'dosage' | 'add_to_cart';
 
 export interface WhatsAppProductCard {
   productId: string;
-  imageUrl: string;
+  imageUrl?: string;
   name: string;
   body: string;
 }
@@ -71,9 +71,16 @@ export function parsePersistedProductCard(value: string | null): WhatsAppProduct
   if (!value?.startsWith(PERSISTED_CARD_PREFIX)) return null;
   try {
     const card = JSON.parse(decodeURIComponent(value.slice(PERSISTED_CARD_PREFIX.length))) as Partial<WhatsAppProductCard>;
+    const hasValidImage = card.imageUrl === undefined || card.imageUrl === null ||
+      (typeof card.imageUrl === 'string' && /^https:\/\//i.test(card.imageUrl));
     return typeof card.productId === 'string' && typeof card.name === 'string' &&
-      typeof card.body === 'string' && typeof card.imageUrl === 'string' && /^https:\/\//i.test(card.imageUrl)
-      ? card as WhatsAppProductCard
+      typeof card.body === 'string' && hasValidImage
+      ? {
+          productId: card.productId,
+          name: card.name,
+          body: card.body,
+          ...(card.imageUrl ? { imageUrl: card.imageUrl } : {}),
+        }
       : null;
   } catch {
     return null;

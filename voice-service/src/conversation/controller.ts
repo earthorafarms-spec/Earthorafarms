@@ -316,18 +316,23 @@ export function isCommonGreeting(userText: string): boolean {
   return COMMON_GREETING_PATTERN.test(userText.trim());
 }
 
+const CHECKOUT_QUESTION_PATTERN =
+  /\b(?:full\s+name|email\s+address|street\s+address|delivery\s+address|city\s+and\s+state|six-digit\s+pin\s+code|pin\s*code|postal\s*code)\b|पूरा\s+नाम|ईमेल\s+एड्रेस|स्ट्रीट\s+एड्रेस|पिन\s+कोड|પૂરું\s+નામ|ઈમેલ\s+એડ્રેસ|સ્ટ્રીટ\s+એડ્રેસ|પિન\s+કોડ/iu;
+
 export function shouldShowWhatsAppMenu(userText: string, state: ConversationState): boolean {
   if (isExplicitMenuRequest(userText)) return true;
   if (!isCommonGreeting(userText)) return false;
 
-  const hasCheckoutProgress = state.cart.length > 0 || Object.entries(state.checkoutFields)
-    .some(([field, value]) => field !== 'phone' && value !== undefined && value !== '');
   const previousReply = lastAssistantReply(state.messages);
   const awaitingQuantity = Boolean(
     state.whatsAppProductContext?.awaitingQuantity === true ||
     (previousReply && /\b(?:how many|quantity|units?)\b|कितन(?:ा|ी|े)|यूनिट|માત્રા|કેટલ(?:ા|ી)|યુનિટ/iu.test(previousReply))
   );
-  return !hasCheckoutProgress && !awaitingQuantity;
+  const activeCheckoutCollection = Boolean(
+    (state.cart.length > 0 && Object.entries(state.checkoutFields).some(([field, value]) => field !== 'phone' && value !== undefined && value !== '')) ||
+    (previousReply && CHECKOUT_QUESTION_PATTERN.test(previousReply))
+  );
+  return !activeCheckoutCollection && !awaitingQuantity;
 }
 
 function buildWhatsAppMenuReply(language: ConversationState['currentLanguage']): string {
@@ -486,8 +491,10 @@ function buildNumberedCatalogReply(
 }
 
 function buildWhatsAppProductCard(details: LiveProductDetails, fallbackName: string): WhatsAppProductCard | null {
-  if (!details.found || typeof details.id !== 'string' ||
-      typeof details.imageUrl !== 'string' || !/^https:\/\//i.test(details.imageUrl)) return null;
+  if (!details.found || typeof details.id !== 'string') return null;
+
+  const hasValidImage = typeof details.imageUrl === 'string' && /^https:\/\//i.test(details.imageUrl);
+  const imageUrl = hasValidImage ? details.imageUrl : undefined;
 
   const name = typeof details.name === 'string' && details.name.trim() ? details.name.trim() : fallbackName;
   const price = typeof details.price === 'number' && Number.isFinite(details.price)
@@ -505,7 +512,12 @@ function buildWhatsAppProductCard(details: LiveProductDetails, fallbackName: str
     ? `${compactDescription.slice(0, 357).trimEnd()}...`
     : compactDescription;
   const body = [`*${name}*`, detailLine, shortDescription, 'To return to the main menu, type Menu.'].filter(Boolean).join('\n');
-  return { productId: details.id, imageUrl: details.imageUrl, name, body };
+  return {
+    productId: details.id,
+    name,
+    body,
+    ...(imageUrl ? { imageUrl } : {}),
+  };
 }
 
 function productActionFailure(language: ConversationState['currentLanguage']): string {
@@ -847,11 +859,13 @@ export async function processTurn(
           }
           if (details && typeof details === 'object') {
             const liveDetails = details as LiveProductDetails;
-            if (!productAction && liveDetails.found && typeof liveDetails.imageUrl === 'string' && /^https:\/\//i.test(liveDetails.imageUrl)) {
-              productImage = {
-                url: liveDetails.imageUrl,
-                caption: typeof liveDetails.name === 'string' ? liveDetails.name : selectedProduct.name,
-              };
+            if (!productAction && liveDetails.found) {
+              if (typeof liveDetails.imageUrl === 'string' && /^https:\/\//i.test(liveDetails.imageUrl)) {
+                productImage = {
+                  url: liveDetails.imageUrl,
+                  caption: typeof liveDetails.name === 'string' ? liveDetails.name : selectedProduct.name,
+                };
+              }
               if (channel === 'text') {
                 productCard = buildWhatsAppProductCard(liveDetails, selectedProduct.name) ?? undefined;
                 if (productCard) {

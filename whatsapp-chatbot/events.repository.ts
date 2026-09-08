@@ -62,7 +62,7 @@ export async function saveWhatsAppTurn(
   productCard?: WhatsAppProductCard,
 ): Promise<void> {
   const persistedMedia = productCard
-    ? { url: productCard.imageUrl, caption: serializeProductCard(productCard) }
+    ? { url: productCard.imageUrl ?? '', caption: serializeProductCard(productCard) }
     : media;
   const { error } = await supabase.rpc('complete_whatsapp_message_turn_v2', {
     p_event_id: eventId,

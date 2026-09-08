@@ -154,10 +154,20 @@ describe('processTurn persisted state', () => {
     expect(chatMock).not.toHaveBeenCalled();
   });
 
-  it('does not replace active quantity or checkout flows with the menu for a greeting', async () => {
-    chatMock
-      .mockResolvedValueOnce({ kind: 'message', content: 'How many units would you like?' })
-      .mockResolvedValueOnce({ kind: 'message', content: 'What is your full name?' });
+  it('returns the main menu for a greeting when a dormant cart exists without active checkout collection', async () => {
+    const state = createInitialState();
+    state.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 }];
+    state.messages.push({ role: 'assistant', content: 'Alpha has been added to your cart.' });
+
+    const outcome = await processTurn('dormant-cart-test', state, 'Hi', 'text');
+
+    expect(outcome.replyText).toContain(WHATSAPP_MENU);
+    expect(outcome.state.cart).toEqual([{ productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 }]);
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it('does not replace active quantity collection with the menu for a greeting', async () => {
+    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'How many units would you like?' });
     const state = createInitialState();
     state.messages.push({ role: 'assistant', content: 'You selected Alpha. How many units would you like?' });
 
@@ -165,15 +175,20 @@ describe('processTurn persisted state', () => {
 
     expect(quantityOutcome.replyText).toBe('How many units would you like?');
     expect(quantityOutcome.replyText).not.toContain(WHATSAPP_MENU);
+    expect(chatMock).toHaveBeenCalledTimes(1);
+  });
 
+  it('does not replace active checkout field collection with the menu for a greeting', async () => {
+    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'What is your full name?' });
     const checkoutState = createInitialState();
     checkoutState.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 1, unitPrice: 90 }];
     checkoutState.messages.push({ role: 'assistant', content: 'What is your full name?' });
+
     const checkoutOutcome = await processTurn('checkout-controller-test', checkoutState, 'Hi', 'text');
 
     expect(checkoutOutcome.replyText).toBe('What is your full name?');
     expect(checkoutOutcome.replyText).not.toContain(WHATSAPP_MENU);
-    expect(chatMock).toHaveBeenCalledTimes(2);
+    expect(chatMock).toHaveBeenCalledTimes(1);
   });
 
   it('uses a safe clarification for a voice greeting instead of an unsolicited product pitch', async () => {
@@ -320,6 +335,40 @@ describe('processTurn persisted state', () => {
     expect(outcome.replyText).toBe(outcome.productCard?.body);
     expect(outcome.state.whatsAppProductContext).toEqual({
       productId: 'beta-id', productName: 'Beta', awaitingQuantity: false,
+    });
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it('resolves a numbered product reply into a deterministic product card even when imageUrl is missing without invoking LLM fallback', async () => {
+    const products = [
+      {
+        id: 'no-img-id', slug: 'no-img', name: 'No Image Product', mrp: 150, price: 120,
+        status: 'active', stockQty: 8, stockLabel: 'In Stock', tag: '', badge: '',
+        description: 'Details without image', highlights: [], imageUrl: null,
+      },
+    ];
+    productRepositoryMocks.listActiveProducts.mockResolvedValue(products);
+    productRepositoryMocks.getProductById.mockImplementation(async (id: string) =>
+      products.find((product) => product.id === id) ?? null
+    );
+    const state = createInitialState();
+    state.messages.push({
+      role: 'assistant',
+      content: '1. No Image Product — ₹120 — In Stock\n\nReply with the product number.',
+    });
+
+    const outcome = await processTurn('controller-test', state, '1', 'text');
+
+    expect(productRepositoryMocks.getProductById).toHaveBeenCalledWith('no-img-id');
+    expect(outcome.productImage).toBeUndefined();
+    expect(outcome.productCard).toEqual({
+      productId: 'no-img-id',
+      name: 'No Image Product',
+      body: '*No Image Product*\n₹120 • MRP ₹150 • In Stock\nDetails without image\nTo return to the main menu, type Menu.',
+    });
+    expect(outcome.replyText).toBe(outcome.productCard?.body);
+    expect(outcome.state.whatsAppProductContext).toEqual({
+      productId: 'no-img-id', productName: 'No Image Product', awaitingQuantity: false,
     });
     expect(chatMock).not.toHaveBeenCalled();
   });
