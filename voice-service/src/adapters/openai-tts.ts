@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import type { TtsAdapter } from './types.js';
 import type { SupportedLanguage } from '../conversation/language.js';
 import { splitSentences, stitchWavs } from './wav-utils.js';
+import { wavToMulaw8k } from '../telephony/mulaw.js';
 
 // OpenAI TTS is the primary English voice and the availability fallback for
 // Hindi/Gujarati when Sarvam cannot synthesize. See buildTtsForLanguage().
@@ -52,5 +53,10 @@ export class OpenAiTtsAdapter implements TtsAdapter {
     // saving (n-1) × ~500ms for a typical 3-sentence reply.
     const wavBuffers = await Promise.all(sentences.map((sentence) => synthesizeOne(sentence, language)));
     return stitchWavs(wavBuffers, SILENCE_GAP_MS);
+  }
+
+  async synthesizeMulaw8k(text: string, language: SupportedLanguage): Promise<Buffer> {
+    const clipped = text.length > 4096 ? text.slice(0, 4096) : text;
+    return wavToMulaw8k(await synthesizeOne(clipped, language));
   }
 }

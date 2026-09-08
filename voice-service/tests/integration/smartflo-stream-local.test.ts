@@ -329,7 +329,7 @@ describe('Smartflo WebSocket local integration', () => {
     expect(sentMetric?.playbackMs).toEqual(expect.any(Number));
   });
 
-  it('does not cancel the greeting when the caller speaks before TTS returns', async () => {
+  it('suppresses a pending greeting when the caller speaks first', async () => {
     mocks.stt.mockResolvedValue({ text: 'Hello', detectedLanguageCode: 'en-IN', languageProbability: 0.99 });
     let resolveGreeting!: (audio: Buffer) => void;
     mocks.ttsMulaw.mockReturnValueOnce(new Promise<Buffer>((resolve) => {
@@ -339,17 +339,22 @@ describe('Smartflo WebSocket local integration', () => {
     sendStart(ws);
     await collector.waitFor(() => mocks.ttsMulaw.mock.calls.length === 1);
 
-    ws.send(JSON.stringify({ event: 'media', media: { payload: mulawFrame(4_000).toString('base64') } }));
+    for (let i = 0; i < 5; i++) {
+      ws.send(JSON.stringify({ event: 'media', media: { payload: mulawFrame(4_000).toString('base64') } }));
+    }
     for (let i = 0; i < 11; i++) {
       ws.send(JSON.stringify({ event: 'media', media: { payload: Buffer.alloc(800, 0xff).toString('base64') } }));
     }
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    // Let sustained speech cross the barge-in threshold before the pending
+    // greeting synthesis completes.
+    await new Promise((resolve) => setTimeout(resolve, 500));
     resolveGreeting(Buffer.alloc(1_600, 0x7f));
 
-    await collector.waitFor((messages) => messages.some((m) => m.event === 'mark' && m.mark?.name?.startsWith('greeting-')));
     await collector.waitFor(() => mocks.processMessage.mock.calls.length === 1);
+    await collector.waitFor((messages) => messages.some((m) => m.event === 'mark' && m.mark?.name?.startsWith('reply-1-')));
     expect(collector.messages.some((m) => m.event === 'media')).toBe(true);
     expect(collector.messages.some((m) => m.event === 'clear')).toBe(false);
+    expect(collector.messages.some((m) => m.event === 'mark' && m.mark?.name?.startsWith('greeting-'))).toBe(false);
     expect(mocks.processMessage).toHaveBeenCalledWith('session-test', 'Hello');
   });
 
@@ -389,7 +394,7 @@ describe('Smartflo WebSocket local integration', () => {
     expect(collector.messages.some((m) => m.event === 'clear')).toBe(false);
   });
 
-  it('starts all reply sentences concurrently and sends them in order', async () => {
+  it('synthesizes a complete reply in one consistent TTS request', async () => {
     mocks.stt.mockResolvedValue({ text: 'Tell me about Alpha', detectedLanguageCode: 'en-IN', languageProbability: 0.99 });
     mocks.processMessage.mockResolvedValue({
       replyText: 'First sentence gives the caller the useful answer immediately. Second sentence asks one concise follow-up question.', language: 'en',
@@ -401,33 +406,11 @@ describe('Smartflo WebSocket local integration', () => {
     sendUtterance(ws);
     await collector.waitFor((messages) => messages.filter((m) => m.event === 'mark').length >= 2);
 
-    expect(mocks.ttsMulaw).toHaveBeenCalledWith('First sentence gives the caller the useful answer immediately.', 'en');
-    expect(mocks.ttsMulaw).toHaveBeenCalledWith('Second sentence asks one concise follow-up question.', 'en');
-  });
-
-  it('sends first-sentence audio before a slower second sentence finishes', async () => {
-    mocks.stt.mockResolvedValue({ text: 'Tell me about Alpha', detectedLanguageCode: 'en-IN', languageProbability: 0.99 });
-    mocks.processMessage.mockResolvedValue({
-      replyText: 'First sentence gives the caller the useful answer immediately. Second sentence asks one concise follow-up question.',
-      language: 'en', callShouldEnd: false, policyViolations: [],
-    });
-    let resolveSecond!: (audio: Buffer) => void;
-    mocks.ttsMulaw
-      .mockResolvedValueOnce(Buffer.alloc(320, 0xff))
-      .mockResolvedValueOnce(Buffer.alloc(1_600, 0x71))
-      .mockReturnValueOnce(new Promise<Buffer>((resolve) => { resolveSecond = resolve; }));
-
-    const { ws, collector } = await connect();
-    sendStart(ws);
-    await collector.waitFor((messages) => messages.filter((m) => m.event === 'mark').length === 1);
-    acknowledgeLatestMark(ws, collector);
-    const mediaBeforeReply = collector.messages.filter((m) => m.event === 'media').length;
-    sendUtterance(ws);
-    await collector.waitFor((messages) => messages.filter((m) => m.event === 'media').length > mediaBeforeReply);
-
-    expect(collector.messages.filter((m) => m.event === 'mark').length).toBe(1);
-    resolveSecond(Buffer.alloc(1_600, 0x72));
-    await collector.waitFor((messages) => messages.filter((m) => m.event === 'mark').length === 2);
+    expect(mocks.ttsMulaw).toHaveBeenCalledWith(
+      'First sentence gives the caller the useful answer immediately. Second sentence asks one concise follow-up question.',
+      'en',
+    );
+    expect(mocks.ttsMulaw).toHaveBeenCalledTimes(2); // greeting + complete reply
   });
 
   it('supersedes a pending answer when the caller continues speaking', async () => {

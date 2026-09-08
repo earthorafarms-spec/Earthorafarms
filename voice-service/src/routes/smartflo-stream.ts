@@ -18,7 +18,6 @@ import { repeatPrompt, silenceCheckPrompt } from '../conversation/voice-copy.js'
 import { AudioAccumulator, pcm16ToWav } from '../telephony/audio-accumulator.js';
 import { mulaw8kToPcm16k, wavToMulaw8k } from '../telephony/mulaw.js';
 import { config } from '../config.js';
-import { splitSentences } from '../adapters/wav-utils.js';
 import type { VoiceTurnMetric } from '../conversation/state.js';
 
 interface PlatformEvent {
@@ -60,7 +59,6 @@ const START_EVENT_TIMEOUT_MS = 15_000;
 const CALLER_SILENCE_HANGUP_MS = 7_000;
 const CALLER_SILENCE_FINAL_GRACE_MS = 3_000;
 const MAX_STORED_VOICE_METRICS = 100;
-const BETWEEN_SENTENCE_SILENCE = Buffer.alloc(640, 0xff); // 80 ms at 8 kHz mu-law
 
 function sendJson(socket: WebSocket, payload: unknown): boolean {
   if (socket.readyState !== socket.OPEN) return false;
@@ -124,6 +122,8 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
     let streamSid: string | null = null;
     let callSid: string | null = null;
     let busy = false;
+    let initializing = false;
+    let greetingWasSuperseded = false;
     let closing = false;
     let sessionFinished = false;
     let startPromise: Promise<void> | null = null;
@@ -271,24 +271,7 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
       clearCallerSilenceTimer();
       const speechEpoch = ++playbackEpoch;
       const tts = buildTtsForLanguage(language);
-      const sentences = splitSentences(text);
-      type PreparedChunk = { audio: Buffer; error?: never } | { audio?: never; error: unknown };
-      // Start every sentence at once, but await/send them in order. This
-      // preserves natural speech order while making the first sentence
-      // audible as soon as its own TTS request completes instead of waiting
-      // for the slowest sentence in the whole reply.
-      const preparedChunks: Promise<PreparedChunk>[] = sentences.map((sentence, index) => {
-        const synthesis = tts.synthesizeMulaw8k
-          ? tts.synthesizeMulaw8k(sentence, language)
-          : tts.synthesize(sentence, language).then(wavToMulaw8k);
-        return withTimeout(synthesis, config.VOICE_TTS_TIMEOUT_MS, `TTS sentence ${index + 1}`)
-          .then((audio): PreparedChunk => ({ audio }))
-          .catch((error): PreparedChunk => ({ error }));
-      });
-
       let firstAudioAt: number | null = null;
-      let sentSentenceCount = 0;
-      let partial = false;
 
       const sendMulaw = async (mulaw: Buffer): Promise<boolean> => {
         for (let offset = 0; offset < mulaw.length; offset += OUTBOUND_CHUNK_BYTES) {
@@ -307,44 +290,32 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
         return true;
       };
 
-      for (let index = 0; index < preparedChunks.length; index++) {
-        const prepared = await preparedChunks[index];
-        if ('error' in prepared) {
-          if (index === 0) throw prepared.error;
-          partial = true;
-          req.log.error({
-            err: prepared.error,
-            ...logContext(),
-            event: 'smartflo_tts_sentence_failed',
-            sentenceNumber: index + 1,
-            sentenceCount: sentences.length,
-          }, 'Smartflo stopped a reply after a later TTS sentence failed');
-          break;
-        }
-        if (closing || speechEpoch !== playbackEpoch || socket.readyState !== socket.OPEN) {
-          return { sent: false, partial, firstAudioAt, sentenceCount: sentences.length };
-        }
-        playbackActive = true;
-        if (index > 0 && !(await sendMulaw(BETWEEN_SENTENCE_SILENCE))) {
-          return { sent: false, partial, firstAudioAt, sentenceCount: sentences.length };
-        }
-        if (!(await sendMulaw(prepared.audio))) {
-          return { sent: false, partial, firstAudioAt, sentenceCount: sentences.length };
-        }
-        sentSentenceCount++;
+      // Keep the entire short phone reply in one synthesis request. Sentence
+      // stitching caused independently generated chunks to sound like a
+      // voice/accent change in the middle of one answer.
+      const synthesis = tts.synthesizeMulaw8k
+        ? tts.synthesizeMulaw8k(text, language)
+        : tts.synthesize(text, language).then(wavToMulaw8k);
+      const audio = await withTimeout(synthesis, config.VOICE_TTS_TIMEOUT_MS, 'TTS reply');
+      if (closing || speechEpoch !== playbackEpoch || socket.readyState !== socket.OPEN) {
+        return { sent: false, partial: false, firstAudioAt, sentenceCount: 1 };
+      }
+      playbackActive = true;
+      if (!(await sendMulaw(audio))) {
+        return { sent: false, partial: false, firstAudioAt, sentenceCount: 1 };
       }
 
       if (closing || speechEpoch !== playbackEpoch || firstAudioAt === null) {
-        return { sent: false, partial, firstAudioAt, sentenceCount: sentences.length };
+        return { sent: false, partial: false, firstAudioAt, sentenceCount: 1 };
       }
       activeMarkName = markName;
       activeMarkSentAt = Date.now();
       sendJson(socket, { event: 'mark', streamSid, mark: { name: markName } });
       return {
-        sent: sentSentenceCount > 0,
-        partial: partial || sentSentenceCount < sentences.length,
+        sent: true,
+        partial: false,
         firstAudioAt,
-        sentenceCount: sentences.length,
+        sentenceCount: 1,
       };
     }
 
@@ -604,13 +575,15 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
         // Once the form was delivered, let the short confirmation finish and
         // close the call; do not let a late noise burst start another turn.
         if (endAfterPlaybackMarkName) return;
-        // An eager caller often says "hello" before the first TTS request has
-        // returned. There is no audio to interrupt yet; bumping playbackEpoch
-        // here used to cancel the greeting before its first frame was sent.
-        // Preserve that initial greeting, then enable normal barge-in as soon
-        // as it has been queued for playback.
+        // The caller may speak before the greeting synthesis returns. Their
+        // first utterance wins; do not begin a stale greeting over it later.
         if (greetingPending && !playbackActive && activeMarkName === null) {
-          req.log.info({ ...logContext(), event: 'smartflo_early_caller_speech' }, 'Caller spoke while greeting was preparing');
+          greetingPending = false;
+          greetingWasSuperseded = true;
+          inputEpoch++;
+          playbackEpoch++;
+          if (initializing) busy = false;
+          req.log.info({ ...logContext(), event: 'smartflo_early_caller_speech' }, 'Caller speech suppressed a pending greeting');
           return;
         }
         // If the bot is already audible, this is a real barge-in and should
@@ -673,6 +646,7 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
           }
 
           busy = true;
+          initializing = true;
           startPromise = (async () => {
             const existing = callSid ? await getCallSessionByProviderCallId(callSid) : null;
             const session = existing ?? await createCallSession(
@@ -711,8 +685,13 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
             await finishSession('failed', 'start_failed');
             if (socket.readyState === socket.OPEN) socket.close(1011, 'call initialization failed');
           }).finally(() => {
-            busy = false;
-            runNextQueued();
+            initializing = false;
+            // If early caller speech already started (or is about to start) a
+            // real turn, leave its busy state intact.
+            if (!greetingWasSuperseded) {
+              busy = false;
+              runNextQueued();
+            }
           });
           return;
         }

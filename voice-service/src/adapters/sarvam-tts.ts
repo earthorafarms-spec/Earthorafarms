@@ -79,32 +79,8 @@ export class SarvamTtsAdapter implements TtsAdapter {
 
   async synthesizeMulaw8k(text: string, language: SupportedLanguage): Promise<Buffer> {
     const clipped = text.length > 2500 ? text.slice(0, 2500) : text;
-    const sentences = splitSentences(clipped);
-    const chunks = await Promise.all(sentences.map(async (sentence) => {
-      // Request Sarvam's native 24 kHz PCM WAV, then perform the same tested
-      // WAV -> G.711 conversion used by English/OpenAI replies. Direct 8 kHz
-      // mu-law generation made Indic speech less intelligible and left
-      // codec/container handling entirely to the vendor.
-      const request = {
-        text: sentence,
-        language_code: SUPPORTED_TO_BCP47[language],
-        model: 'bulbul:v3',
-        speaker: speakerForLanguage(language),
-        pace: PACE_BY_LANGUAGE[language],
-        temperature: TTS_TEMPERATURE,
-        speech_sample_rate: 24000,
-        output_audio_codec: 'wav',
-      };
-      const response = await withSarvamClient((client, requestOptions) => client.textToSpeech.convert(
-        request as unknown as TtsConvertParams,
-        requestOptions,
-      ), config.VOICE_TTS_TIMEOUT_MS);
-      const audioBase64 = response.audios[0];
-      if (!audioBase64) throw new Error('Sarvam textToSpeech.convert returned no audio.');
-      return wavToMulaw8k(Buffer.from(audioBase64, 'base64'));
-    }));
-
-    const silence = Buffer.alloc(Math.round(8000 * SILENCE_GAP_MS / 1_000), 0xff);
-    return Buffer.concat(chunks.flatMap((chunk, index) => index === 0 ? [chunk] : [silence, chunk]));
+    // Phone replies are short. One vendor request keeps speaker, accent, and
+    // prosody consistent for the complete reply.
+    return wavToMulaw8k(await this.synthesizeOne(clipped, language));
   }
 }

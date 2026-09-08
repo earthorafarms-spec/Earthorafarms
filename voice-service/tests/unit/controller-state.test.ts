@@ -176,14 +176,12 @@ describe('processTurn persisted state', () => {
     expect(chatMock).toHaveBeenCalledTimes(2);
   });
 
-  it('leaves voice greeting handling in the LLM flow', async () => {
-    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'Hello! How can I help you today?' });
-
+  it('uses a safe clarification for a voice greeting instead of an unsolicited product pitch', async () => {
     const outcome = await processTurn('controller-test', createInitialState(), 'Hi', 'voice');
 
-    expect(outcome.replyText).toBe('Hello! How can I help you today?');
+    expect(outcome.replyText).toBe('Hello! I can help with product information or an order. What would you like to know?');
     expect(outcome.replyText).not.toContain(WHATSAPP_MENU);
-    expect(chatMock).toHaveBeenCalledTimes(1);
+    expect(chatMock).not.toHaveBeenCalled();
   });
 
   it('keeps output-policy correction instructions turn-local', async () => {
@@ -539,6 +537,19 @@ describe('processTurn persisted state', () => {
     expect(confirmed.state.pendingDigitConfirmation).toBeUndefined();
     expect(confirmed.state.checkoutFields.phone).toBe('+917984769472');
     expect(confirmed.replyText).toContain('स्ट्रीट एड्रेस');
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it('does not treat a repeated email as an incomplete phone number', async () => {
+    const state = createInitialState();
+    state.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 1, unitPrice: 90 }];
+    state.checkoutFields = { name: 'Test User', email: 'customer7@example.com' };
+
+    const outcome = await processTurn('controller-test', state, 'customer7@example.com');
+
+    expect(outcome.replyText).toContain('already saved your email address');
+    expect(outcome.replyText).toContain('WhatsApp number');
+    expect(outcome.state.checkoutFields.phone).toBeUndefined();
     expect(chatMock).not.toHaveBeenCalled();
   });
 

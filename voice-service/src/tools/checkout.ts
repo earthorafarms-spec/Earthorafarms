@@ -31,8 +31,13 @@ export function normalizeSpokenDigitSequence(raw: string): string | null {
   const normalized = normalizeNativeDigits(raw).toLowerCase().trim();
   if (/^[\d\s().,+-]+$/.test(normalized)) return normalized.replace(/\D/g, '');
   const tokens = normalized.match(/[a-z]+|[\u0900-\u097f]+|[\u0a80-\u0aff]+|\d/gu) ?? [];
-  const digits = tokens.map((token) => /^\d$/.test(token) ? token : SPOKEN_DIGITS[token]).filter(Boolean);
-  return digits.length > 0 ? digits.join('') : null;
+  if (tokens.length === 0) return null;
+
+  // Treat this as a digit sequence only when every spoken token is a digit.
+  // Otherwise an email such as "customer7@example.com" can be reduced to
+  // "7" and incorrectly rejected as a partial phone number.
+  const digits = tokens.map((token) => /^\d$/.test(token) ? token : SPOKEN_DIGITS[token]);
+  return digits.every((digit): digit is string => Boolean(digit)) ? digits.join('') : null;
 }
 
 export function normalizeWhatsAppPhone(raw: string): string | null {

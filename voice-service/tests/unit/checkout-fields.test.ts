@@ -18,6 +18,7 @@ describe('checkout field validation', () => {
     expect(normalizeSpokenDigitSequence('थ्री एट टू फोर सेवन ज़ीरो')).toBe('382470');
     expect(normalizeSpokenDigitSequence('થ્રી એટ ટુ ફોર સેવન ઝીરો')).toBe('382470');
     expect(normalizeSpokenDigitSequence('three eight two four seven टू')).toBe('382472');
+    expect(normalizeSpokenDigitSequence('customer7@example.com')).toBeNull();
   });
 
   it('requires exactly ten Indian mobile digits and six PIN-code digits', async () => {

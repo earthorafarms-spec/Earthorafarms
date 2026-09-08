@@ -20,7 +20,6 @@ import { SarvamSttAdapter } from './adapters/sarvam-stt.js';
 import { SarvamTtsAdapter } from './adapters/sarvam-tts.js';
 import { GoogleSttAdapter } from './adapters/google-stt.js';
 import { GoogleTtsAdapter } from './adapters/google-tts.js';
-import { wavToMulaw8k } from './telephony/mulaw.js';
 
 // Constructed lazily, at most once each, regardless of how many times a
 // factory below is called — cheap to call chatWithRouting() every turn.
@@ -172,7 +171,7 @@ export function buildTtsForLanguage(language: SupportedLanguage): TtsAdapter {
       } catch (err) {
         // eslint-disable-next-line no-console
         console.warn(`[providers] Sarvam telephony TTS failed; using OpenAI TTS: ${(err as Error).message}`);
-        return wavToMulaw8k(await getOpenAiTts().synthesize(text, replyLanguage));
+        return getOpenAiTts().synthesizeMulaw8k(text, replyLanguage);
       }
     },
   };

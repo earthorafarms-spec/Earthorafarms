@@ -119,6 +119,29 @@ function nextCheckoutQuestion(state: ConversationState): string | null {
   return questions[field]?.[language] ?? null;
 }
 
+function looksLikeEmailAddress(text: string): boolean {
+  const value = text.trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value) ||
+    /\b\w+\s+(?:at|ऐट|एट|એટ)\s+\w+\s+(?:dot|डॉट|ડોટ)\s+\w+\b/iu.test(value);
+}
+
+function savedEmailThenPhonePrompt(language: ConversationState['currentLanguage']): string {
+  if (language === 'hi') return 'आपका ईमेल एड्रेस पहले ही सेव हो चुका है। अब अपना दस अंकों का WhatsApp नंबर एक-एक अंक बोलकर बताइए।';
+  if (language === 'gu') return 'તમારું ઈમેલ એડ્રેસ પહેલેથી સેવ થઈ ગયું છે. હવે તમારો દસ અંકનો WhatsApp નંબર એક પછી એક બોલો.';
+  return 'I already saved your email address. Now please say your ten-digit WhatsApp number one digit at a time.';
+}
+
+function openingClarification(language: ConversationState['currentLanguage']): string {
+  if (language === 'hi') return 'नमस्ते! मैं प्रोडक्ट की जानकारी या ऑर्डर में मदद कर सकती हूँ। आप क्या जानना चाहते हैं?';
+  if (language === 'gu') return 'નમસ્તે! હું પ્રોડક્ટની માહિતી અથવા ઓર્ડરમાં મદદ કરી શકું છું. તમે શું જાણવા માંગો છો?';
+  return 'Hello! I can help with product information or an order. What would you like to know?';
+}
+
+function hasExplicitOpeningIntent(text: string): boolean {
+  return shouldPrefetchProductCatalog(text) ||
+    /\b(?:buy|order|add|cart|want|need|quantity|bottles?|packs?|price|cost)\b|खरीद|ऑर्डर|कार्ट|चाहिए|बोतल|पैक|कीमत|ઓર્ડર|કાર્ટ|જોઈએ|બોટલ|પેક|કિંમત/iu.test(text);
+}
+
 function ensureCheckoutProgressQuestion(
   reply: string,
   state: ConversationState,
@@ -554,6 +577,15 @@ export async function processTurn(
     if (detected) state.currentLanguage = detected;
   }
 
+  // A clipped/noisy opening transcript must never trigger an unprompted
+  // catalog pitch. Let the caller state a product or order intent first.
+  const userMessageCount = state.messages.filter((message) => message.role === 'user').length;
+  if (channel === 'voice' && userMessageCount === 1 && !checkoutStarted && !hasExplicitOpeningIntent(userText)) {
+    const replyText = openingClarification(state.currentLanguage);
+    state.messages.push({ role: 'assistant', content: replyText });
+    return { state, replyText, policyViolations: [], outboundActions };
+  }
+
   if (channel === 'voice' && state.awaitingReviewReceiptConfirmation && confirmedReviewReceipt(userText)) {
     state.awaitingReviewReceiptConfirmation = false;
     const replyText = reviewReceivedPrompt(state.currentLanguage);
@@ -588,6 +620,14 @@ export async function processTurn(
   if (channel === 'voice' && state.cart.length > 0) {
     const expectedField = CHECKOUT_FIELDS.find((key) => !state.checkoutFields[key]);
     if (expectedField === 'phone' || expectedField === 'postalCode') {
+      // Do not reinterpret a repeated email as a failed phone/PIN sequence.
+      // This can happen when the caller did not hear the acknowledgement and
+      // repeats the email they just gave.
+      if (expectedField === 'phone' && looksLikeEmailAddress(userText)) {
+        const replyText = savedEmailThenPhonePrompt(state.currentLanguage);
+        state.messages.push({ role: 'assistant', content: replyText });
+        return { state, replyText, policyViolations: [], outboundActions };
+      }
       const digits = normalizeSpokenDigitSequence(userText);
       if (digits) {
         const storedValue = expectedField === 'phone' ? normalizeWhatsAppPhone(digits) : digits;
