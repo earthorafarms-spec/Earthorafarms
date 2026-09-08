@@ -34,11 +34,6 @@ const shippingHighlights = [
   },
 ];
 
-const deliveryTimelines = [
-  { region: "Metro Cities (Mumbai, Delhi, Bengaluru, etc.)", time: "7 – 14 Business Days" },
-  { region: "Tier-2 & Tier-3 Cities across India", time: "7 – 14 Business Days" },
-  { region: "Special Territories (North-East, J&K, Islands)", time: "7 – 14 Business Days" },
-];
 
 export default function ShippingPolicy() {
   return (
@@ -142,18 +137,14 @@ export default function ShippingPolicy() {
                 Domestic Delivery Schedule
               </h2>
               <p className="font-inter text-sm text-black/60 leading-relaxed mb-6">
-                All shipments include automated SMS and WhatsApp tracking links dispatched immediately upon courier handoff.
+                All orders are shipped via India Post with delivery across Pan-India.
               </p>
 
-              <div className="space-y-4">
-                {deliveryTimelines.map((row, i) => (
-                  <div key={i} className="p-5 rounded-2xl bg-[#FAF9F5] border border-black/5 flex items-center justify-between gap-4">
-                    <span className="font-inter text-sm font-medium text-black/80">{row.region}</span>
-                    <span className="font-dm text-sm font-semibold text-emerald-800 shrink-0 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200/60">
-                      {row.time}
-                    </span>
-                  </div>
-                ))}
+              <div className="p-5 rounded-2xl bg-[#FAF9F5] border border-black/5 flex items-center justify-between gap-4">
+                <span className="font-inter text-sm font-medium text-black/80">Pan-India Delivery</span>
+                <span className="font-dm text-sm font-semibold text-emerald-800 shrink-0 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200/60">
+                  7 – 14 Business Days
+                </span>
               </div>
             </div>
 
@@ -164,7 +155,7 @@ export default function ShippingPolicy() {
                   <Package className="w-5 h-5 text-emerald-800" /> Order Tracking & Dispatch
                 </h3>
                 <p className="font-inter text-sm text-black/65 leading-relaxed">
-                  Once your order is confirmed, our farm team packs your moringa in UV-proof pouches. You will receive an email and SMS with your courier tracking number (BlueDart, Delhivery, or FedEx) within 24 hours of dispatch.
+                  Once your order is confirmed, our farm team packs your moringa and dispatches it via India Post. You will receive a WhatsApp message on your registered number within 24 hours of dispatch with your shipment details.
                 </p>
               </div>
 
