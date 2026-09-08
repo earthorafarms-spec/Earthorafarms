@@ -70,12 +70,12 @@ const faqData: FAQItem[] = [
   {
     category: "shipping",
     question: "How fast will my order arrive?",
-    answer: "Orders placed before 2:00 PM IST are dispatched the same day. Metro deliveries take 2–3 business days, tier-2 cities take 3–5 business days, and international shipments arrive within 5–9 business days.",
+    answer: "All orders are shipped via India Post and delivered across Pan-India within 7–14 business days.",
   },
   {
     category: "shipping",
     question: "Do you ship internationally?",
-    answer: "Yes, we ship to over 30 countries globally via DHL Express and FedEx with real-time tracking.",
+    answer: "We currently only ship within India. International shipping is not available yet. Stay tuned for updates!",
   },
 
   // Orders & Payment
