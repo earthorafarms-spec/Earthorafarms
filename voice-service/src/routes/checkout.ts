@@ -170,7 +170,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance): Promise<void
       });
     }
 
-    const referenceId = `voice-${session.id}`;
+    const referenceId = `voice-${session.id.replace(/-/g, '')}`;
     const amountPaise = Math.round(session.frozenPricing.total * 100);
 
     try {
