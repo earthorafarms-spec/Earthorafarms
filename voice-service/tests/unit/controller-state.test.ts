@@ -1313,6 +1313,41 @@ describe('processTurn persisted state', () => {
         expect(checkoutTurn.replyText).toBe('Your cart is currently empty.');
         expect(checkoutTurn.outboundActions?.find((a) => a.type === 'checkout_review')).toBeUndefined();
       });
+
+      it('advances from Name to Email when user enters name during checkout', async () => {
+        const state = createInitialState();
+        state.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 1, unitPrice: 90 }];
+        state.messages.push({ role: 'assistant', content: 'Alpha has been added to your cart.' });
+
+        // Step 1: User selects Checkout
+        const checkoutTurn = await processTurn(
+          'controller-test',
+          state,
+          productActionInputFromButtonId(cartButtonId('checkout'))!,
+          'text',
+        );
+        expect(checkoutTurn.replyText).toBe('What is your full name?');
+
+        // Step 2: User enters name "ADARSH"
+        const nameTurn = await processTurn('controller-test', checkoutTurn.state, 'ADARSH', 'text');
+        expect(nameTurn.state.checkoutFields.name).toBe('ADARSH');
+        expect(nameTurn.replyText).toBe('What is your email address?');
+      });
+
+      it('does not capture normal conversational messages that mention checkout keywords', async () => {
+        const state = createInitialState();
+        state.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 1, unitPrice: 90 }];
+        state.messages.push({
+          role: 'assistant',
+          content: 'You can contact customer support with your full name and query at support@earthora.com.',
+        });
+        chatMock.mockResolvedValueOnce({ content: 'How else can I assist you today?', calls: [] });
+
+        const turn = await processTurn('controller-test', state, 'Thank you', 'text');
+        expect(turn.state.checkoutFields.name).toBeUndefined();
+        expect(turn.replyText).toBe('How else can I assist you today?');
+        expect(chatMock).toHaveBeenCalled();
+      });
     });
   });
 });

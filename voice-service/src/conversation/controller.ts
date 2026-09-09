@@ -1,4 +1,4 @@
-import type { ConversationState, ConversationMessage, CartSnapshotLine } from './state.js';
+import type { ConversationState, ConversationMessage, CartSnapshotLine, CheckoutFieldSnapshot } from './state.js';
 import { SYSTEM_PROMPT } from './prompt.js';
 import {
   WHATSAPP_MENU,
@@ -559,6 +559,92 @@ function numberedProductSelectionNumber(userText: string, messages: Conversation
   return Number.parseInt(selection, 10);
 }
 
+const CHECKOUT_QUESTION_MATCHERS: {
+  field: keyof CheckoutFieldSnapshot | 'city_state';
+  matches: (text: string) => boolean;
+  isActive: (state: ConversationState) => boolean;
+}[] = [
+  {
+    field: 'name',
+    matches: (text) => /What is your full name\?|आपका पूरा नाम क्या है\?|તમારું પૂરું નામ શું છે\?/i.test(text),
+    isActive: (state) => !state.checkoutFields.name,
+  },
+  {
+    field: 'email',
+    matches: (text) => /What is your email address\?|आपका ईमेल एड्रेस क्या है\?|તમારું ઈમેલ એડ્રેસ શું છે\?/i.test(text),
+    isActive: (state) => Boolean(state.checkoutFields.name) && !state.checkoutFields.email,
+  },
+  {
+    field: 'phone',
+    matches: (text) => /What WhatsApp number should I use\?|आपका WhatsApp नंबर क्या है\?|તમારો WhatsApp નંબર શું છે\?/i.test(text),
+    isActive: (state) => !state.checkoutFields.phone,
+  },
+  {
+    field: 'address',
+    matches: (text) => /What is your street address\?|आपका पूरा स्ट्रीट एड्रेस क्या है\?|તમારું પૂરું સ્ટ્રીટ એડ્રેસ શું છે\?/i.test(text),
+    isActive: (state) => !state.checkoutFields.address,
+  },
+  {
+    field: 'city_state',
+    matches: (text) => /Please tell me your city and state\.|अपना शहर और राज्य साथ में बताइए।|તમારું શહેર અને રાજ્ય સાથે જણાવો\./i.test(text),
+    isActive: (state) => !state.checkoutFields.city || !state.checkoutFields.state,
+  },
+  {
+    field: 'state',
+    matches: (text) => /Which state is the delivery address in\?|डिलीवरी एड्रेस किस राज्य में है\?|ડિલિવરી એડ્રેસ કયા રાજ્યમાં છે\?/i.test(text),
+    isActive: (state) => Boolean(state.checkoutFields.city) && !state.checkoutFields.state,
+  },
+  {
+    field: 'postalCode',
+    matches: (text) => /What is your six-digit PIN code\?|आपका छह अंकों का पिन कोड क्या है\?|તમારો છ અંકનો પિન કોડ શું છે\?/i.test(text),
+    isActive: (state) => !state.checkoutFields.postalCode,
+  },
+  {
+    field: 'country',
+    matches: (text) => /Is the delivery address in India\?|क्या डिलीवरी एड्रेस भारत में है\?|શું ડિલિવરી એડ્રેસ ભારતમાં છે\?/i.test(text),
+    isActive: (state) => !state.checkoutFields.country,
+  },
+];
+
+function getActiveCheckoutQuestionField(
+  previousReply: string | null,
+  state: ConversationState,
+): keyof CheckoutFieldSnapshot | 'city_state' | null {
+  if (!previousReply) return null;
+  for (const entry of CHECKOUT_QUESTION_MATCHERS) {
+    if (entry.isActive(state) && entry.matches(previousReply)) {
+      return entry.field;
+    }
+  }
+  return null;
+}
+
+function parseCityAndStateInput(input: string): { city: string; state?: string } {
+  const parts = input.split(/[,\n]+/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    return { city: parts[0], state: parts.slice(1).join(', ') };
+  }
+  const words = input.trim().split(/\s+/);
+  if (words.length >= 2) {
+    const lastWord = words[words.length - 1];
+    const twoWord = words.slice(-2).join(' ');
+    const knownState = [
+      'gujarat', 'maharashtra', 'rajasthan', 'madhya pradesh', 'delhi', 'punjab',
+      'haryana', 'karnataka', 'tamil nadu', 'kerala', 'uttar pradesh', 'west bengal',
+      'bihar', 'goa', 'assam', 'odisha', 'gujrat', 'gujrath', 'गुजरात', 'ગુજરાત',
+      'महाराष्ट्र', 'મહારાષ્ટ્ર', 'राजस्थान', 'રાજસ્થાન',
+    ].find((s) => s.toLowerCase() === twoWord.toLowerCase() || s.toLowerCase() === lastWord.toLowerCase());
+    if (knownState) {
+      const statePart = knownState.includes(' ') ? twoWord : lastWord;
+      const cityPart = input.slice(0, input.toLowerCase().lastIndexOf(statePart.toLowerCase())).trim();
+      if (cityPart) {
+        return { city: cityPart, state: statePart };
+      }
+    }
+  }
+  return { city: input.trim() };
+}
+
 function liveCatalogProducts(catalog: unknown): LiveCatalogProduct[] {
   if (!catalog || typeof catalog !== 'object') return [];
   const products = (catalog as { products?: unknown }).products;
@@ -1114,6 +1200,132 @@ export async function processTurn(
     const replyText = WHATSAPP_RETURN_POLICY;
     state.messages.push({ role: 'assistant', content: replyText });
     return { state, replyText, policyViolations: [], outboundActions };
+  }
+
+  const previousReplyForCheckout = lastAssistantReply(state.messages);
+  const activeCheckoutField = channel === 'text' && state.cart.length > 0
+    ? getActiveCheckoutQuestionField(previousReplyForCheckout, state)
+    : null;
+
+  if (activeCheckoutField !== null) {
+    const trimmed = userText.trim();
+
+    if (
+      parseCartActionInput(trimmed) === 'main_menu' ||
+      /^(?:0|menu|main\s*menu|मेन्यू|મેનુ)$/iu.test(trimmed)
+    ) {
+      delete state.whatsAppProductContext;
+      delete state.awaitingCartRemoval;
+      const replyText = buildWhatsAppMenuReply(state.currentLanguage);
+      state.messages.push({ role: 'assistant', content: replyText });
+      return { state, replyText, policyViolations: [], outboundActions };
+    }
+
+    if (
+      parseCartActionInput(trimmed) === 'view_cart' ||
+      /^(?:cancel|stop|back|cart|view\s*cart|रद्द|वापस|પાછા|રદ)$/iu.test(trimmed)
+    ) {
+      delete state.whatsAppProductContext;
+      delete state.awaitingCartRemoval;
+      const cartCard = buildViewCartCard(state);
+      state.messages.push({ role: 'assistant', content: cartCard.body });
+      return { state, replyText: cartCard.body, productCard: cartCard, policyViolations: [], outboundActions };
+    }
+
+    if (/^(?:checkout|check\s*out|चेकआउट|ચેકઆઉટ)$/iu.test(trimmed)) {
+      const currentQuestion = nextCheckoutQuestion(state);
+      if (currentQuestion) {
+        state.messages.push({ role: 'assistant', content: currentQuestion });
+        return { state, replyText: currentQuestion, policyViolations: [], outboundActions };
+      }
+    }
+
+    // Greetings and bare digits on name question fall down to model
+    // routing so policies/menu/chat guards remain covered.
+    const isGreeting = isCommonGreeting(trimmed);
+    const isDigitOnName = activeCheckoutField === 'name' && /^\d+$/.test(trimmed);
+
+    if (!isGreeting && !isDigitOnName) {
+      delete state.whatsAppProductContext;
+      delete state.awaitingCartRemoval;
+
+      let toolResult: unknown = null;
+
+      if (activeCheckoutField === 'name') {
+        toolResult = await toolsByName.set_checkout_field.handler(
+          { field: 'name', value: trimmed },
+          toolContext
+        );
+      } else if (activeCheckoutField === 'email') {
+        toolResult = await toolsByName.set_checkout_field.handler(
+          { field: 'email', value: trimmed },
+          toolContext
+        );
+      } else if (activeCheckoutField === 'phone') {
+        toolResult = await toolsByName.set_checkout_field.handler(
+          { field: 'phone', value: trimmed },
+          toolContext
+        );
+      } else if (activeCheckoutField === 'address') {
+        toolResult = await toolsByName.set_checkout_field.handler(
+          { field: 'address', value: trimmed },
+          toolContext
+        );
+      } else if (activeCheckoutField === 'city_state') {
+        const parsed = parseCityAndStateInput(trimmed);
+        if (parsed.state) {
+          toolResult = await toolsByName.set_delivery_location.handler(
+            { city: parsed.city, state: parsed.state },
+            toolContext
+          );
+        } else {
+          toolResult = await toolsByName.set_checkout_field.handler(
+            { field: 'city', value: parsed.city },
+            toolContext
+          );
+        }
+      } else if (activeCheckoutField === 'state') {
+        toolResult = await toolsByName.set_checkout_field.handler(
+          { field: 'state', value: trimmed },
+          toolContext
+        );
+      } else if (activeCheckoutField === 'postalCode') {
+        toolResult = await toolsByName.set_checkout_field.handler(
+          { field: 'postalCode', value: trimmed },
+          toolContext
+        );
+      } else if (activeCheckoutField === 'country') {
+        const isIndia = /^(?:yes|yeah|हाँ|हां|હા|india|in india|भारत|ભારત)[.!?]*$/iu.test(trimmed);
+        toolResult = await toolsByName.set_checkout_field.handler(
+          { field: 'country', value: isIndia ? 'India' : trimmed },
+          toolContext
+        );
+      }
+
+      if (toolResult && typeof toolResult === 'object') {
+        const toolOk = Boolean((toolResult as { ok?: boolean }).ok);
+        state.currentTurnFacts.push({
+          toolName: activeCheckoutField === 'city_state' && (toolResult as { city?: string; state?: string }).state
+            ? 'set_delivery_location'
+            : 'set_checkout_field',
+          resultJson: JSON.stringify(toolResult),
+        });
+
+        if (toolOk) {
+          const nextQuestion = nextCheckoutQuestion(state);
+          if (nextQuestion) {
+            state.messages.push({ role: 'assistant', content: nextQuestion });
+            return { state, replyText: nextQuestion, policyViolations: [], outboundActions };
+          }
+        } else {
+          const errMsg = (toolResult as { message?: string }).message;
+          const currentQuestion = nextCheckoutQuestion(state);
+          const replyText = [errMsg, currentQuestion].filter(Boolean).join(' ');
+          state.messages.push({ role: 'assistant', content: replyText });
+          return { state, replyText, policyViolations: [], outboundActions };
+        }
+      }
+    }
   }
 
   // The language instruction is folded into the PRIMARY system message,
