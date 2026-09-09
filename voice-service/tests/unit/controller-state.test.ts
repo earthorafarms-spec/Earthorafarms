@@ -930,9 +930,9 @@ describe('processTurn persisted state', () => {
       expect(outcomeButton.replyText).toContain('two Alpha at ₹90 (Tax Included) each');
       expect(outcomeButton.replyText).toContain('The exact total is ₹180 (Tax Included).');
       expect(outcomeButton.productCard?.buttons).toEqual([
+        { id: 'earthora_cart:remove_item', title: 'Remove Item' },
         { id: 'earthora_cart:checkout', title: 'Checkout' },
         { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' },
-        { id: 'earthora_cart:main_menu', title: 'Main Menu' },
       ]);
 
       // Action via numeric reply '1'
@@ -971,14 +971,14 @@ describe('processTurn persisted state', () => {
       const checkoutNumber = await processTurn('controller-test', stateNumber, '2', 'text');
       expect(checkoutNumber.replyText).toBe('What is your full name?');
 
-      // 3. Checkout from View Cart screen via numeric reply '1'
+      // 3. Checkout from View Cart screen via numeric reply '2'
       const viewCartState = createInitialState();
       viewCartState.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 }];
       viewCartState.messages.push({
         role: 'assistant',
         content: 'Your cart has two Alpha at ₹90 (Tax Included) each. The exact total is ₹180 (Tax Included).',
       });
-      const checkoutFromCart = await processTurn('controller-test', viewCartState, '1', 'text');
+      const checkoutFromCart = await processTurn('controller-test', viewCartState, '2', 'text');
       expect(checkoutFromCart.replyText).toBe('What is your full name?');
     });
 
@@ -1017,14 +1017,14 @@ describe('processTurn persisted state', () => {
       expect(outcomeNumber.replyText).toContain('1. Alpha — ₹90 (Tax Included) — In Stock');
       expect(outcomeNumber.replyText).toContain('2. Beta — ₹150 (Tax Included) — In Stock');
 
-      // 3. Via numeric reply '2' from View Cart screen
+      // 3. Via numeric reply '3' from View Cart screen
       const viewCartState = createInitialState();
       viewCartState.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 }];
       viewCartState.messages.push({
         role: 'assistant',
         content: 'Your cart has two Alpha at ₹90 (Tax Included) each. The exact total is ₹180 (Tax Included).',
       });
-      const outcomeFromCart = await processTurn('controller-test', viewCartState, '2', 'text');
+      const outcomeFromCart = await processTurn('controller-test', viewCartState, '3', 'text');
       expect(outcomeFromCart.replyText).toContain('1. Alpha — ₹90 (Tax Included) — In Stock');
       expect(outcomeFromCart.replyText).toContain('2. Beta — ₹150 (Tax Included) — In Stock');
     });
@@ -1102,18 +1102,17 @@ describe('processTurn persisted state', () => {
       expect(turn7.replyText).toContain('one Beta at ₹150 (Tax Included) each');
       expect(turn7.replyText).toContain('The exact total is ₹330 (Tax Included).');
       expect(turn7.productCard?.buttons).toEqual([
+        { id: 'earthora_cart:remove_item', title: 'Remove Item' },
         { id: 'earthora_cart:checkout', title: 'Checkout' },
         { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' },
-        { id: 'earthora_cart:main_menu', title: 'Main Menu' },
       ]);
     });
 
-    it('navigates to Main Menu from View Cart button 3', async () => {
+    it('navigates to Main Menu from empty View Cart button 2', async () => {
       const stateButton = createInitialState();
-      stateButton.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 1, unitPrice: 90 }];
       stateButton.messages.push({
         role: 'assistant',
-        content: 'Your cart has one Alpha at ₹90 (Tax Included) each. The exact total is ₹90 (Tax Included).',
+        content: 'Your cart is currently empty.',
       });
 
       const outcomeButton = await processTurn(
@@ -1125,12 +1124,11 @@ describe('processTurn persisted state', () => {
       expect(outcomeButton.replyText).toContain(WHATSAPP_MENU);
 
       const stateNumber = createInitialState();
-      stateNumber.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 1, unitPrice: 90 }];
       stateNumber.messages.push({
         role: 'assistant',
-        content: 'Your cart has one Alpha at ₹90 (Tax Included) each. The exact total is ₹90 (Tax Included).',
+        content: 'Your cart is currently empty.',
       });
-      const outcomeNumber = await processTurn('controller-test', stateNumber, '3', 'text');
+      const outcomeNumber = await processTurn('controller-test', stateNumber, '2', 'text');
       expect(outcomeNumber.replyText).toContain(WHATSAPP_MENU);
     });
 
@@ -1147,6 +1145,174 @@ describe('processTurn persisted state', () => {
         { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' },
         { id: 'earthora_cart:main_menu', title: 'Main Menu' },
       ]);
+    });
+
+    describe('WhatsApp Checkout UX fixes: Cart Item Removal and Sequential Checkout Collection', () => {
+      it('handles Remove Item flow for multi-item cart: prompts numbered list, removes selected item, updates total', async () => {
+        const state = createInitialState();
+        state.cart = [
+          { productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 },
+          { productId: 'beta-id', productName: 'Beta', quantity: 1, unitPrice: 150 },
+        ];
+        state.messages.push({
+          role: 'assistant',
+          content: 'Your cart has two Alpha at ₹90 (Tax Included) each and one Beta at ₹150 (Tax Included) each. The exact total is ₹330 (Tax Included).',
+        });
+
+        // 1. User clicks "Remove Item" button
+        const removeTurn = await processTurn(
+          'controller-test',
+          state,
+          productActionInputFromButtonId(cartButtonId('remove_item'))!,
+          'text',
+        );
+        expect(removeTurn.state.awaitingCartRemoval).toBe(true);
+        expect(removeTurn.replyText).toContain('Select an item to remove:');
+        expect(removeTurn.replyText).toContain('1. Alpha (2 units) — ₹90 (Tax Included) each — Total ₹180 (Tax Included)');
+        expect(removeTurn.replyText).toContain('2. Beta (1 unit) — ₹150 (Tax Included) each — Total ₹150 (Tax Included)');
+        expect(removeTurn.replyText).toContain('Reply with the item number to remove.');
+
+        // 2. User replies with "1" to remove Alpha
+        const itemRemovedTurn = await processTurn('controller-test', removeTurn.state, '1', 'text');
+        expect(itemRemovedTurn.state.awaitingCartRemoval).toBeUndefined();
+        expect(itemRemovedTurn.state.cart).toEqual([
+          { productId: 'beta-id', productName: 'Beta', quantity: 1, unitPrice: 150 },
+        ]);
+        expect(itemRemovedTurn.replyText).toContain('Alpha has been removed from your cart.');
+        expect(itemRemovedTurn.replyText).toContain('Your cart has one Beta at ₹150 (Tax Included) each. The exact total is ₹150 (Tax Included).');
+        expect(itemRemovedTurn.productCard?.buttons).toEqual([
+          { id: 'earthora_cart:remove_item', title: 'Remove Item' },
+          { id: 'earthora_cart:checkout', title: 'Checkout' },
+          { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' },
+        ]);
+      });
+
+      it('removes item via numeric reply 1 on View Cart screen', async () => {
+        const state = createInitialState();
+        state.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 1, unitPrice: 90 }];
+        state.messages.push({
+          role: 'assistant',
+          content: 'Your cart has one Alpha at ₹90 (Tax Included) each. The exact total is ₹90 (Tax Included).',
+        });
+
+        const turn1 = await processTurn('controller-test', state, '1', 'text');
+        expect(turn1.state.awaitingCartRemoval).toBe(true);
+        expect(turn1.replyText).toContain('Select an item to remove:');
+        expect(turn1.replyText).toContain('1. Alpha (1 unit) — ₹90 (Tax Included) each — Total ₹90 (Tax Included)');
+      });
+
+      it('removes final item and gracefully transitions to empty cart with Continue Shopping and Main Menu buttons', async () => {
+        const state = createInitialState();
+        state.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 1, unitPrice: 90 }];
+        state.awaitingCartRemoval = true;
+        state.messages.push({
+          role: 'assistant',
+          content: 'Select an item to remove:\n1. Alpha\nReply with the item number to remove.',
+        });
+
+        const turn = await processTurn('controller-test', state, '1', 'text');
+        expect(turn.state.awaitingCartRemoval).toBeUndefined();
+        expect(turn.state.cart).toEqual([]);
+        expect(turn.replyText).toContain('Alpha has been removed from your cart.');
+        expect(turn.replyText).toContain('Your cart is currently empty.');
+        expect(turn.productCard?.buttons).toEqual([
+          { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' },
+          { id: 'earthora_cart:main_menu', title: 'Main Menu' },
+        ]);
+      });
+
+      it('handles invalid item numbers safely without mutating cart or erroring', async () => {
+        const state = createInitialState();
+        state.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 1, unitPrice: 90 }];
+        state.awaitingCartRemoval = true;
+        state.messages.push({
+          role: 'assistant',
+          content: 'Select an item to remove:\n1. Alpha',
+        });
+
+        const invalidTurn = await processTurn('controller-test', state, '9', 'text');
+        expect(invalidTurn.state.awaitingCartRemoval).toBe(true);
+        expect(invalidTurn.state.cart).toHaveLength(1);
+        expect(invalidTurn.replyText).toContain('That is not a valid item number.');
+        expect(invalidTurn.replyText).toContain('Select an item to remove:');
+      });
+
+      it('allows cancelling out of cart removal back to View Cart', async () => {
+        const state = createInitialState();
+        state.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 1, unitPrice: 90 }];
+        state.awaitingCartRemoval = true;
+        state.messages.push({
+          role: 'assistant',
+          content: 'Select an item to remove:\n1. Alpha',
+        });
+
+        const cancelTurn = await processTurn('controller-test', state, 'cancel', 'text');
+        expect(cancelTurn.state.awaitingCartRemoval).toBeUndefined();
+        expect(cancelTurn.state.cart).toHaveLength(1);
+        expect(cancelTurn.replyText).toContain('Your cart has one Alpha at ₹90 (Tax Included) each.');
+        expect(cancelTurn.productCard?.buttons).toEqual([
+          { id: 'earthora_cart:remove_item', title: 'Remove Item' },
+          { id: 'earthora_cart:checkout', title: 'Checkout' },
+          { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' },
+        ]);
+      });
+
+      it('clears stale persisted checkout delivery fields on explicit Checkout and starts sequential collection', async () => {
+        const state = createInitialState();
+        state.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 1, unitPrice: 90 }];
+        // Stale persisted fields from previous completed order
+        state.checkoutFields = {
+          phone: '+919876543210',
+          name: 'Old Name',
+          email: 'old@example.com',
+          address: 'Old Street 123',
+          city: 'Old City',
+          state: 'Old State',
+          postalCode: '110001',
+          country: 'India',
+          gst: '27ABCDE1234F1Z5',
+        };
+        state.messages.push({
+          role: 'assistant',
+          content: 'Your cart has one Alpha at ₹90 (Tax Included) each. The exact total is ₹90 (Tax Included).',
+        });
+
+        // User triggers checkout
+        const checkoutTurn = await processTurn(
+          'controller-test',
+          state,
+          productActionInputFromButtonId(cartButtonId('checkout'))!,
+          'text',
+        );
+
+        // Verification link must NOT be generated prematurely
+        expect(checkoutTurn.outboundActions?.find((a) => a.type === 'checkout_review')).toBeUndefined();
+        // Phone is preserved as authoritative WhatsApp sender phone
+        expect(checkoutTurn.state.checkoutFields.phone).toBe('+919876543210');
+        // Stale delivery details are cleared
+        expect(checkoutTurn.state.checkoutFields.name).toBeUndefined();
+        expect(checkoutTurn.state.checkoutFields.email).toBeUndefined();
+        expect(checkoutTurn.state.checkoutFields.address).toBeUndefined();
+        expect(checkoutTurn.state.checkoutFields.postalCode).toBeUndefined();
+        expect(checkoutTurn.state.checkoutFields.gst).toBeUndefined();
+        // Prompt asks for the first required missing field: Full Name
+        expect(checkoutTurn.replyText).toBe('What is your full name?');
+      });
+
+      it('does not generate verification link prematurely when user enters checkout on empty cart', async () => {
+        const state = createInitialState();
+        state.cart = [];
+        state.checkoutFields = { phone: '+919876543210' };
+
+        const checkoutTurn = await processTurn(
+          'controller-test',
+          state,
+          productActionInputFromButtonId(cartButtonId('checkout'))!,
+          'text',
+        );
+        expect(checkoutTurn.replyText).toBe('Your cart is currently empty.');
+        expect(checkoutTurn.outboundActions?.find((a) => a.type === 'checkout_review')).toBeUndefined();
+      });
     });
   });
 });

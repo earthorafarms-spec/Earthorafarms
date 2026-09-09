@@ -111,4 +111,36 @@ describe('WhatsApp checkout template payload', () => {
     });
     expect(parsePersistedProductCard(serializeProductCard(postAddCard))).toEqual(postAddCard);
   });
+
+  it('builds View Cart native interactive card with Remove Item, Checkout, Continue Shopping and preserves across serialization', () => {
+    const viewCartCard = {
+      body: 'Your cart has one Alpha at ₹90 (Tax Included) each. The exact total is ₹90 (Tax Included).',
+      buttons: [
+        { id: 'earthora_cart:remove_item', title: 'Remove Item' },
+        { id: 'earthora_cart:checkout', title: 'Checkout' },
+        { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' },
+      ],
+    };
+    const interactive = {
+      type: 'button',
+      body: { text: viewCartCard.body },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'earthora_cart:remove_item', title: 'Remove Item' } },
+          { type: 'reply', reply: { id: 'earthora_cart:checkout', title: 'Checkout' } },
+          { type: 'reply', reply: { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' } },
+        ],
+      },
+    };
+
+    expect(buildTataOmniProductCardPayload('919876543210', viewCartCard)).toEqual({
+      to: '+919876543210', type: 'interactive', source: 'external', interactive,
+    });
+    expect(buildMetaProductCardPayload('+919876543210', viewCartCard)).toEqual({
+      messaging_product: 'whatsapp', recipient_type: 'individual', to: '919876543210',
+      type: 'interactive', interactive,
+    });
+    expect(parsePersistedProductCard(serializeProductCard(viewCartCard))).toEqual(viewCartCard);
+  });
 });
+

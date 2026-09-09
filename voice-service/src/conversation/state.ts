@@ -87,6 +87,8 @@ export interface ConversationState {
     awaitingQuantity: boolean;
     lastAction?: 'benefits' | 'dosage' | 'add_to_cart';
   };
+  /** WhatsApp only: true when awaiting an item number to remove from the cart. */
+  awaitingCartRemoval?: boolean;
   /** Reusable encrypted review token so "send the form again" does not create duplicate checkout sessions. */
   activeCheckoutReview?: {
     checkoutSessionId: string;

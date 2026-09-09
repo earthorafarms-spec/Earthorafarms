@@ -1,4 +1,4 @@
-import type { ConversationState, ConversationMessage } from './state.js';
+import type { ConversationState, ConversationMessage, CartSnapshotLine } from './state.js';
 import { SYSTEM_PROMPT } from './prompt.js';
 import {
   WHATSAPP_MENU,
@@ -335,13 +335,12 @@ export function shouldShowWhatsAppMenu(userText: string, state: ConversationStat
   const nextCheckoutPrompt = state.cart.length > 0 ? nextCheckoutQuestion(state) : null;
   const activeCheckoutCollection = Boolean(nextCheckoutPrompt && previousReply?.includes(nextCheckoutPrompt));
 
-  if (activeCheckoutCollection || awaitingQuantity) {
+  if (activeCheckoutCollection || awaitingQuantity || state.awaitingCartRemoval) {
     return false;
   }
 
   const trimmed = userText.trim();
   if (parseCartActionInput(trimmed) === 'main_menu') return true;
-  if (trimmed === '3' && state.cart.length > 0 && isViewCartReply(previousReply, state)) return true;
   if (trimmed === '2' && state.cart.length === 0 && isViewCartReply(previousReply, state)) return true;
   if (isExplicitMenuRequest(userText)) return true;
   if (!isCommonGreeting(userText)) return false;
@@ -358,7 +357,7 @@ function isProductMenuSelection(userText: string, messages: ConversationMessage[
 }
 
 function isPoliciesMenuSelection(userText: string, messages: ConversationMessage[], state: ConversationState): boolean {
-  if (state.whatsAppProductContext?.awaitingQuantity) return false;
+  if (state.whatsAppProductContext?.awaitingQuantity || state.awaitingCartRemoval) return false;
   const previousReply = lastAssistantReply(messages);
   if (!previousReply) return false;
   const nextCheckoutPrompt = state.cart.length > 0 ? nextCheckoutQuestion(state) : null;
@@ -371,7 +370,7 @@ function isPoliciesMenuSelection(userText: string, messages: ConversationMessage
 }
 
 function isShippingPolicySelection(userText: string, messages: ConversationMessage[], state: ConversationState): boolean {
-  if (state.whatsAppProductContext?.awaitingQuantity) return false;
+  if (state.whatsAppProductContext?.awaitingQuantity || state.awaitingCartRemoval) return false;
   const previousReply = lastAssistantReply(messages);
   if (!previousReply) return false;
   const nextCheckoutPrompt = state.cart.length > 0 ? nextCheckoutQuestion(state) : null;
@@ -384,7 +383,7 @@ function isShippingPolicySelection(userText: string, messages: ConversationMessa
 }
 
 function isReturnPolicySelection(userText: string, messages: ConversationMessage[], state: ConversationState): boolean {
-  if (state.whatsAppProductContext?.awaitingQuantity) return false;
+  if (state.whatsAppProductContext?.awaitingQuantity || state.awaitingCartRemoval) return false;
   const previousReply = lastAssistantReply(messages);
   if (!previousReply) return false;
   const nextCheckoutPrompt = state.cart.length > 0 ? nextCheckoutQuestion(state) : null;
@@ -421,9 +420,9 @@ export function buildViewCartCard(
   const body = directCartReply(state);
   const buttons: WhatsAppButton[] = state.cart.length > 0
     ? [
+        { id: 'earthora_cart:remove_item', title: 'Remove Item' },
         { id: 'earthora_cart:checkout', title: 'Checkout' },
         { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' },
-        { id: 'earthora_cart:main_menu', title: 'Main Menu' },
       ]
     : [
         { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' },
@@ -433,6 +432,53 @@ export function buildViewCartCard(
     body,
     buttons,
   };
+}
+
+export function buildCartRemovalPromptReply(
+  cart: CartSnapshotLine[],
+  language: ConversationState['currentLanguage'],
+  invalidSelection = false,
+): string {
+  if (cart.length === 0) {
+    if (language === 'hi') return 'अभी आपका कार्ट खाली है।';
+    if (language === 'gu') return 'હાલમાં તમારું કાર્ટ ખાલી છે.';
+    return 'Your cart is currently empty.';
+  }
+
+  const prefix = invalidSelection
+    ? language === 'hi'
+      ? 'यह मान्य आइटम नंबर नहीं है।\n\n'
+      : language === 'gu'
+        ? 'આ માન્ય આઇટમ નંબર નથી.\n\n'
+        : 'That is not a valid item number.\n\n'
+    : '';
+
+  const heading = language === 'hi'
+    ? 'हटाने के लिए आइटम चुनें:'
+    : language === 'gu'
+      ? 'દૂર કરવા માટે આઇટમ પસંદ કરો:'
+      : 'Select an item to remove:';
+
+  const lines = cart.map((item, index) => {
+    const total = (item.quantity * item.unitPrice).toLocaleString('en-IN');
+    const unit = item.unitPrice.toLocaleString('en-IN');
+    const qtyLabel = `${item.quantity} ${item.quantity === 1 ? 'unit' : 'units'}`;
+    if (language === 'hi') {
+      return `${index + 1}. ${item.productName} (${item.quantity} यूनिट) — ₹${unit} (Tax Included) प्रति पैक — कुल ₹${total} (Tax Included)`;
+    }
+    if (language === 'gu') {
+      return `${index + 1}. ${item.productName} (${item.quantity} યુનિટ) — પેક દીઠ ₹${unit} (Tax Included) — કુલ ₹${total} (Tax Included)`;
+    }
+    return `${index + 1}. ${item.productName} (${qtyLabel}) — ₹${unit} (Tax Included) each — Total ₹${total} (Tax Included)`;
+  });
+
+  const prompt = language === 'hi'
+    ? 'हटाने के लिए आइटम का नंबर भेजें।\nरद्द करने के लिए Cancel लिखें।'
+    : language === 'gu'
+      ? 'દૂર કરવા માટે આઇટમ નંબર મોકલો.\nરદ કરવા માટે Cancel લખો.'
+      : 'Reply with the item number to remove.\nTo cancel, type Cancel.';
+
+  return `${prefix}${heading}\n${lines.join('\n')}\n\n${prompt}`;
 }
 
 function isPostAddToCartReply(text: string | null): boolean {
@@ -467,6 +513,17 @@ function isViewCartSelection(userText: string, previousReply: string | null, sta
   return false;
 }
 
+function isRemoveItemSelection(userText: string, previousReply: string | null, state?: ConversationState): boolean {
+  const nextPrompt = state && state.cart.length > 0 ? nextCheckoutQuestion(state) : null;
+  if (nextPrompt && previousReply?.includes(nextPrompt)) return false;
+
+  const trimmed = userText.trim();
+  if (parseCartActionInput(trimmed) === 'remove_item') return true;
+  if (/^(?:remove\s*item|remove\s*product|remove|delete\s*item|delete|हटाएं|हटाओ|કાઢો|દૂર\s*કરો)$/iu.test(trimmed)) return true;
+  if (trimmed === '1' && state && state.cart.length > 0 && isViewCartReply(previousReply, state)) return true;
+  return false;
+}
+
 function isCheckoutSelection(userText: string, previousReply: string | null, state: ConversationState): boolean {
   const nextPrompt = state.cart.length > 0 ? nextCheckoutQuestion(state) : null;
   if (nextPrompt && previousReply?.includes(nextPrompt)) return false;
@@ -475,7 +532,7 @@ function isCheckoutSelection(userText: string, previousReply: string | null, sta
   if (parseCartActionInput(trimmed) === 'checkout') return true;
   if (/^(?:checkout|check\s*out|order\s*now|place\s*order|चेकआउट|ચેકઆઉટ)$/iu.test(trimmed)) return true;
   if (trimmed === '2' && isPostAddToCartReply(previousReply)) return true;
-  if (trimmed === '1' && isViewCartReply(previousReply, state)) return true;
+  if (trimmed === '2' && state.cart.length > 0 && isViewCartReply(previousReply, state)) return true;
   return false;
 }
 
@@ -487,7 +544,8 @@ function isContinueShoppingSelection(userText: string, previousReply: string | n
   if (parseCartActionInput(trimmed) === 'continue_shopping') return true;
   if (/^(?:continue\s*shopping|shop\s*more|browse\s*products|browse|खरीदारी|વધુ\s*ખરીદી)$/iu.test(trimmed)) return true;
   if (trimmed === '3' && isPostAddToCartReply(previousReply)) return true;
-  if (trimmed === '2' && isViewCartReply(previousReply, state)) return true;
+  if (trimmed === '3' && state && state.cart.length > 0 && isViewCartReply(previousReply, state)) return true;
+  if (trimmed === '1' && state && state.cart.length === 0 && isViewCartReply(previousReply, state)) return true;
   return false;
 }
 
@@ -806,6 +864,7 @@ export async function processTurn(
   }
 
   if (CART_SUMMARY_PATTERN.test(userText) || (state.cart.length > 0 && CART_PRICING_PATTERN.test(userText))) {
+    delete state.awaitingCartRemoval;
     const cartTool = toolsByName.get_cart;
     const cartResult = cartTool
       ? await cartTool.handler({}, toolContext)
@@ -845,6 +904,7 @@ export async function processTurn(
       return { state, replyText, policyViolations: [], outboundActions };
     }
     pendingProduct.awaitingQuantity = false;
+    delete state.awaitingCartRemoval;
 
     if (channel === 'text') {
       delete state.whatsAppProductContext;
@@ -870,8 +930,97 @@ export async function processTurn(
     return { state, replyText, policyViolations: [], outboundActions };
   }
 
+  if (channel === 'text' && state.awaitingCartRemoval) {
+    const trimmed = userText.trim();
+    if (
+      parseCartActionInput(trimmed) === 'main_menu' ||
+      /^(?:0|menu|main\s*menu|मेन्यू|મેનુ)$/iu.test(trimmed)
+    ) {
+      delete state.awaitingCartRemoval;
+      delete state.whatsAppProductContext;
+      const replyText = buildWhatsAppMenuReply(state.currentLanguage);
+      state.messages.push({ role: 'assistant', content: replyText });
+      return { state, replyText, policyViolations: [], outboundActions };
+    }
+
+    if (
+      parseCartActionInput(trimmed) === 'view_cart' ||
+      /^(?:cancel|stop|back|cart|view\s*cart|रद्द|वापस|પાછા|રદ)$/iu.test(trimmed)
+    ) {
+      delete state.awaitingCartRemoval;
+      delete state.whatsAppProductContext;
+      const cartCard = buildViewCartCard(state);
+      state.messages.push({ role: 'assistant', content: cartCard.body });
+      return { state, replyText: cartCard.body, productCard: cartCard, policyViolations: [], outboundActions };
+    }
+
+    if (isCheckoutSelection(userText, lastAssistantReply(state.messages), state)) {
+      delete state.awaitingCartRemoval;
+    } else if (isContinueShoppingSelection(userText, lastAssistantReply(state.messages), state)) {
+      delete state.awaitingCartRemoval;
+    } else {
+      delete state.whatsAppProductContext;
+      if (state.cart.length === 0) {
+        delete state.awaitingCartRemoval;
+        const cartCard = buildViewCartCard(state);
+        state.messages.push({ role: 'assistant', content: cartCard.body });
+        return { state, replyText: cartCard.body, productCard: cartCard, policyViolations: [], outboundActions };
+      }
+
+      let selectedIndex = -1;
+      const numMatch = trimmed.match(/^(?:item\s*#?|#)?(\d+)$/i);
+      if (numMatch) {
+        const idx = Number.parseInt(numMatch[1], 10) - 1;
+        if (idx >= 0 && idx < state.cart.length) {
+          selectedIndex = idx;
+        }
+      }
+      if (selectedIndex === -1) {
+        const matchIdx = state.cart.findIndex((item) => {
+          const itemLower = item.productName.toLowerCase();
+          const textLower = trimmed.toLowerCase();
+          return textLower.length >= 3 && (itemLower.includes(textLower) || textLower.includes(itemLower));
+        });
+        if (matchIdx >= 0) {
+          selectedIndex = matchIdx;
+        }
+      }
+
+      if (selectedIndex >= 0 && selectedIndex < state.cart.length) {
+        const removedItem = state.cart[selectedIndex];
+        state.cart.splice(selectedIndex, 1);
+        delete state.awaitingCartRemoval;
+        state.currentTurnFacts.push({
+          toolName: 'remove_cart_item',
+          resultJson: JSON.stringify({ ok: true, removed: removedItem, remainingCount: state.cart.length }),
+        });
+        const removedNotice = state.currentLanguage === 'hi'
+          ? `${removedItem.productName} कार्ट से हटा दिया गया है।`
+          : state.currentLanguage === 'gu'
+            ? `${removedItem.productName} કાર્ટમાંથી દૂર કરવામાં આવ્યું છે.`
+            : `${removedItem.productName} has been removed from your cart.`;
+        const cartCard = buildViewCartCard(state);
+        const body = `${removedNotice}\n\n${cartCard.body}`;
+        const responseCard = { ...cartCard, body };
+        state.messages.push({ role: 'assistant', content: body });
+        return {
+          state,
+          replyText: body,
+          productCard: responseCard,
+          policyViolations: [],
+          outboundActions,
+        };
+      }
+
+      const replyText = buildCartRemovalPromptReply(state.cart, state.currentLanguage, true);
+      state.messages.push({ role: 'assistant', content: replyText });
+      return { state, replyText, policyViolations: [], outboundActions };
+    }
+  }
+
   if (channel === 'text' && shouldShowWhatsAppMenu(userText, state)) {
     delete state.whatsAppProductContext;
+    delete state.awaitingCartRemoval;
     const replyText = buildWhatsAppMenuReply(state.currentLanguage);
     state.messages.push({ role: 'assistant', content: replyText });
     return { state, replyText, policyViolations: [], outboundActions };
@@ -879,6 +1028,7 @@ export async function processTurn(
 
   if (channel === 'text' && isViewCartSelection(userText, lastAssistantReply(state.messages), state)) {
     delete state.whatsAppProductContext;
+    delete state.awaitingCartRemoval;
     const cartTool = toolsByName.get_cart;
     const cartResult = cartTool
       ? await cartTool.handler({}, toolContext)
@@ -889,8 +1039,23 @@ export async function processTurn(
     return { state, replyText: cartCard.body, productCard: cartCard, policyViolations: [], outboundActions };
   }
 
+  if (channel === 'text' && isRemoveItemSelection(userText, lastAssistantReply(state.messages), state)) {
+    delete state.whatsAppProductContext;
+    if (state.cart.length === 0) {
+      delete state.awaitingCartRemoval;
+      const cartCard = buildViewCartCard(state);
+      state.messages.push({ role: 'assistant', content: cartCard.body });
+      return { state, replyText: cartCard.body, productCard: cartCard, policyViolations: [], outboundActions };
+    }
+    state.awaitingCartRemoval = true;
+    const replyText = buildCartRemovalPromptReply(state.cart, state.currentLanguage, false);
+    state.messages.push({ role: 'assistant', content: replyText });
+    return { state, replyText, policyViolations: [], outboundActions };
+  }
+
   if (channel === 'text' && isCheckoutSelection(userText, lastAssistantReply(state.messages), state)) {
     delete state.whatsAppProductContext;
+    delete state.awaitingCartRemoval;
     if (state.cart.length === 0) {
       const replyText = state.currentLanguage === 'hi'
         ? 'अभी आपका कार्ट खाली है।'
@@ -900,31 +1065,19 @@ export async function processTurn(
       state.messages.push({ role: 'assistant', content: replyText });
       return { state, replyText, policyViolations: [], outboundActions };
     }
+    const senderPhone = state.checkoutFields.phone;
+    state.checkoutFields = { ...(senderPhone ? { phone: senderPhone } : {}) };
+    delete state.activeCheckoutReview;
     const nextQuestion = nextCheckoutQuestion(state);
     if (nextQuestion) {
       state.messages.push({ role: 'assistant', content: nextQuestion });
       return { state, replyText: nextQuestion, policyViolations: [], outboundActions };
     }
-    if (isCheckoutReady(state)) {
-      const callId = `checkout-direct-${state.turnCount}`;
-      let delivery: unknown;
-      try {
-        delivery = await toolsByName.create_verification_link.handler({}, toolContext);
-      } catch {
-        delivery = { ok: false, reason: 'checkout_preparation_failed' };
-      }
-      const resultJson = JSON.stringify(delivery);
-      state.currentTurnFacts.push({ toolName: 'create_verification_link', resultJson });
-      state.messages.push({ role: 'tool', toolName: 'create_verification_link', toolCallId: callId, content: resultJson });
-      const reviewUrl = outboundActions.find((action) => action.type === 'checkout_review')?.url;
-      const replyText = reviewFormReply(Boolean(delivery && typeof delivery === 'object' && (delivery as { ok?: boolean }).ok), state.currentLanguage, reviewUrl);
-      state.messages.push({ role: 'assistant', content: replyText });
-      return { state, replyText, policyViolations: [], outboundActions };
-    }
   }
 
   if (channel === 'text' && isContinueShoppingSelection(userText, lastAssistantReply(state.messages), state)) {
     delete state.whatsAppProductContext;
+    delete state.awaitingCartRemoval;
     const listTool = toolsByName.list_products;
     let productCatalog: unknown;
     try {
@@ -941,6 +1094,7 @@ export async function processTurn(
 
   if (channel === 'text' && isPoliciesMenuSelection(userText, state.messages, state)) {
     delete state.whatsAppProductContext;
+    delete state.awaitingCartRemoval;
     const replyText = WHATSAPP_POLICIES_MENU;
     state.messages.push({ role: 'assistant', content: replyText });
     return { state, replyText, policyViolations: [], outboundActions };
@@ -948,6 +1102,7 @@ export async function processTurn(
 
   if (channel === 'text' && isShippingPolicySelection(userText, state.messages, state)) {
     delete state.whatsAppProductContext;
+    delete state.awaitingCartRemoval;
     const replyText = WHATSAPP_SHIPPING_POLICY;
     state.messages.push({ role: 'assistant', content: replyText });
     return { state, replyText, policyViolations: [], outboundActions };
@@ -955,6 +1110,7 @@ export async function processTurn(
 
   if (channel === 'text' && isReturnPolicySelection(userText, state.messages, state)) {
     delete state.whatsAppProductContext;
+    delete state.awaitingCartRemoval;
     const replyText = WHATSAPP_RETURN_POLICY;
     state.messages.push({ role: 'assistant', content: replyText });
     return { state, replyText, policyViolations: [], outboundActions };

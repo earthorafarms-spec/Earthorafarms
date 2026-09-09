@@ -1,5 +1,5 @@
 export type WhatsAppProductAction = 'benefits' | 'dosage' | 'add_to_cart';
-export type WhatsAppCartAction = 'view_cart' | 'checkout' | 'continue_shopping' | 'main_menu';
+export type WhatsAppCartAction = 'view_cart' | 'checkout' | 'continue_shopping' | 'main_menu' | 'remove_item';
 
 export interface WhatsAppButton {
   id: string;
@@ -39,7 +39,7 @@ export function productActionInputFromButtonId(buttonId: unknown): string | null
       return null;
     }
   }
-  const cartMatch = buttonId.match(/^earthora_cart:(view_cart|checkout|continue_shopping|main_menu)$/u);
+  const cartMatch = buttonId.match(/^earthora_cart:(view_cart|checkout|continue_shopping|main_menu|remove_item)$/u);
   if (cartMatch) {
     return `${CART_ACTION_INPUT_PREFIX}${cartMatch[1]}`;
   }
@@ -49,8 +49,8 @@ export function productActionInputFromButtonId(buttonId: unknown): string | null
 export function parseCartActionInput(input: string): WhatsAppCartAction | null {
   if (typeof input !== 'string') return null;
   const match =
-    input.match(/^__earthora_whatsapp_cart_action__:(view_cart|checkout|continue_shopping|main_menu)$/u) ??
-    input.match(/^earthora_cart:(view_cart|checkout|continue_shopping|main_menu)$/u);
+    input.match(/^__earthora_whatsapp_cart_action__:(view_cart|checkout|continue_shopping|main_menu|remove_item)$/u) ??
+    input.match(/^earthora_cart:(view_cart|checkout|continue_shopping|main_menu|remove_item)$/u);
   if (match) return match[1] as WhatsAppCartAction;
   return null;
 }
