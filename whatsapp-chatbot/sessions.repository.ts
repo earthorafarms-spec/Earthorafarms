@@ -21,26 +21,49 @@ export interface WhatsAppSessionResult {
  * so the checkout tool's FK to `voice_call_sessions` resolves correctly.
  */
 export async function getOrCreateSession(phone: string): Promise<WhatsAppSessionResult> {
-  // Look up existing whatsapp_sessions row for this phone.
+  // Look up existing whatsapp_sessions row and linked voice session in a single read.
   const { data: waRow } = await supabase
     .from('whatsapp_sessions')
-    .select('voice_session_id')
+    .select(`
+      voice_session_id,
+      voice_call_sessions (
+        id,
+        conversation_state,
+        expires_at
+      )
+    `)
     .eq('phone_number', phone)
     .maybeSingle();
 
   if (waRow) {
-    // Check if the linked voice session is still alive.
-    const { data: vsRow } = await supabase
-      .from('voice_call_sessions')
-      .select('id, conversation_state, expires_at')
-      .eq('id', waRow.voice_session_id)
-      .maybeSingle();
+    const rawVs = (waRow as Record<string, any>).voice_call_sessions;
+    const vsRow = (Array.isArray(rawVs) ? rawVs[0] : rawVs) as {
+      id?: string;
+      conversation_state?: unknown;
+      expires_at?: string;
+    } | null | undefined;
 
-    if (vsRow && new Date(vsRow.expires_at as string) > new Date()) {
+    if (vsRow && typeof vsRow.expires_at === 'string' && new Date(vsRow.expires_at) > new Date()) {
       return {
-        voiceSessionId: vsRow.id as string,
+        voiceSessionId: (vsRow.id ?? waRow.voice_session_id) as string,
         state: (vsRow.conversation_state as ConversationState) ?? createInitialState(),
       };
+    }
+
+    // Graceful fallback if embedded relation was not returned
+    if (!vsRow && waRow.voice_session_id) {
+      const { data: directVs } = await supabase
+        .from('voice_call_sessions')
+        .select('id, conversation_state, expires_at')
+        .eq('id', waRow.voice_session_id)
+        .maybeSingle();
+
+      if (directVs && typeof directVs.expires_at === 'string' && new Date(directVs.expires_at as string) > new Date()) {
+        return {
+          voiceSessionId: directVs.id as string,
+          state: (directVs.conversation_state as ConversationState) ?? createInitialState(),
+        };
+      }
     }
   }
 

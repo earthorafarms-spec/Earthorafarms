@@ -87,3 +87,63 @@ test('WhatsApp inbox migration is private, idempotent, retryable and atomic with
     await db.close();
   }
 });
+
+test('WhatsApp claim media migration extends claim_next_whatsapp_message with outbound media fields', async () => {
+  const inboxSql = await readFile(
+    new URL('../supabase/migrations/20260905000000_whatsapp_chatbot_inbox.sql', import.meta.url),
+    'utf8',
+  );
+  const mediaSql = await readFile(
+    new URL('../supabase/migrations/20260907120000_whatsapp_outbound_media.sql', import.meta.url),
+    'utf8',
+  );
+  const claimSql = await readFile(
+    new URL('../supabase/migrations/20260909000000_whatsapp_claim_media.sql', import.meta.url),
+    'utf8',
+  );
+
+  const db = new PGlite();
+  try {
+    await db.exec(`
+      CREATE ROLE anon;
+      CREATE ROLE authenticated;
+      CREATE ROLE service_role BYPASSRLS;
+      CREATE TABLE voice_call_sessions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        conversation_state JSONB NOT NULL DEFAULT '{}',
+        expires_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE TABLE whatsapp_sessions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        phone_number TEXT NOT NULL UNIQUE,
+        voice_session_id UUID NOT NULL REFERENCES voice_call_sessions(id),
+        last_active_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+    `);
+    await db.exec(inboxSql);
+    await db.exec(mediaSql);
+    await db.exec(claimSql);
+    // Migration is safe to retry
+    await db.exec(claimSql);
+
+    await db.exec('GRANT ALL ON voice_call_sessions, whatsapp_sessions TO service_role; SET ROLE service_role;');
+
+    await db.query(
+      `INSERT INTO whatsapp_message_events(
+        provider_message_id, phone_number, message_text,
+        outbound_media_url, outbound_media_caption
+       ) VALUES ($1, $2, $3, $4, $5)`,
+      ['wamid.media-test', '+919876543210', 'Check media', 'https://example.com/item.png', 'Item caption'],
+    );
+
+    const claim = await db.query('SELECT * FROM claim_next_whatsapp_message()');
+    assert.equal(claim.rows.length, 1);
+    assert.equal(claim.rows[0].provider_message_id, 'wamid.media-test');
+    assert.equal(claim.rows[0].outbound_media_url, 'https://example.com/item.png');
+    assert.equal(claim.rows[0].outbound_media_caption, 'Item caption');
+    assert.equal(claim.rows[0].media_sent_at, null);
+  } finally {
+    await db.close();
+  }
+});

@@ -34,6 +34,21 @@ export async function claimNextWhatsAppMessage(): Promise<WhatsAppInboxEvent | n
   if (error) throw new Error(`whatsapp: failed to claim inbox event: ${error.message}`);
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return null;
+  const rawRow = row as Record<string, any>;
+  if (rawRow.outbound_media_url !== undefined) {
+    return {
+      id: rawRow.id,
+      providerMessageId: rawRow.provider_message_id,
+      phone: rawRow.phone_number,
+      messageText: rawRow.message_text,
+      replyText: rawRow.reply_text,
+      mediaUrl: rawRow.outbound_media_url,
+      mediaCaption: rawRow.outbound_media_caption,
+      mediaSentAt: rawRow.media_sent_at,
+      attemptCount: Number(rawRow.attempt_count),
+    };
+  }
+
   const { data:delivery, error: deliveryError } = await supabase
     .from('whatsapp_message_events')
     .select('outbound_media_url, outbound_media_caption, media_sent_at')
