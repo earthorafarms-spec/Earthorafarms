@@ -44,8 +44,16 @@ export async function buildApp(options: BuildAppOptions = {}) {
   // CORS restricted to the real site origin — deliberately NOT '*' like the
   // existing Netlify functions, since this API also handles PII (see
   // earthora-voice-agent-build-pack/03-DATA-AND-API.md section 2).
+  const allowedSiteOrigins = [...new Set([
+    config.PUBLIC_APP_URL.replace(/\/$/, ''),
+    'https://earthorafarms.com',
+    'https://www.earthorafarms.com',
+    // Keep already-sent, unexpired links usable while the legacy hostname
+    // permanently redirects to the canonical .com domain.
+    'https://earthorafarms.netlify.app',
+  ])];
   await app.register(cors, {
-    origin: [config.PUBLIC_APP_URL],
+    origin: allowedSiteOrigins,
   });
 
   // Every route below handles PII or triggers external calls (email,

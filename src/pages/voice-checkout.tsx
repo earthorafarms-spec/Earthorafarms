@@ -8,7 +8,7 @@ import {
   type VoiceCheckoutSession, type VoiceCheckoutItem,
 } from '@/lib/voiceCheckoutApi';
 
-type ViewState = 'loading' | 'not_found' | 'expired' | 'edit' | 'reviewing' | 'redirecting' | 'polling' | 'success' | 'failed';
+type ViewState = 'loading' | 'not_found' | 'expired' | 'unavailable' | 'edit' | 'reviewing' | 'redirecting' | 'polling' | 'success' | 'failed';
 
 interface VoiceCheckoutProps {
   params: { token: string };
@@ -36,7 +36,9 @@ export default function VoiceCheckout({ params }: VoiceCheckoutProps) {
         setView('edit');
       })
       .catch((e: Error) => {
-        setView(e.message === 'expired' ? 'expired' : 'not_found');
+        if (e.message === 'expired') setView('expired');
+        else if (e.message === 'not_found') setView('not_found');
+        else setView('unavailable');
       });
   }, [token]);
 
@@ -126,7 +128,7 @@ export default function VoiceCheckout({ params }: VoiceCheckoutProps) {
     );
   }
 
-  if (view === 'not_found' || view === 'expired') {
+  if (view === 'not_found' || view === 'expired' || view === 'unavailable') {
     return (
       <div className="min-h-[100dvh] flex flex-col bg-[#FAF9F5] text-black">
         <Navbar />
@@ -136,12 +138,18 @@ export default function VoiceCheckout({ params }: VoiceCheckoutProps) {
               <AlertTriangle className="w-7 h-7" />
             </div>
             <h1 className="font-dm text-2xl text-black mb-2">
-              {view === 'expired' ? 'This link has expired' : 'Link not found'}
+              {view === 'expired'
+                ? 'This link has expired'
+                : view === 'unavailable'
+                  ? 'Unable to load your order'
+                  : 'Link not found'}
             </h1>
             <p className="text-sm text-black/60">
               {view === 'expired'
                 ? 'Please call back and ask the assistant to send you a new secure link.'
-                : "This checkout link isn't valid. Please check the link or call back to start again."}
+                : view === 'unavailable'
+                  ? 'The order service is temporarily unavailable. Please refresh this page in a moment.'
+                  : "This checkout link isn't valid. Please check the link or call back to start again."}
             </p>
           </div>
         </section>

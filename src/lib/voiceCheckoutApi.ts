@@ -2,7 +2,14 @@
 // src/pages/voice-checkout.tsx. Mirrors the plain-fetch style already used
 // throughout src/lib/api.ts rather than introducing a new HTTP client.
 
-const VOICE_SERVICE_URL = (import.meta.env.VITE_VOICE_SERVICE_URL as string | undefined) || '';
+const PRODUCTION_VOICE_SERVICE_URL = 'https://earthorafarms-mhwv.onrender.com';
+
+// Netlify normally injects VITE_VOICE_SERVICE_URL at build time. Keep a
+// production fallback so a missing dashboard/build-context variable cannot
+// turn every valid review token into a misleading "Link not found" page.
+const VOICE_SERVICE_URL =
+  (import.meta.env.VITE_VOICE_SERVICE_URL as string | undefined)?.replace(/\/$/, '') ||
+  (import.meta.env.PROD ? PRODUCTION_VOICE_SERVICE_URL : '');
 
 export interface VoiceCheckoutItem {
   productId: string;
