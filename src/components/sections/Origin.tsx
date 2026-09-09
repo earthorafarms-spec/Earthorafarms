@@ -69,6 +69,8 @@ export function Origin() {
             <img
               src={leafImg}
               alt="Moringa Leaves Detail"
+              loading="lazy"
+              decoding="async"
               className="w-full h-full object-cover opacity-85 group-hover:scale-105 transition-transform duration-700 ease-out"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent p-6 lg:p-8 flex flex-col justify-between">

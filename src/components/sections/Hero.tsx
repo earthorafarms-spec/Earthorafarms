@@ -1,7 +1,7 @@
 import { ArrowUpRight } from "lucide-react";
 import { Link } from "wouter";
 import terraHeroBg from "@assets/generated_images/terra_hero_bg.webp";
-import morilifeHeroProduct from "@assets/generated_images/morilife_hero_product.png";
+import morilifeHeroProduct from "@assets/generated_images/morilife_hero_product.webp";
 
 const BG_IMAGE_URL = terraHeroBg;
 const PRODUCT_BOTTLE_URL = morilifeHeroProduct;
@@ -76,6 +76,10 @@ export function Hero() {
         <img
           src={PRODUCT_BOTTLE_URL}
           alt="Earthora Farms Moringa Product"
+          width="1200"
+          height="1294"
+          fetchPriority="high"
+          decoding="async"
           className="w-[85%] max-w-[340px] sm:max-w-[480px] object-contain drop-shadow-2xl translate-x-4"
         />
       </div>
@@ -84,6 +88,10 @@ export function Hero() {
       <img
         src={PRODUCT_BOTTLE_URL}
         alt="Earthora Farms Moringa Product"
+        width="1200"
+        height="1294"
+        fetchPriority="high"
+        decoding="async"
         className="hidden lg:block absolute z-0 animate-scale-in delay-700 pointer-events-none drop-shadow-2xl"
         style={{
           width: "clamp(500px, 60vw, 1100px)",

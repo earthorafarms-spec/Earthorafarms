@@ -75,20 +75,28 @@ function mapProduct(p: DbProduct, dbDeals: FestiveDeal[], dbReviews: DbReview[],
 }
 
 export async function fetchPublicProducts(): Promise<Product[]> {
+  // Keep the public catalog from holding the whole route open indefinitely
+  // when a Supabase edge/database request is slow or temporarily unavailable.
+  const requestSignal = AbortSignal.timeout(8000);
   const [productsRes, reviewsRes, dealsRes] = await Promise.all([
     (supabase.from('products') as any)
-      .select('*, inventory(*)')
+      .select('id,name,slug,price,mrp,status,tag,badge,description,highlights,images,rating,created_at,inventory(total_stock)')
       .neq('status', 'archived')
-      .order('created_at', { ascending: true }),
-    (supabase.from('review_details') as any).select('*'),
+      .order('created_at', { ascending: true })
+      .abortSignal(requestSignal),
+    (supabase.from('review_details') as any)
+      .select('review_product_id,review_user_id,review_rating,review_comment,review_created_at')
+      .abortSignal(requestSignal),
     (supabase.from('festival_details') as any)
-      .select('*, festival_deal_products(product_id)')
-      .eq('festival_status', 'active'),
+      .select('id,festival_name,festival_status,festival_start_date,festival_end_date,discount_type,discount_value,festival_deal_products(product_id)')
+      .eq('festival_status', 'active')
+      .abortSignal(requestSignal),
   ]);
 
   if (productsRes.error) throw productsRes.error;
-  if (reviewsRes.error) throw reviewsRes.error;
-  // Don't throw on deals error — just use empty array so products still load
+  // Reviews and deals are enhancements to the catalog, not prerequisites for
+  // rendering it. If either optional request times out or fails, keep the
+  // product list usable and let the page render without those extras.
   const dbDeals = (dealsRes.data || []) as FestiveDeal[];
   const dbReviews = (reviewsRes.data || []) as DbReview[];
 
@@ -97,15 +105,20 @@ export async function fetchPublicProducts(): Promise<Product[]> {
 }
 
 export async function fetchReviews(): Promise<DbReview[]> {
-  const { data, error } = await (supabase.from('review_details') as any).select('*');
+  const requestSignal = AbortSignal.timeout(8000);
+  const { data, error } = await (supabase.from('review_details') as any)
+    .select('review_product_id,review_user_id,review_rating,review_comment,review_created_at')
+    .abortSignal(requestSignal);
   if (error) throw error;
   return (data || []) as DbReview[];
 }
 
 export async function fetchActiveDeals(): Promise<FestiveDeal[]> {
+  const requestSignal = AbortSignal.timeout(8000);
   const { data, error } = await (supabase.from('festival_details') as any)
-    .select('*, festival_deal_products(product_id)')
-    .eq('festival_status', 'active');
+    .select('id,festival_name,festival_status,festival_start_date,festival_end_date,discount_type,discount_value,festival_deal_products(product_id)')
+    .eq('festival_status', 'active')
+    .abortSignal(requestSignal);
   if (error) throw error;
   return (data || []) as FestiveDeal[];
 }

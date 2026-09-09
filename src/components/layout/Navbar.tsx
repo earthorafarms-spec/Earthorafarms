@@ -6,7 +6,6 @@ import { ShoppingBag, Menu, X, Heart, Settings } from "lucide-react";
 import { useCart } from "@/contexts/cart-context";
 import { useAuth } from "@/contexts/auth-context";
 import { supabase } from "@/lib/supabase";
-import { fetchPublicProducts } from "@/lib/api";
 import { UserDashboardModal } from "@/components/user/UserDashboardModal";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import earthoraTextSvg from "@assets/generated_images/Earthora Text.svg";
@@ -59,20 +58,31 @@ export function Navbar() {
       setFavoritesCount(0);
       return;
     }
-    Promise.all([
-      (supabase.from("favorite_details") as any)
+    (async () => {
+      const { data: favorites, error: favoritesError } = await (supabase.from("favorite_details") as any)
         .select("product_id")
-        .eq("user_email", email),
-      fetchPublicProducts(),
-    ]).then(([favoritesResult, publicProducts]) => {
-      if (favoritesResult.error) return;
+        .eq("user_email", email);
+      if (favoritesError) {
+        setFavoritesCount(0);
+        return;
+      }
 
-      const publicProductIds = new Set(publicProducts.map((product) => String(product.id)));
-      const visibleFavorites = (favoritesResult.data || []).filter(
-        (favorite: { product_id: string }) => publicProductIds.has(String(favorite.product_id)),
-      );
-      setFavoritesCount(visibleFavorites.length);
-    }).catch(() => setFavoritesCount(0));
+      const favoriteIds = (favorites || [])
+        .map((favorite: { product_id: string }) => favorite.product_id)
+        .filter(Boolean);
+      if (!favoriteIds.length) {
+        setFavoritesCount(0);
+        return;
+      }
+
+      // Only fetch the IDs needed for the badge instead of the entire catalog,
+      // including reviews, inventory, images, and active deals.
+      const { data: visibleFavorites, error: productsError } = await (supabase.from("products") as any)
+        .select("id")
+        .in("id", favoriteIds)
+        .neq("status", "archived");
+      setFavoritesCount(productsError ? 0 : (visibleFavorites || []).length);
+    })().catch(() => setFavoritesCount(0));
   }, [user]);
 
   // Listen for optimistic wishlist changes from product cards

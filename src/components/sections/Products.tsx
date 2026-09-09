@@ -99,6 +99,8 @@ export function Products() {
                     <img
                       src={product.imageMain || powderImg}
                       alt={product.name}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover rounded-lg shadow-md group-hover:scale-105 transition-transform duration-700 ease-out"
                     />
                   </div>

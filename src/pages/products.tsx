@@ -59,6 +59,7 @@ export default function Products() {
     queryKey: ['product-reviews'],
     queryFn: fetchReviews,
     staleTime: 1000 * 60 * 5,
+    retry: 0,
   });
 
   const reviewsMap = useMemo(() => {
@@ -81,6 +82,7 @@ export default function Products() {
     queryKey: ['public-products'],
     queryFn: fetchPublicProducts,
     staleTime: 1000 * 60 * 5,
+    retry: 0,
   });
 
   // Auto-open modal when navigated to with ?open=<productId>
@@ -319,6 +321,7 @@ export default function Products() {
                 <ProductCard
                   key={p.id}
                   product={p}
+                  priority={p.id === sortedProducts[0]?.id}
                   hoveredId={hoveredId}
                   wishlist={wishlist}
                   onHover={setHoveredId}

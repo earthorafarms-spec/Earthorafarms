@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Plus, X, Search, Sparkles, Percent, Tag, Calendar,
+  Plus, X, Search, Gift, Percent, Tag, Calendar,
   Trash2, Package, Loader2, ChevronDown, ArrowRight,
   Check, Clock, ImageIcon
 } from "lucide-react";
@@ -295,7 +295,7 @@ export default function AdminFestive() {
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-48 gap-3 text-foreground/30">
             <div className="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-100 flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-amber-400" strokeWidth={1} />
+              <Gift className="w-6 h-6 text-amber-400" strokeWidth={1} />
             </div>
             <p className="text-sm font-medium text-foreground/40">No festive deals yet</p>
             <button onClick={openCreate} className="text-xs text-primary font-medium hover:underline underline-offset-2">
@@ -321,7 +321,7 @@ export default function AdminFestive() {
                         <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
                           isLive ? "bg-emerald-50" : isExpired ? "bg-gray-50" : "bg-amber-50"
                         }`}>
-                          <Sparkles className={`w-5 h-5 ${
+                          <Gift className={`w-5 h-5 ${
                             isLive ? "text-emerald-500" : isExpired ? "text-gray-300" : "text-amber-500"
                           }`} strokeWidth={1.5} />
                         </div>
@@ -438,7 +438,7 @@ export default function AdminFestive() {
               <div className="flex items-center justify-between px-8 h-16 shrink-0 bg-white border-b border-border/20">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 flex items-center justify-center shadow-sm">
-                    <Sparkles className="w-4 h-4 text-white" strokeWidth={1.5} />
+                    <Gift className="w-4 h-4 text-white" strokeWidth={1.5} />
                   </div>
                   <div>
                     <h2 className="text-sm font-serif font-bold text-foreground">
@@ -676,7 +676,7 @@ export default function AdminFestive() {
                         {saving ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
                         ) : (
-                          <Sparkles className="w-4 h-4" strokeWidth={1.5} />
+                          <Gift className="w-4 h-4" strokeWidth={1.5} />
                         )}
                         {saving ? "Saving…" : editId ? "Save Changes" : "Create Deal"}
                         {!saving && (
@@ -765,7 +765,7 @@ export default function AdminFestive() {
                       <div className="pt-2">
                         <div className="rounded-xl bg-amber-50 border border-amber-100 p-3.5">
                           <div className="flex items-start gap-2.5">
-                            <Sparkles className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" strokeWidth={1.5} />
+                            <Gift className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" strokeWidth={1.5} />
                             <div>
                               <p className="text-xs font-semibold text-amber-800">Festive Deal</p>
                               <p className="text-[11px] text-amber-600/70 mt-0.5">This promotion will be active from {formatDate(form.startsAt) || "start"} to {formatDate(form.endsAt) || "end"}.</p>

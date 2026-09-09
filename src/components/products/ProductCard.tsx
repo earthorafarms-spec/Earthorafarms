@@ -10,6 +10,7 @@ const itemVars: Variants = {
 
 interface ProductCardProps {
   product: Product;
+  priority?: boolean;
   hoveredId: string | null;
   wishlist: Set<string>;
   onHover: (id: string | null) => void;
@@ -21,6 +22,7 @@ interface ProductCardProps {
 
 export const ProductCard = memo(function ProductCard({
   product: p,
+  priority = false,
   hoveredId,
   wishlist,
   onHover,
@@ -60,7 +62,9 @@ export const ProductCard = memo(function ProductCard({
             src={hoveredId === p.id && p.imageHover ? p.imageHover : p.imageMain}
             alt={p.name}
             className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-700 ease-out drop-shadow-md"
-            loading="lazy"
+            loading={priority ? 'eager' : 'lazy'}
+            fetchPriority={priority ? 'high' : 'auto'}
+            decoding="async"
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center">

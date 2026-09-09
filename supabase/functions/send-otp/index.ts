@@ -96,32 +96,47 @@ function generateOtp(): string {
   return String(Math.floor(100000 + Math.random() * 900000));
 }
 
-async function sendEmail(otp: string, domain: string, recipientEmail?: string): Promise<{ success: boolean; resendError?: string }> {
-  const apiKey = domain === "kacc"
+async function sendEmail(
+  otp: string,
+  domain: string,
+  recipientEmail?: string,
+): Promise<{ success: boolean; messageId?: string; resendError?: string }> {
+  const primaryKey = domain === "kacc"
     ? (Deno.env.get("RESEND_API_KEY_KACC") || Deno.env.get("RESEND_API_KEY"))
     : (Deno.env.get("RESEND_API_KEY_ADMIN") || Deno.env.get("RESEND_API_KEY"));
+  // Do not silently try another portal's Resend key: that can use a different
+  // sender/domain configuration and makes delivery intermittent. Each portal
+  // should use its own configured key only.
+  const apiKeys = primaryKey ? [primaryKey] : [];
+  const targetEmail = (recipientEmail && recipientEmail.trim())
+    ? recipientEmail.trim()
+    : (Deno.env.get("ADMIN_OTP_EMAIL") || "earthorafarms@gmail.com");
+  // Resend's onboarding sender is guaranteed to work in test mode. A verified
+  // production sender can be supplied through RESEND_FROM_EMAIL later.
+  const sender = Deno.env.get("RESEND_FROM_EMAIL") || "Earthora Farms <onboarding@resend.dev>";
+  const replyTo = Deno.env.get("RESEND_REPLY_TO_EMAIL");
 
-  const targetEmail = (recipientEmail && recipientEmail.trim()) ? recipientEmail.trim() : "earthorafarms@gmail.com";
-
-  if (!apiKey) {
+  if (apiKeys.length === 0) {
     console.error(`[send-otp] No Resend API key configured for ${domain}`);
     return { success: false, resendError: "Email provider is not configured" };
   }
 
   const domainLabel = domain === "kacc" ? "Key Accounts Portal" : "Admin Portal";
 
-  try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: "Earthora Farms <onboarding@resend.dev>",
-        to: targetEmail,
-        subject: `Your ${domainLabel} OTP Code`,
-        html: `
+  let lastError = "Email provider rejected the request";
+  for (const apiKey of apiKeys) {
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: sender,
+          to: targetEmail,
+          subject: `Your ${domainLabel} OTP Code`,
+          html: `
           <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#fafaf8;border-radius:16px;">
             <h2 style="color:#1b4332;margin:0 0 8px;">${domainLabel}</h2>
             <p style="color:#666;font-size:14px;margin:0 0 24px;">Use the OTP below to complete sign-in.</p>
@@ -131,19 +146,25 @@ async function sendEmail(otp: string, domain: string, recipientEmail?: string): 
             <p style="color:#999;font-size:12px;margin-top:20px;">This code expires in 5 minutes. If you didn't request this, ignore this email.</p>
           </div>
         `,
-      }),
-    });
+          ...(replyTo ? { reply_to: replyTo } : {}),
+        }),
+      });
 
-    if (!res.ok) {
+      if (res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        return { success: true, messageId: payload?.id };
+      }
+
       const errText = await res.text();
-      console.error(`[send-otp] Resend API error for ${domain}: ${res.status} ${errText.slice(0, 500)}`);
-      return { success: false, resendError: errText };
+      lastError = errText || `Resend returned ${res.status}`;
+      console.error(`[send-otp] Resend API error for ${domain}: ${res.status} ${lastError.slice(0, 500)}`);
+    } catch (err: any) {
+      lastError = err?.message || "Email dispatch exception";
+      console.error("[send-otp] Email dispatch exception:", lastError);
     }
-    return { success: true };
-  } catch (err: any) {
-    console.error("[send-otp] Email dispatch exception:", err?.message);
-    return { success: false, resendError: err?.message };
   }
+
+  return { success: false, resendError: lastError };
 }
 
 function getClientIp(req: Request): string {
@@ -250,13 +271,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const otpHash = await hashOtp(otp);
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
-    // Invalidate any existing unused OTPs for this domain before inserting new one
+    // Clean up expired codes, but keep still-valid codes. If a resend is delayed
+    // or fails, the previously delivered code must remain usable.
     await supabase
       .from("otp_codes")
       .delete()
-      .eq("domain", domain)
-      .eq("used", false)
-      .gte("expires_at", new Date().toISOString());
+      .lt("expires_at", new Date().toISOString());
 
     const { error: insertErr } = await supabase.from("otp_codes").insert({
       otp: otpHash,
@@ -300,6 +320,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       JSON.stringify({
         ok: true,
         sent: true,
+        messageId: mailResult.messageId || null,
       }),
       {
         status: 200,

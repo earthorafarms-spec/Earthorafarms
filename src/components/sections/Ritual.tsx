@@ -26,6 +26,8 @@ export function Ritual() {
               <img
                 src={smoothieImg}
                 alt="Morning Moringa Ritual Smoothie"
+                loading="lazy"
+                decoding="async"
                 className="w-full h-full object-cover"
               />
             </motion.div>

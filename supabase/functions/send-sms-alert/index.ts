@@ -65,7 +65,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         `Current Stock: ${record.stock_at_alert} units\n` +
         `Threshold: ${record.threshold} units\n` +
         `Please arrange restocking soon.\n` +
-        `Admin: https://earthorafarms.netlify.app/admin/products`;
+        `Admin: https://www.earthorafarms.com/sun-earthora/products`;
 
       const results = await Promise.allSettled(
         record.recipients.map((phone: string) => sendSmartFlowSms(phone, message))
@@ -91,7 +91,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const message =
         `✅ Good news from Earthora Farms!\n` +
         `${record.product_name} is back in stock.\n` +
-        `Order now: https://earthorafarms.netlify.app/our-product\n` +
+        `Order now: https://www.earthorafarms.com/our-product\n` +
         `Reply STOP to unsubscribe.`;
 
       const results = await Promise.allSettled(
