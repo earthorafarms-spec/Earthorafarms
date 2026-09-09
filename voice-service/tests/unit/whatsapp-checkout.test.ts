@@ -80,4 +80,35 @@ describe('WhatsApp checkout template payload', () => {
     });
     expect(parsePersistedProductCard(serializeProductCard(card))).toEqual(card);
   });
+
+  it('builds native interactive cards with custom buttons and preserves them across retry serialization', () => {
+    const postAddCard = {
+      body: 'Alpha has been added to your cart.',
+      buttons: [
+        { id: 'earthora_cart:view_cart', title: 'View Cart' },
+        { id: 'earthora_cart:checkout', title: 'Checkout' },
+        { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' },
+      ],
+    };
+    const interactive = {
+      type: 'button',
+      body: { text: postAddCard.body },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'earthora_cart:view_cart', title: 'View Cart' } },
+          { type: 'reply', reply: { id: 'earthora_cart:checkout', title: 'Checkout' } },
+          { type: 'reply', reply: { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' } },
+        ],
+      },
+    };
+
+    expect(buildTataOmniProductCardPayload('919876543210', postAddCard)).toEqual({
+      to: '+919876543210', type: 'interactive', source: 'external', interactive,
+    });
+    expect(buildMetaProductCardPayload('+919876543210', postAddCard)).toEqual({
+      messaging_product: 'whatsapp', recipient_type: 'individual', to: '919876543210',
+      type: 'interactive', interactive,
+    });
+    expect(parsePersistedProductCard(serializeProductCard(postAddCard))).toEqual(postAddCard);
+  });
 });

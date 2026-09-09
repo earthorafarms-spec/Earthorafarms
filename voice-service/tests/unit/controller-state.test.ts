@@ -29,7 +29,11 @@ import {
   WHATSAPP_SHIPPING_POLICY,
   WHATSAPP_RETURN_POLICY,
 } from '../../../whatsapp-chatbot/prompt.js';
-import { productActionInputFromButtonId, productButtonId } from '../../../whatsapp-chatbot/product-card.js';
+import {
+  cartButtonId,
+  productActionInputFromButtonId,
+  productButtonId,
+} from '../../../whatsapp-chatbot/product-card.js';
 
 describe('processTurn persisted state', () => {
   beforeEach(() => {
@@ -513,9 +517,24 @@ describe('processTurn persisted state', () => {
     expect(quantityOutcome.state.cart).toEqual([
       { productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 },
     ]);
-    expect(quantityOutcome.replyText).toContain('What is your full name?');
-    expect(quantityOutcome.state.whatsAppProductContext?.awaitingQuantity).toBe(false);
+    expect(quantityOutcome.replyText).toContain('Alpha has been added to your cart.');
+    expect(quantityOutcome.productCard?.buttons).toEqual([
+      { id: 'earthora_cart:view_cart', title: 'View Cart' },
+      { id: 'earthora_cart:checkout', title: 'Checkout' },
+      { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' },
+    ]);
+    expect(quantityOutcome.state.whatsAppProductContext).toBeUndefined();
     expect(quantityOutcome.state.messages.some((m) => m.role === 'user' && m.content === '2')).toBe(true);
+    expect(chatMock).not.toHaveBeenCalled();
+
+    // From post-add confirmation, customer continues to checkout
+    const checkoutOutcome = await processTurn(
+      'controller-test',
+      quantityOutcome.state,
+      productActionInputFromButtonId(cartButtonId('checkout'))!,
+      'text',
+    );
+    expect(checkoutOutcome.replyText).toContain('What is your full name?');
     expect(chatMock).not.toHaveBeenCalled();
   });
 
@@ -841,6 +860,293 @@ describe('processTurn persisted state', () => {
       expect(outcomeCheckout.replyText).not.toBe(WHATSAPP_POLICIES_MENU);
       expect(outcomeCheckout.replyText).not.toContain('Shipping Policy');
       expect(chatMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('WhatsApp post-add-to-cart deterministic buttons and cart navigation', () => {
+    it('shows confirmation with 3 actions (View Cart, Checkout, Continue Shopping) after adding product and quantity', async () => {
+      const state = createInitialState();
+      const addInput = productActionInputFromButtonId(productButtonId('add_to_cart', 'alpha-id'))!;
+
+      const step1 = await processTurn('controller-test', state, addInput, 'text');
+      expect(step1.replyText).toBe('How many units of Alpha would you like to add to your cart?');
+      expect(step1.state.whatsAppProductContext?.awaitingQuantity).toBe(true);
+
+      const step2 = await processTurn('controller-test', step1.state, '2', 'text');
+      expect(step2.replyText).toBe('Alpha has been added to your cart.');
+      expect(step2.productCard).toBeDefined();
+      expect(step2.productCard?.buttons).toEqual([
+        { id: 'earthora_cart:view_cart', title: 'View Cart' },
+        { id: 'earthora_cart:checkout', title: 'Checkout' },
+        { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' },
+      ]);
+      expect(step2.state.cart).toEqual([
+        { productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 },
+      ]);
+      expect(step2.state.whatsAppProductContext).toBeUndefined();
+    });
+
+    it('supports multilingual post-add-to-cart confirmation (Hindi & Gujarati)', async () => {
+      // Hindi
+      const stateHi = createInitialState();
+      stateHi.currentLanguage = 'hi';
+      const addInput = productActionInputFromButtonId(productButtonId('add_to_cart', 'alpha-id'))!;
+      const stepHi1 = await processTurn('controller-test', stateHi, addInput, 'text');
+      expect(stepHi1.replyText).toContain('Alpha');
+      const stepHi2 = await processTurn('controller-test', stepHi1.state, '1', 'text');
+      expect(stepHi2.replyText).toContain('Alpha कार्ट में जोड़ दिया है।');
+      expect(stepHi2.productCard?.buttons).toEqual([
+        { id: 'earthora_cart:view_cart', title: 'View Cart' },
+        { id: 'earthora_cart:checkout', title: 'Checkout' },
+        { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' },
+      ]);
+
+      // Gujarati
+      const stateGu = createInitialState();
+      stateGu.currentLanguage = 'gu';
+      const stepGu1 = await processTurn('controller-test', stateGu, addInput, 'text');
+      expect(stepGu1.replyText).toContain('Alpha');
+      const stepGu2 = await processTurn('controller-test', stepGu1.state, '1', 'text');
+      expect(stepGu2.replyText).toContain('Alpha કાર્ટમાં ઉમેર્યું છે.');
+      expect(stepGu2.productCard?.buttons).toEqual([
+        { id: 'earthora_cart:view_cart', title: 'View Cart' },
+        { id: 'earthora_cart:checkout', title: 'Checkout' },
+        { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' },
+      ]);
+    });
+
+    it('navigates to View Cart and displays tax-inclusive prices and 3 action buttons', async () => {
+      const state = createInitialState();
+      state.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 }];
+      state.messages.push({ role: 'assistant', content: 'Alpha has been added to your cart.' });
+
+      // Action via native button click
+      const outcomeButton = await processTurn(
+        'controller-test',
+        state,
+        productActionInputFromButtonId(cartButtonId('view_cart'))!,
+        'text',
+      );
+      expect(outcomeButton.replyText).toContain('two Alpha at ₹90 (Tax Included) each');
+      expect(outcomeButton.replyText).toContain('The exact total is ₹180 (Tax Included).');
+      expect(outcomeButton.productCard?.buttons).toEqual([
+        { id: 'earthora_cart:checkout', title: 'Checkout' },
+        { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' },
+        { id: 'earthora_cart:main_menu', title: 'Main Menu' },
+      ]);
+
+      // Action via numeric reply '1'
+      const stateNumber = createInitialState();
+      stateNumber.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 }];
+      stateNumber.messages.push({ role: 'assistant', content: 'Alpha has been added to your cart.' });
+      const outcomeNumber = await processTurn('controller-test', stateNumber, '1', 'text');
+      expect(outcomeNumber.replyText).toContain('two Alpha at ₹90 (Tax Included) each');
+      expect(outcomeNumber.replyText).toContain('The exact total is ₹180 (Tax Included).');
+
+      // Action via text 'View Cart'
+      const stateText = createInitialState();
+      stateText.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 }];
+      stateText.messages.push({ role: 'assistant', content: 'Alpha has been added to your cart.' });
+      const outcomeText = await processTurn('controller-test', stateText, 'View Cart', 'text');
+      expect(outcomeText.replyText).toContain('two Alpha at ₹90 (Tax Included) each');
+    });
+
+    it('navigates to Checkout from post-add confirmation and View Cart', async () => {
+      // 1. Checkout from post-add confirmation via button
+      const stateButton = createInitialState();
+      stateButton.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 }];
+      stateButton.messages.push({ role: 'assistant', content: 'Alpha has been added to your cart.' });
+      const checkoutOutcome = await processTurn(
+        'controller-test',
+        stateButton,
+        productActionInputFromButtonId(cartButtonId('checkout'))!,
+        'text',
+      );
+      expect(checkoutOutcome.replyText).toBe('What is your full name?');
+
+      // 2. Checkout from post-add confirmation via numeric reply '2'
+      const stateNumber = createInitialState();
+      stateNumber.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 }];
+      stateNumber.messages.push({ role: 'assistant', content: 'Alpha has been added to your cart.' });
+      const checkoutNumber = await processTurn('controller-test', stateNumber, '2', 'text');
+      expect(checkoutNumber.replyText).toBe('What is your full name?');
+
+      // 3. Checkout from View Cart screen via numeric reply '1'
+      const viewCartState = createInitialState();
+      viewCartState.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 }];
+      viewCartState.messages.push({
+        role: 'assistant',
+        content: 'Your cart has two Alpha at ₹90 (Tax Included) each. The exact total is ₹180 (Tax Included).',
+      });
+      const checkoutFromCart = await processTurn('controller-test', viewCartState, '1', 'text');
+      expect(checkoutFromCart.replyText).toBe('What is your full name?');
+    });
+
+    it('navigates to Continue Shopping and displays catalog for further product selection', async () => {
+      productRepositoryMocks.listActiveProducts.mockResolvedValue([
+        {
+          id: 'alpha-id', slug: 'alpha', name: 'Alpha', mrp: 100, price: 90,
+          status: 'active', stockQty: 10, stockLabel: 'In Stock', tag: '120 caps', badge: '',
+          description: 'Alpha description', highlights: [], imageUrl: 'https://cdn.example.com/alpha.png',
+        },
+        {
+          id: 'beta-id', slug: 'beta', name: 'Beta', mrp: 200, price: 150,
+          status: 'active', stockQty: 10, stockLabel: 'In Stock', tag: '60 caps', badge: '',
+          description: 'Beta description', highlights: [], imageUrl: 'https://cdn.example.com/beta.png',
+        },
+      ]);
+      const state = createInitialState();
+      state.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 }];
+      state.messages.push({ role: 'assistant', content: 'Alpha has been added to your cart.' });
+
+      // 1. Via native button
+      const outcomeButton = await processTurn(
+        'controller-test',
+        state,
+        productActionInputFromButtonId(cartButtonId('continue_shopping'))!,
+        'text',
+      );
+      expect(outcomeButton.replyText).toContain('1. Alpha — ₹90 (Tax Included) — In Stock');
+      expect(outcomeButton.replyText).toContain('2. Beta — ₹150 (Tax Included) — In Stock');
+
+      // 2. Via numeric reply '3' from post-add confirmation
+      const stateNumber = createInitialState();
+      stateNumber.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 }];
+      stateNumber.messages.push({ role: 'assistant', content: 'Alpha has been added to your cart.' });
+      const outcomeNumber = await processTurn('controller-test', stateNumber, '3', 'text');
+      expect(outcomeNumber.replyText).toContain('1. Alpha — ₹90 (Tax Included) — In Stock');
+      expect(outcomeNumber.replyText).toContain('2. Beta — ₹150 (Tax Included) — In Stock');
+
+      // 3. Via numeric reply '2' from View Cart screen
+      const viewCartState = createInitialState();
+      viewCartState.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 }];
+      viewCartState.messages.push({
+        role: 'assistant',
+        content: 'Your cart has two Alpha at ₹90 (Tax Included) each. The exact total is ₹180 (Tax Included).',
+      });
+      const outcomeFromCart = await processTurn('controller-test', viewCartState, '2', 'text');
+      expect(outcomeFromCart.replyText).toContain('1. Alpha — ₹90 (Tax Included) — In Stock');
+      expect(outcomeFromCart.replyText).toContain('2. Beta — ₹150 (Tax Included) — In Stock');
+    });
+
+    it('supports multiple products in cart across Continue Shopping flow', async () => {
+      productRepositoryMocks.listActiveProducts.mockResolvedValue([
+        {
+          id: 'alpha-id', slug: 'alpha', name: 'Alpha', mrp: 100, price: 90,
+          status: 'active', stockQty: 10, stockLabel: 'In Stock', tag: '120 caps', badge: '',
+          description: 'Alpha description', highlights: [], imageUrl: 'https://cdn.example.com/alpha.png',
+        },
+        {
+          id: 'beta-id', slug: 'beta', name: 'Beta', mrp: 200, price: 150,
+          status: 'active', stockQty: 10, stockLabel: 'In Stock', tag: '60 caps', badge: '',
+          description: 'Beta description', highlights: [], imageUrl: 'https://cdn.example.com/beta.png',
+        },
+      ]);
+      productRepositoryMocks.getProductById.mockImplementation(async (id: string) => {
+        if (id === 'beta-id') {
+          return {
+            id: 'beta-id', slug: 'beta', name: 'Beta', mrp: 200, price: 150,
+            status: 'active', stockQty: 10, stockLabel: 'In Stock', tag: '60 caps', badge: '',
+            description: 'Beta description', highlights: [], imageUrl: 'https://cdn.example.com/beta.png',
+          };
+        }
+        return {
+          id: 'alpha-id', slug: 'alpha', name: 'Alpha', mrp: 100, price: 90,
+          status: 'active', stockQty: 10, stockLabel: 'In Stock', tag: '120 caps', badge: '',
+          description: 'Alpha description', highlights: [], imageUrl: 'https://cdn.example.com/alpha.png',
+        };
+      });
+
+      const state = createInitialState();
+
+      // 1. Add Alpha
+      const addAlpha = productActionInputFromButtonId(productButtonId('add_to_cart', 'alpha-id'))!;
+      const turn1 = await processTurn('controller-test', state, addAlpha, 'text');
+      const turn2 = await processTurn('controller-test', turn1.state, '2', 'text');
+      expect(turn2.state.cart).toHaveLength(1);
+
+      // 2. Continue Shopping
+      const turn3 = await processTurn(
+        'controller-test',
+        turn2.state,
+        productActionInputFromButtonId(cartButtonId('continue_shopping'))!,
+        'text',
+      );
+      expect(turn3.replyText).toContain('2. Beta');
+
+      // 3. Select Beta (option 2)
+      const turn4 = await processTurn('controller-test', turn3.state, '2', 'text');
+      expect(turn4.productCard?.name).toBe('Beta');
+
+      // 4. Add to Cart for Beta
+      const addBeta = productActionInputFromButtonId(productButtonId('add_to_cart', 'beta-id'))!;
+      const turn5 = await processTurn('controller-test', turn4.state, addBeta, 'text');
+      expect(turn5.replyText).toBe('How many units of Beta would you like to add to your cart?');
+
+      // 5. Provide quantity 1 for Beta
+      const turn6 = await processTurn('controller-test', turn5.state, '1', 'text');
+      expect(turn6.replyText).toBe('Beta has been added to your cart.');
+      expect(turn6.state.cart).toEqual([
+        { productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 },
+        { productId: 'beta-id', productName: 'Beta', quantity: 1, unitPrice: 150 },
+      ]);
+
+      // 6. View Cart shows both items with (Tax Included) and exact total
+      const turn7 = await processTurn(
+        'controller-test',
+        turn6.state,
+        productActionInputFromButtonId(cartButtonId('view_cart'))!,
+        'text',
+      );
+      expect(turn7.replyText).toContain('two Alpha at ₹90 (Tax Included) each');
+      expect(turn7.replyText).toContain('one Beta at ₹150 (Tax Included) each');
+      expect(turn7.replyText).toContain('The exact total is ₹330 (Tax Included).');
+      expect(turn7.productCard?.buttons).toEqual([
+        { id: 'earthora_cart:checkout', title: 'Checkout' },
+        { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' },
+        { id: 'earthora_cart:main_menu', title: 'Main Menu' },
+      ]);
+    });
+
+    it('navigates to Main Menu from View Cart button 3', async () => {
+      const stateButton = createInitialState();
+      stateButton.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 1, unitPrice: 90 }];
+      stateButton.messages.push({
+        role: 'assistant',
+        content: 'Your cart has one Alpha at ₹90 (Tax Included) each. The exact total is ₹90 (Tax Included).',
+      });
+
+      const outcomeButton = await processTurn(
+        'controller-test',
+        stateButton,
+        productActionInputFromButtonId(cartButtonId('main_menu'))!,
+        'text',
+      );
+      expect(outcomeButton.replyText).toContain(WHATSAPP_MENU);
+
+      const stateNumber = createInitialState();
+      stateNumber.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 1, unitPrice: 90 }];
+      stateNumber.messages.push({
+        role: 'assistant',
+        content: 'Your cart has one Alpha at ₹90 (Tax Included) each. The exact total is ₹90 (Tax Included).',
+      });
+      const outcomeNumber = await processTurn('controller-test', stateNumber, '3', 'text');
+      expect(outcomeNumber.replyText).toContain(WHATSAPP_MENU);
+    });
+
+    it('displays View Cart properly when cart is empty', async () => {
+      const state = createInitialState();
+      const outcome = await processTurn(
+        'controller-test',
+        state,
+        productActionInputFromButtonId(cartButtonId('view_cart'))!,
+        'text',
+      );
+      expect(outcome.replyText).toBe('Your cart is currently empty.');
+      expect(outcome.productCard?.buttons).toEqual([
+        { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' },
+        { id: 'earthora_cart:main_menu', title: 'Main Menu' },
+      ]);
     });
   });
 });

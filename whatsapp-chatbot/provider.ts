@@ -93,16 +93,19 @@ export function buildTataOmniImagePayload(
 
 function productCardInteractive(card: WhatsAppProductCard): Record<string, unknown> {
   const hasValidImage = typeof card.imageUrl === 'string' && /^https:\/\//i.test(card.imageUrl);
+  const buttons = Array.isArray(card.buttons) && card.buttons.length > 0
+    ? card.buttons.map((b) => ({ type: 'reply', reply: { id: b.id, title: b.title } }))
+    : [
+        { type: 'reply', reply: { id: productButtonId('benefits', card.productId ?? ''), title: 'Benefits' } },
+        { type: 'reply', reply: { id: productButtonId('dosage', card.productId ?? ''), title: 'Dosage' } },
+        { type: 'reply', reply: { id: productButtonId('add_to_cart', card.productId ?? ''), title: 'Add to Cart' } },
+      ];
   return {
     type: 'button',
     ...(hasValidImage ? { header: { type: 'image', image: { link: card.imageUrl } } } : {}),
     body: { text: card.body },
     action: {
-      buttons: [
-        { type: 'reply', reply: { id: productButtonId('benefits', card.productId), title: 'Benefits' } },
-        { type: 'reply', reply: { id: productButtonId('dosage', card.productId), title: 'Dosage' } },
-        { type: 'reply', reply: { id: productButtonId('add_to_cart', card.productId), title: 'Add to Cart' } },
-      ],
+      buttons,
     },
   };
 }

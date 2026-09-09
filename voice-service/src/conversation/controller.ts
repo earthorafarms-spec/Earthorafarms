@@ -21,7 +21,10 @@ import type { OutboundAction, ToolContext } from '../tools/types.js';
 import {
   parseProductActionInput,
   parseProductActionFromText,
+  parseCartActionInput,
   type WhatsAppProductCard,
+  type WhatsAppButton,
+  type WhatsAppCartAction,
 } from '../../../whatsapp-chatbot/product-card.js';
 
 function reviewFormReply(
@@ -311,6 +314,7 @@ export const EXPLICIT_MENU_PATTERN =
 
 export function isExplicitMenuRequest(userText: string): boolean {
   const trimmed = userText.trim();
+  if (parseCartActionInput(trimmed) === 'main_menu') return true;
   if (EXPLICIT_MENU_PATTERN.test(trimmed)) return true;
   return /\b(?:main\s+menu|menu|available\s+options?)\b|(?:मुख्य\s+)?मेन्यू|उपलब्ध\s+विकल्प|(?:મુખ્ય\s+)?મેનુ|ઉપલબ્ધ\s+વિકલ્પ/iu.test(trimmed);
 }
@@ -323,9 +327,6 @@ export function isCommonGreeting(userText: string): boolean {
 }
 
 export function shouldShowWhatsAppMenu(userText: string, state: ConversationState): boolean {
-  if (isExplicitMenuRequest(userText)) return true;
-  if (!isCommonGreeting(userText)) return false;
-
   const previousReply = lastAssistantReply(state.messages);
   const awaitingQuantity = Boolean(
     state.whatsAppProductContext?.awaitingQuantity === true ||
@@ -333,7 +334,19 @@ export function shouldShowWhatsAppMenu(userText: string, state: ConversationStat
   );
   const nextCheckoutPrompt = state.cart.length > 0 ? nextCheckoutQuestion(state) : null;
   const activeCheckoutCollection = Boolean(nextCheckoutPrompt && previousReply?.includes(nextCheckoutPrompt));
-  return !activeCheckoutCollection && !awaitingQuantity;
+
+  if (activeCheckoutCollection || awaitingQuantity) {
+    return false;
+  }
+
+  const trimmed = userText.trim();
+  if (parseCartActionInput(trimmed) === 'main_menu') return true;
+  if (trimmed === '3' && state.cart.length > 0 && isViewCartReply(previousReply, state)) return true;
+  if (trimmed === '2' && state.cart.length === 0 && isViewCartReply(previousReply, state)) return true;
+  if (isExplicitMenuRequest(userText)) return true;
+  if (!isCommonGreeting(userText)) return false;
+
+  return true;
 }
 
 function buildWhatsAppMenuReply(language: ConversationState['currentLanguage']): string {
@@ -380,6 +393,101 @@ function isReturnPolicySelection(userText: string, messages: ConversationMessage
   const trimmed = userText.trim();
   if (trimmed === '2' && previousReply.includes(WHATSAPP_POLICIES_MENU)) return true;
   if (/^(?:returns?\s*(&|and)?\s*(order\s*)?cancellation(\s*policy)?|return\s*policy|cancellation\s*policy|refund\s*policy)$/i.test(trimmed)) return true;
+  return false;
+}
+
+export function buildPostAddToCartCard(
+  productName: string,
+  language: ConversationState['currentLanguage'],
+): WhatsAppProductCard {
+  const confirmation = language === 'hi'
+    ? `${productName} कार्ट में जोड़ दिया है।`
+    : language === 'gu'
+      ? `${productName} કાર્ટમાં ઉમેર્યું છે.`
+      : `${productName} has been added to your cart.`;
+  return {
+    body: confirmation,
+    buttons: [
+      { id: 'earthora_cart:view_cart', title: 'View Cart' },
+      { id: 'earthora_cart:checkout', title: 'Checkout' },
+      { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' },
+    ],
+  };
+}
+
+export function buildViewCartCard(
+  state: ConversationState,
+): WhatsAppProductCard {
+  const body = directCartReply(state);
+  const buttons: WhatsAppButton[] = state.cart.length > 0
+    ? [
+        { id: 'earthora_cart:checkout', title: 'Checkout' },
+        { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' },
+        { id: 'earthora_cart:main_menu', title: 'Main Menu' },
+      ]
+    : [
+        { id: 'earthora_cart:continue_shopping', title: 'Continue Shopping' },
+        { id: 'earthora_cart:main_menu', title: 'Main Menu' },
+      ];
+  return {
+    body,
+    buttons,
+  };
+}
+
+function isPostAddToCartReply(text: string | null): boolean {
+  if (!text) return false;
+  return text.includes('has been added to your cart') ||
+    text.includes('कार्ट में जोड़ दिया है') ||
+    text.includes('કાર્ટમાં ઉમેર્યું છે');
+}
+
+function isViewCartReply(text: string | null, state?: ConversationState): boolean {
+  if (!text) return false;
+  if (state && state.cart.length > 0) {
+    const nextQuestion = nextCheckoutQuestion(state);
+    if (nextQuestion && text.includes(nextQuestion)) return false;
+  }
+  if (/\b(?:What is your|आपका पूरा नाम|તમારું પૂરું નામ|What WhatsApp number|six-digit PIN|street address)\b/iu.test(text)) {
+    return false;
+  }
+  return text.includes('Your cart has') || text.includes('Your cart is currently empty') ||
+    text.includes('आपके कार्ट में') || text.includes('अभी आपका कार्ट खाली है') ||
+    text.includes('તમારા કાર્ટમાં') || text.includes('હાલમાં તમારું કાર્ટ ખાલી છે');
+}
+
+function isViewCartSelection(userText: string, previousReply: string | null, state?: ConversationState): boolean {
+  const nextPrompt = state && state.cart.length > 0 ? nextCheckoutQuestion(state) : null;
+  if (nextPrompt && previousReply?.includes(nextPrompt)) return false;
+
+  const trimmed = userText.trim();
+  if (parseCartActionInput(trimmed) === 'view_cart') return true;
+  if (/^(?:view\s*cart|my\s*cart|show\s*cart|cart|कॉर्ट|કાર્ટ|કાર્ટ\s*જુઓ|कार्ट|कार्ट\s*देखें)$/iu.test(trimmed)) return true;
+  if (trimmed === '1' && isPostAddToCartReply(previousReply)) return true;
+  return false;
+}
+
+function isCheckoutSelection(userText: string, previousReply: string | null, state: ConversationState): boolean {
+  const nextPrompt = state.cart.length > 0 ? nextCheckoutQuestion(state) : null;
+  if (nextPrompt && previousReply?.includes(nextPrompt)) return false;
+
+  const trimmed = userText.trim();
+  if (parseCartActionInput(trimmed) === 'checkout') return true;
+  if (/^(?:checkout|check\s*out|order\s*now|place\s*order|चेकआउट|ચેકઆઉટ)$/iu.test(trimmed)) return true;
+  if (trimmed === '2' && isPostAddToCartReply(previousReply)) return true;
+  if (trimmed === '1' && isViewCartReply(previousReply, state)) return true;
+  return false;
+}
+
+function isContinueShoppingSelection(userText: string, previousReply: string | null, state?: ConversationState): boolean {
+  const nextPrompt = state && state.cart.length > 0 ? nextCheckoutQuestion(state) : null;
+  if (nextPrompt && previousReply?.includes(nextPrompt)) return false;
+
+  const trimmed = userText.trim();
+  if (parseCartActionInput(trimmed) === 'continue_shopping') return true;
+  if (/^(?:continue\s*shopping|shop\s*more|browse\s*products|browse|खरीदारी|વધુ\s*ખરીદી)$/iu.test(trimmed)) return true;
+  if (trimmed === '3' && isPostAddToCartReply(previousReply)) return true;
+  if (trimmed === '2' && isViewCartReply(previousReply, state)) return true;
   return false;
 }
 
@@ -703,6 +811,12 @@ export async function processTurn(
       ? await cartTool.handler({}, toolContext)
       : { items: state.cart };
     state.currentTurnFacts.push({ toolName: 'get_cart', resultJson: JSON.stringify(cartResult) });
+    if (channel === 'text') {
+      delete state.whatsAppProductContext;
+      const cartCard = buildViewCartCard(state);
+      state.messages.push({ role: 'assistant', content: cartCard.body });
+      return { state, replyText: cartCard.body, productCard: cartCard, policyViolations: [], outboundActions };
+    }
     const replyText = directCartReply(state);
     state.messages.push({ role: 'assistant', content: replyText });
     return { state, replyText, policyViolations: [], outboundActions };
@@ -731,6 +845,20 @@ export async function processTurn(
       return { state, replyText, policyViolations: [], outboundActions };
     }
     pendingProduct.awaitingQuantity = false;
+
+    if (channel === 'text') {
+      delete state.whatsAppProductContext;
+      const postAddCard = buildPostAddToCartCard(pendingProduct.productName, state.currentLanguage);
+      state.messages.push({ role: 'assistant', content: postAddCard.body });
+      return {
+        state,
+        replyText: postAddCard.body,
+        productCard: postAddCard,
+        policyViolations: [],
+        outboundActions,
+      };
+    }
+
     const nextQuestion = nextCheckoutQuestion(state);
     const confirmation = state.currentLanguage === 'hi'
       ? `${pendingProduct.productName} कार्ट में जोड़ दिया है।`
@@ -745,6 +873,68 @@ export async function processTurn(
   if (channel === 'text' && shouldShowWhatsAppMenu(userText, state)) {
     delete state.whatsAppProductContext;
     const replyText = buildWhatsAppMenuReply(state.currentLanguage);
+    state.messages.push({ role: 'assistant', content: replyText });
+    return { state, replyText, policyViolations: [], outboundActions };
+  }
+
+  if (channel === 'text' && isViewCartSelection(userText, lastAssistantReply(state.messages), state)) {
+    delete state.whatsAppProductContext;
+    const cartTool = toolsByName.get_cart;
+    const cartResult = cartTool
+      ? await cartTool.handler({}, toolContext)
+      : { items: state.cart };
+    state.currentTurnFacts.push({ toolName: 'get_cart', resultJson: JSON.stringify(cartResult) });
+    const cartCard = buildViewCartCard(state);
+    state.messages.push({ role: 'assistant', content: cartCard.body });
+    return { state, replyText: cartCard.body, productCard: cartCard, policyViolations: [], outboundActions };
+  }
+
+  if (channel === 'text' && isCheckoutSelection(userText, lastAssistantReply(state.messages), state)) {
+    delete state.whatsAppProductContext;
+    if (state.cart.length === 0) {
+      const replyText = state.currentLanguage === 'hi'
+        ? 'अभी आपका कार्ट खाली है।'
+        : state.currentLanguage === 'gu'
+          ? 'હાલમાં તમારું કાર્ટ ખાલી છે.'
+          : 'Your cart is currently empty.';
+      state.messages.push({ role: 'assistant', content: replyText });
+      return { state, replyText, policyViolations: [], outboundActions };
+    }
+    const nextQuestion = nextCheckoutQuestion(state);
+    if (nextQuestion) {
+      state.messages.push({ role: 'assistant', content: nextQuestion });
+      return { state, replyText: nextQuestion, policyViolations: [], outboundActions };
+    }
+    if (isCheckoutReady(state)) {
+      const callId = `checkout-direct-${state.turnCount}`;
+      let delivery: unknown;
+      try {
+        delivery = await toolsByName.create_verification_link.handler({}, toolContext);
+      } catch {
+        delivery = { ok: false, reason: 'checkout_preparation_failed' };
+      }
+      const resultJson = JSON.stringify(delivery);
+      state.currentTurnFacts.push({ toolName: 'create_verification_link', resultJson });
+      state.messages.push({ role: 'tool', toolName: 'create_verification_link', toolCallId: callId, content: resultJson });
+      const reviewUrl = outboundActions.find((action) => action.type === 'checkout_review')?.url;
+      const replyText = reviewFormReply(Boolean(delivery && typeof delivery === 'object' && (delivery as { ok?: boolean }).ok), state.currentLanguage, reviewUrl);
+      state.messages.push({ role: 'assistant', content: replyText });
+      return { state, replyText, policyViolations: [], outboundActions };
+    }
+  }
+
+  if (channel === 'text' && isContinueShoppingSelection(userText, lastAssistantReply(state.messages), state)) {
+    delete state.whatsAppProductContext;
+    const listTool = toolsByName.list_products;
+    let productCatalog: unknown;
+    try {
+      productCatalog = listTool ? await listTool.handler({ query: null }, toolContext) : null;
+    } catch (err) {
+      productCatalog = { error: 'tool_execution_failed', message: (err as Error).message };
+    }
+    const resultJson = JSON.stringify(productCatalog);
+    state.currentTurnFacts.push({ toolName: 'list_products', resultJson });
+    const replyText = buildNumberedCatalogReply(productCatalog, state.currentLanguage);
     state.messages.push({ role: 'assistant', content: replyText });
     return { state, replyText, policyViolations: [], outboundActions };
   }
@@ -931,8 +1121,8 @@ export async function processTurn(
                 productCard = buildWhatsAppProductCard(liveDetails, selectedProduct.name) ?? undefined;
                 if (productCard) {
                   state.whatsAppProductContext = {
-                    productId: productCard.productId,
-                    productName: productCard.name,
+                    productId: productCard.productId ?? selectedProduct.id,
+                    productName: productCard.name ?? selectedProduct.name,
                     awaitingQuantity: false,
                   };
                 }

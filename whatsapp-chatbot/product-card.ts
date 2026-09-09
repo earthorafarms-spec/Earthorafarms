@@ -1,30 +1,58 @@
 export type WhatsAppProductAction = 'benefits' | 'dosage' | 'add_to_cart';
+export type WhatsAppCartAction = 'view_cart' | 'checkout' | 'continue_shopping' | 'main_menu';
+
+export interface WhatsAppButton {
+  id: string;
+  title: string;
+}
 
 export interface WhatsAppProductCard {
-  productId: string;
+  productId?: string;
   imageUrl?: string;
-  name: string;
+  name?: string;
   body: string;
+  buttons?: WhatsAppButton[];
 }
 
 const BUTTON_ID_PREFIX = 'earthora_product';
+const CART_BUTTON_ID_PREFIX = 'earthora_cart';
 const ACTION_INPUT_PREFIX = '__earthora_whatsapp_product_action__:';
+const CART_ACTION_INPUT_PREFIX = '__earthora_whatsapp_cart_action__:';
 const PERSISTED_CARD_PREFIX = '__earthora_whatsapp_product_card__:';
 
 export function productButtonId(action: WhatsAppProductAction, productId: string): string {
   return `${BUTTON_ID_PREFIX}:${action}:${encodeURIComponent(productId)}`;
 }
 
+export function cartButtonId(action: WhatsAppCartAction): string {
+  return `${CART_BUTTON_ID_PREFIX}:${action}`;
+}
+
 export function productActionInputFromButtonId(buttonId: unknown): string | null {
   if (typeof buttonId !== 'string') return null;
   const match = buttonId.match(/^earthora_product:(benefits|dosage|add_to_cart):(.+)$/u);
-  if (!match) return null;
-  try {
-    const productId = decodeURIComponent(match[2]);
-    return productId ? `${ACTION_INPUT_PREFIX}${match[1]}:${encodeURIComponent(productId)}` : null;
-  } catch {
-    return null;
+  if (match) {
+    try {
+      const productId = decodeURIComponent(match[2]);
+      return productId ? `${ACTION_INPUT_PREFIX}${match[1]}:${encodeURIComponent(productId)}` : null;
+    } catch {
+      return null;
+    }
   }
+  const cartMatch = buttonId.match(/^earthora_cart:(view_cart|checkout|continue_shopping|main_menu)$/u);
+  if (cartMatch) {
+    return `${CART_ACTION_INPUT_PREFIX}${cartMatch[1]}`;
+  }
+  return null;
+}
+
+export function parseCartActionInput(input: string): WhatsAppCartAction | null {
+  if (typeof input !== 'string') return null;
+  const match =
+    input.match(/^__earthora_whatsapp_cart_action__:(view_cart|checkout|continue_shopping|main_menu)$/u) ??
+    input.match(/^earthora_cart:(view_cart|checkout|continue_shopping|main_menu)$/u);
+  if (match) return match[1] as WhatsAppCartAction;
+  return null;
 }
 
 export function parseProductActionInput(input: string): { action: WhatsAppProductAction; productId: string } | null {
@@ -73,15 +101,17 @@ export function parsePersistedProductCard(value: string | null): WhatsAppProduct
     const card = JSON.parse(decodeURIComponent(value.slice(PERSISTED_CARD_PREFIX.length))) as Partial<WhatsAppProductCard>;
     const hasValidImage = card.imageUrl === undefined || card.imageUrl === null ||
       (typeof card.imageUrl === 'string' && /^https:\/\//i.test(card.imageUrl));
-    return typeof card.productId === 'string' && typeof card.name === 'string' &&
-      typeof card.body === 'string' && hasValidImage
-      ? {
-          productId: card.productId,
-          name: card.name,
-          body: card.body,
-          ...(card.imageUrl ? { imageUrl: card.imageUrl } : {}),
-        }
-      : null;
+    const hasValidButtons = card.buttons === undefined || (Array.isArray(card.buttons) && card.buttons.every(
+      (b) => b && typeof b === 'object' && typeof b.id === 'string' && typeof b.title === 'string'
+    ));
+    if (typeof card.body !== 'string' || !hasValidImage || !hasValidButtons) return null;
+    return {
+      ...(typeof card.productId === 'string' ? { productId: card.productId } : {}),
+      ...(typeof card.name === 'string' ? { name: card.name } : {}),
+      body: card.body,
+      ...(card.imageUrl ? { imageUrl: card.imageUrl } : {}),
+      ...(Array.isArray(card.buttons) ? { buttons: card.buttons } : {}),
+    };
   } catch {
     return null;
   }
