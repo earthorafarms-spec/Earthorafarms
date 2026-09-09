@@ -1,6 +1,12 @@
 import type { ConversationState, ConversationMessage } from './state.js';
 import { SYSTEM_PROMPT } from './prompt.js';
-import { WHATSAPP_MENU, WHATSAPP_SYSTEM_PROMPT } from '../../../whatsapp-chatbot/prompt.js';
+import {
+  WHATSAPP_MENU,
+  WHATSAPP_POLICIES_MENU,
+  WHATSAPP_SHIPPING_POLICY,
+  WHATSAPP_RETURN_POLICY,
+  WHATSAPP_SYSTEM_PROMPT,
+} from '../../../whatsapp-chatbot/prompt.js';
 import { enforceOutputPolicy } from './output-policy.js';
 import { limitSpokenReply, normalizeIndicSpeechText, toSpokenText } from './speech-format.js';
 import { detectLanguage, requestedLanguage, buildLanguageInstruction } from './language.js';
@@ -73,14 +79,14 @@ function directCartReply(state: ConversationState): string {
   const money = (value: number) => value.toLocaleString('en-IN');
   const lines = cart.map((line) => {
     const quantity = spokenQuantity(line.quantity, language);
-    if (language === 'hi') return `${quantity} ${line.productName}, ₹${money(line.unitPrice)} प्रति पैक`;
-    if (language === 'gu') return `${quantity} ${line.productName}, પેક દીઠ ₹${money(line.unitPrice)}`;
-    return `${quantity} ${line.productName} at ₹${money(line.unitPrice)} each`;
+    if (language === 'hi') return `${quantity} ${line.productName}, ₹${money(line.unitPrice)} (Tax Included) प्रति पैक`;
+    if (language === 'gu') return `${quantity} ${line.productName}, પેક દીઠ ₹${money(line.unitPrice)} (Tax Included)`;
+    return `${quantity} ${line.productName} at ₹${money(line.unitPrice)} (Tax Included) each`;
   });
   const total = cart.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0).toLocaleString('en-IN');
-  if (language === 'hi') return `आपके कार्ट में ${lines.join(' और ')} हैं। सही कुल ₹${total} है।`;
-  if (language === 'gu') return `તમારા કાર્ટમાં ${lines.join(' અને ')} છે. સાચું કુલ ₹${total} છે.`;
-  return `Your cart has ${lines.join(' and ')}. The exact total is ₹${total}.`;
+  if (language === 'hi') return `आपके कार्ट में ${lines.join(' और ')} हैं। सही कुल ₹${total} (Tax Included) है।`;
+  if (language === 'gu') return `તમારા કાર્ટમાં ${lines.join(' અને ')} છે. સાચું કુલ ₹${total} (Tax Included) છે.`;
+  return `Your cart has ${lines.join(' and ')}. The exact total is ₹${total} (Tax Included).`;
 }
 
 function cartMutationReply(state: ConversationState): string {
@@ -338,6 +344,45 @@ function isProductMenuSelection(userText: string, messages: ConversationMessage[
   return userText.trim() === '1' && (lastAssistantReply(messages)?.includes(WHATSAPP_MENU) ?? false);
 }
 
+function isPoliciesMenuSelection(userText: string, messages: ConversationMessage[], state: ConversationState): boolean {
+  if (state.whatsAppProductContext?.awaitingQuantity) return false;
+  const previousReply = lastAssistantReply(messages);
+  if (!previousReply) return false;
+  const nextCheckoutPrompt = state.cart.length > 0 ? nextCheckoutQuestion(state) : null;
+  if (nextCheckoutPrompt && previousReply.includes(nextCheckoutPrompt)) return false;
+
+  const trimmed = userText.trim();
+  if (trimmed === '3' && previousReply.includes(WHATSAPP_MENU) && !previousReply.includes(WHATSAPP_POLICIES_MENU)) return true;
+  if (/^(?:policies|policy|नीति|નીતિ)$/i.test(trimmed)) return true;
+  return false;
+}
+
+function isShippingPolicySelection(userText: string, messages: ConversationMessage[], state: ConversationState): boolean {
+  if (state.whatsAppProductContext?.awaitingQuantity) return false;
+  const previousReply = lastAssistantReply(messages);
+  if (!previousReply) return false;
+  const nextCheckoutPrompt = state.cart.length > 0 ? nextCheckoutQuestion(state) : null;
+  if (nextCheckoutPrompt && previousReply.includes(nextCheckoutPrompt)) return false;
+
+  const trimmed = userText.trim();
+  if (trimmed === '1' && previousReply.includes(WHATSAPP_POLICIES_MENU)) return true;
+  if (/^(?:shipping\s*policy|shipping\s*(&|and)?\s*delivery|delivery\s*policy)$/i.test(trimmed)) return true;
+  return false;
+}
+
+function isReturnPolicySelection(userText: string, messages: ConversationMessage[], state: ConversationState): boolean {
+  if (state.whatsAppProductContext?.awaitingQuantity) return false;
+  const previousReply = lastAssistantReply(messages);
+  if (!previousReply) return false;
+  const nextCheckoutPrompt = state.cart.length > 0 ? nextCheckoutQuestion(state) : null;
+  if (nextCheckoutPrompt && previousReply.includes(nextCheckoutPrompt)) return false;
+
+  const trimmed = userText.trim();
+  if (trimmed === '2' && previousReply.includes(WHATSAPP_POLICIES_MENU)) return true;
+  if (/^(?:returns?\s*(&|and)?\s*(order\s*)?cancellation(\s*policy)?|return\s*policy|cancellation\s*policy|refund\s*policy)$/i.test(trimmed)) return true;
+  return false;
+}
+
 function numberedProductSelectionNumber(userText: string, messages: ConversationMessage[]): number | null {
   const selection = userText.trim();
   if (!/^[1-9]\d*$/.test(selection)) return null;
@@ -470,7 +515,7 @@ function buildNumberedCatalogReply(
   const lines = products.map((product, index) => {
     const parts = [`${index + 1}. ${product.name}`];
     if (typeof product.price === 'number' && Number.isFinite(product.price)) {
-      parts.push(`${product.currency === 'INR' || !product.currency ? '₹' : `${product.currency} `}${product.price}`);
+      parts.push(`${product.currency === 'INR' || !product.currency ? '₹' : `${product.currency} `}${product.price} (Tax Included)`);
     }
     if (typeof product.stockLabel === 'string' && product.stockLabel.trim()) parts.push(product.stockLabel.trim());
     return parts.join(' — ');
@@ -493,7 +538,7 @@ function buildWhatsAppProductCard(details: LiveProductDetails, fallbackName: str
 
   const name = typeof details.name === 'string' && details.name.trim() ? details.name.trim() : fallbackName;
   const price = typeof details.price === 'number' && Number.isFinite(details.price)
-    ? `${details.currency === 'INR' || !details.currency ? '₹' : `${details.currency} `}${details.price.toLocaleString('en-IN')}`
+    ? `${details.currency === 'INR' || !details.currency ? '₹' : `${details.currency} `}${details.price.toLocaleString('en-IN')} (Tax Included)`
     : null;
   const mrp = price && typeof details.mrp === 'number' && Number.isFinite(details.mrp) && details.mrp > (details.price ?? 0)
     ? `MRP ₹${details.mrp.toLocaleString('en-IN')}`
@@ -700,6 +745,27 @@ export async function processTurn(
   if (channel === 'text' && shouldShowWhatsAppMenu(userText, state)) {
     delete state.whatsAppProductContext;
     const replyText = buildWhatsAppMenuReply(state.currentLanguage);
+    state.messages.push({ role: 'assistant', content: replyText });
+    return { state, replyText, policyViolations: [], outboundActions };
+  }
+
+  if (channel === 'text' && isPoliciesMenuSelection(userText, state.messages, state)) {
+    delete state.whatsAppProductContext;
+    const replyText = WHATSAPP_POLICIES_MENU;
+    state.messages.push({ role: 'assistant', content: replyText });
+    return { state, replyText, policyViolations: [], outboundActions };
+  }
+
+  if (channel === 'text' && isShippingPolicySelection(userText, state.messages, state)) {
+    delete state.whatsAppProductContext;
+    const replyText = WHATSAPP_SHIPPING_POLICY;
+    state.messages.push({ role: 'assistant', content: replyText });
+    return { state, replyText, policyViolations: [], outboundActions };
+  }
+
+  if (channel === 'text' && isReturnPolicySelection(userText, state.messages, state)) {
+    delete state.whatsAppProductContext;
+    const replyText = WHATSAPP_RETURN_POLICY;
     state.messages.push({ role: 'assistant', content: replyText });
     return { state, replyText, policyViolations: [], outboundActions };
   }

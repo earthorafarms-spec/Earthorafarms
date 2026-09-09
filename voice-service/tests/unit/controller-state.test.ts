@@ -23,7 +23,12 @@ vi.mock('../../src/repositories/knowledge.repository.js', async (importOriginal)
 }));
 
 import { processTurn, shouldPrefetchProductCatalog } from '../../src/conversation/controller.js';
-import { WHATSAPP_MENU } from '../../../whatsapp-chatbot/prompt.js';
+import {
+  WHATSAPP_MENU,
+  WHATSAPP_POLICIES_MENU,
+  WHATSAPP_SHIPPING_POLICY,
+  WHATSAPP_RETURN_POLICY,
+} from '../../../whatsapp-chatbot/prompt.js';
 import { productActionInputFromButtonId, productButtonId } from '../../../whatsapp-chatbot/product-card.js';
 
 describe('processTurn persisted state', () => {
@@ -110,7 +115,7 @@ describe('processTurn persisted state', () => {
     const state = createInitialState();
     state.messages.push({
       role: 'assistant',
-      content: '1. Alpha — ₹90 — In Stock\n\nReply with the product number.\nTo return to the main menu, type Menu.',
+      content: '1. Alpha — ₹90 (Tax Included) — In Stock\n\nReply with the product number.\nTo return to the main menu, type Menu.',
     });
     state.whatsAppProductContext = { productId: 'alpha-id', productName: 'Alpha', awaitingQuantity: false };
 
@@ -144,7 +149,7 @@ describe('processTurn persisted state', () => {
     const state = createInitialState();
     state.messages.push({
       role: 'assistant',
-      content: '1. Alpha — ₹90 — In Stock\n\nReply with the product number.',
+      content: '1. Alpha — ₹90 (Tax Included) — In Stock\n\nReply with the product number.',
     });
 
     const outcome = await processTurn('controller-test', state, '0', 'text');
@@ -295,8 +300,8 @@ describe('processTurn persisted state', () => {
 
     const outcome = await processTurn('controller-test', state, '1', 'text');
 
-    expect(outcome.replyText).toContain('1. Alpha — ₹90 — In Stock');
-    expect(outcome.replyText).toContain('2. Beta — ₹110 — Low Stock');
+    expect(outcome.replyText).toContain('1. Alpha — ₹90 (Tax Included) — In Stock');
+    expect(outcome.replyText).toContain('2. Beta — ₹110 (Tax Included) — Low Stock');
     expect(outcome.replyText).toContain('Reply with the product number.');
     expect(productRepositoryMocks.listActiveProducts).toHaveBeenCalledTimes(1);
     expect(chatMock).not.toHaveBeenCalled();
@@ -309,7 +314,7 @@ describe('processTurn persisted state', () => {
     const catalog = await processTurn('controller-test', state, '1', 'text');
 
     expect(greeting.replyText).toContain(WHATSAPP_MENU);
-    expect(catalog.replyText).toContain('1. Alpha — ₹90 — In Stock');
+    expect(catalog.replyText).toContain('1. Alpha — ₹90 (Tax Included) — In Stock');
     expect(catalog.replyText).toContain('Reply with the product number.');
     expect(productRepositoryMocks.listActiveProducts).toHaveBeenCalledTimes(1);
     expect(chatMock).not.toHaveBeenCalled();
@@ -335,7 +340,7 @@ describe('processTurn persisted state', () => {
     const state = createInitialState();
     state.messages.push({
       role: 'assistant',
-      content: '1. Alpha — ₹90 — In Stock\n2. Beta — ₹110 — Low Stock\n\nReply with the product number.',
+      content: '1. Alpha — ₹90 (Tax Included) — In Stock\n2. Beta — ₹110 (Tax Included) — Low Stock\n\nReply with the product number.',
     });
 
     const outcome = await processTurn('controller-test', state, '2', 'text');
@@ -346,7 +351,7 @@ describe('processTurn persisted state', () => {
       productId: 'beta-id',
       imageUrl: 'https://cdn.example.com/beta.png',
       name: 'Beta',
-      body: '*Beta*\n₹110 • MRP ₹120 • Low Stock\nBeta details\nTo return to the main menu, type Menu.',
+      body: '*Beta*\n₹110 (Tax Included) • MRP ₹120 • Low Stock\nBeta details\nTo return to the main menu, type Menu.',
     });
     expect(outcome.replyText).toBe(outcome.productCard?.body);
     expect(outcome.state.whatsAppProductContext).toEqual({
@@ -370,7 +375,7 @@ describe('processTurn persisted state', () => {
     const state = createInitialState();
     state.messages.push({
       role: 'assistant',
-      content: '1. No Image Product — ₹120 — In Stock\n\nReply with the product number.',
+      content: '1. No Image Product — ₹120 (Tax Included) — In Stock\n\nReply with the product number.',
     });
 
     const outcome = await processTurn('controller-test', state, '1', 'text');
@@ -380,7 +385,7 @@ describe('processTurn persisted state', () => {
     expect(outcome.productCard).toEqual({
       productId: 'no-img-id',
       name: 'No Image Product',
-      body: '*No Image Product*\n₹120 • MRP ₹150 • In Stock\nDetails without image\nTo return to the main menu, type Menu.',
+      body: '*No Image Product*\n₹120 (Tax Included) • MRP ₹150 • In Stock\nDetails without image\nTo return to the main menu, type Menu.',
     });
     expect(outcome.replyText).toBe(outcome.productCard?.body);
     expect(outcome.state.whatsAppProductContext).toEqual({
@@ -691,5 +696,151 @@ describe('processTurn persisted state', () => {
     expect(outcome.replyText).not.toMatch(/^###|^- /m);
     const messages = chatMock.mock.calls[1][0] as { role: string; content: string }[];
     expect(messages.some((message) => message.content.includes('[Formatting correction]'))).toBe(true);
+  });
+
+  describe('WhatsApp policy routing and price tax rules', () => {
+    it('routes Main Menu option 3 deterministically to Policies Menu', async () => {
+      const state = createInitialState();
+      state.messages.push({ role: 'assistant', content: `Hello!\n\n${WHATSAPP_MENU}` });
+
+      const outcome = await processTurn('controller-test', state, '3', 'text');
+
+      expect(outcome.replyText).toBe(WHATSAPP_POLICIES_MENU);
+      expect(outcome.state.whatsAppProductContext).toBeUndefined();
+      expect(chatMock).not.toHaveBeenCalled();
+    });
+
+    it('routes Policies Menu option 1 deterministically to Shipping Policy', async () => {
+      const state = createInitialState();
+      state.messages.push({ role: 'assistant', content: WHATSAPP_POLICIES_MENU });
+
+      const outcome = await processTurn('controller-test', state, '1', 'text');
+
+      expect(outcome.replyText).toBe(WHATSAPP_SHIPPING_POLICY);
+      expect(outcome.state.whatsAppProductContext).toBeUndefined();
+      expect(chatMock).not.toHaveBeenCalled();
+    });
+
+    it('routes Policies Menu option 2 deterministically to Return & Cancellation Policy', async () => {
+      const state = createInitialState();
+      state.messages.push({ role: 'assistant', content: WHATSAPP_POLICIES_MENU });
+
+      const outcome = await processTurn('controller-test', state, '2', 'text');
+
+      expect(outcome.replyText).toBe(WHATSAPP_RETURN_POLICY);
+      expect(outcome.state.whatsAppProductContext).toBeUndefined();
+      expect(chatMock).not.toHaveBeenCalled();
+    });
+
+    it('routes Policies Menu option 0 deterministically to Main Menu', async () => {
+      const state = createInitialState();
+      state.messages.push({ role: 'assistant', content: WHATSAPP_POLICIES_MENU });
+
+      const outcome = await processTurn('controller-test', state, '0', 'text');
+
+      expect(outcome.replyText).toContain(WHATSAPP_MENU);
+      expect(outcome.state.whatsAppProductContext).toBeUndefined();
+      expect(chatMock).not.toHaveBeenCalled();
+    });
+
+    it('routes Policy screen back to Main Menu on "menu" and "0"', async () => {
+      for (const policyContent of [WHATSAPP_SHIPPING_POLICY, WHATSAPP_RETURN_POLICY]) {
+        for (const trigger of ['Menu', 'menu', '0', 'main menu']) {
+          chatMock.mockClear();
+          const state = createInitialState();
+          state.messages.push({ role: 'assistant', content: policyContent });
+
+          const outcome = await processTurn('controller-test', state, trigger, 'text');
+
+          expect(outcome.replyText).toContain(WHATSAPP_MENU);
+          expect(chatMock).not.toHaveBeenCalled();
+        }
+      }
+    });
+
+    it('formats price in catalog with (Tax Included)', async () => {
+      productRepositoryMocks.listActiveProducts.mockResolvedValueOnce([
+        {
+          id: 'alpha-id', slug: 'alpha', name: 'Alpha', mrp: 100, price: 90,
+          status: 'active', stockQty: 10, stockLabel: 'In Stock', tag: '', badge: '',
+          description: '', highlights: [], imageUrl: 'https://cdn.example.com/alpha.png',
+        },
+      ]);
+      const state = createInitialState();
+      state.messages.push({ role: 'assistant', content: `Hello!\n\n${WHATSAPP_MENU}` });
+
+      const outcome = await processTurn('controller-test', state, '1', 'text');
+
+      expect(outcome.replyText).toContain('1. Alpha — ₹90 (Tax Included) — In Stock');
+      expect(outcome.replyText).not.toContain('₹90 — In Stock');
+    });
+
+    it('formats price in product card with (Tax Included) and preserves MRP benchmark semantics', async () => {
+      const product = {
+        id: 'beta-id', slug: 'beta', name: 'Beta', mrp: 120, price: 110,
+        status: 'active', stockQty: 4, stockLabel: 'Low Stock', tag: '', badge: '',
+        description: 'Beta details', highlights: [], imageUrl: 'https://cdn.example.com/beta.png',
+      };
+      productRepositoryMocks.listActiveProducts.mockResolvedValue([product]);
+      productRepositoryMocks.getProductById.mockResolvedValue(product);
+      const state = createInitialState();
+      state.messages.push({
+        role: 'assistant',
+        content: '1. Beta — ₹110 (Tax Included) — Low Stock\n\nReply with the product number.',
+      });
+
+      const outcome = await processTurn('controller-test', state, '1', 'text');
+
+      expect(outcome.productCard?.body).toContain('₹110 (Tax Included) • MRP ₹120 • Low Stock');
+      expect(outcome.productCard?.body).not.toContain('MRP ₹120 (Tax Included)');
+    });
+
+    it('formats price in cart with (Tax Included)', async () => {
+      const state = createInitialState();
+      state.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 }];
+
+      const outcome = await processTurn('controller-test', state, 'what is in my cart', 'text');
+
+      expect(outcome.replyText).toContain('Alpha at ₹90 (Tax Included) each');
+      expect(outcome.replyText).toContain('The exact total is ₹180 (Tax Included).');
+    });
+
+    it('ensures existing checkout and quantity routing remains intact and does not trigger policies menu', async () => {
+      // Case A: Awaiting quantity
+      const stateQuantity = createInitialState();
+      stateQuantity.whatsAppProductContext = {
+        productId: 'alpha-id',
+        productName: 'Alpha',
+        awaitingQuantity: true,
+      };
+      stateQuantity.messages.push({
+        role: 'assistant',
+        content: 'How many units of Alpha would you like to add to your cart?',
+      });
+
+      const outcomeQuantity = await processTurn('controller-test', stateQuantity, '3', 'text');
+
+      expect(outcomeQuantity.state.cart).toEqual([
+        { productId: 'alpha-id', productName: 'Alpha', quantity: 3, unitPrice: 90 },
+      ]);
+      expect(outcomeQuantity.replyText).not.toContain('Shipping Policy');
+      expect(outcomeQuantity.replyText).not.toBe(WHATSAPP_POLICIES_MENU);
+
+      // Case B: Active checkout field collection
+      chatMock.mockReset();
+      chatMock.mockResolvedValueOnce({ kind: 'message', content: 'Thank you. What is your email address?' });
+      const stateCheckout = createInitialState();
+      stateCheckout.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 1, unitPrice: 90 }];
+      stateCheckout.messages.push({
+        role: 'assistant',
+        content: 'Your cart has 1 Alpha at ₹90 (Tax Included) each, and the exact total is ₹90 (Tax Included). What is your full name?',
+      });
+
+      const outcomeCheckout = await processTurn('controller-test', stateCheckout, '3', 'text');
+
+      expect(outcomeCheckout.replyText).not.toBe(WHATSAPP_POLICIES_MENU);
+      expect(outcomeCheckout.replyText).not.toContain('Shipping Policy');
+      expect(chatMock).toHaveBeenCalledTimes(1);
+    });
   });
 });
