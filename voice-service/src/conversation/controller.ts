@@ -276,6 +276,49 @@ function maternalSafetyReply(
   return `Please consult a doctor before taking ${productName} during pregnancy or breastfeeding. Also consult them if you have a health problem or take regular medicines.`;
 }
 
+export function buildProductKnowledgeReply(
+  knowledge: unknown,
+  product: LiveCatalogProduct,
+  action: 'benefits' | 'dosage',
+  language: ConversationState['currentLanguage'],
+): string {
+  const entries = knowledge && typeof knowledge === 'object' && Array.isArray((knowledge as { entries?: unknown }).entries)
+    ? (knowledge as { entries: { category?: unknown; content?: unknown }[] }).entries
+    : [];
+
+  const entry = entries.find((e) =>
+    e?.category === action && typeof e.content === 'string' && e.content.trim().length > 0
+  ) ?? (action === 'dosage' ? entries.find((e) =>
+    e?.category === 'directions' && typeof e.content === 'string' && e.content.trim().length > 0
+  ) : undefined);
+
+  if (!entry || typeof entry.content !== 'string' || !entry.content.trim()) {
+    if (language === 'hi') {
+      return `${product.name} के लिए ${action === 'benefits' ? 'फायदे' : 'खुराक'} की स्वीकृत जानकारी अभी उपलब्ध नहीं है।\n\nमेन्यू पर वापस जाने के लिए Menu लिखें।`;
+    }
+    if (language === 'gu') {
+      return `${product.name} માટે ${action === 'benefits' ? 'ફાયદા' : 'માત્રા'} વિશેની માન્ય માહિતી હાલમાં ઉપલબ્ધ નથી.\n\nમેનુ પર પાછા જવા માટે Menu લખો.`;
+    }
+    return `Approved ${action === 'benefits' ? 'benefits' : 'dosage'} information is not available for ${product.name}.\n\nTo return to the main menu, type Menu.`;
+  }
+
+  const content = entry.content.trim();
+
+  if (language === 'hi') {
+    const heading = action === 'benefits' ? `*${product.name} के फायदे:*` : `*${product.name} की खुराक और उपयोग:*`;
+    const actionsHint = 'कार्ट में जोड़ने के लिए "Add to Cart" लिखें।\nमेन्यू पर वापस जाने के लिए Menu लिखें।';
+    return `${heading}\n${content}\n\n${actionsHint}`;
+  }
+  if (language === 'gu') {
+    const heading = action === 'benefits' ? `*${product.name} ના ફાયદા:*` : `*${product.name} ની માત્રા અને ઉપયોગ:*`;
+    const actionsHint = 'કાર્ટમાં ઉમેરવા માટે "Add to Cart" લખો.\nમેનુ પર પાછા જવા માટે Menu લખો.';
+    return `${heading}\n${content}\n\n${actionsHint}`;
+  }
+  const heading = action === 'benefits' ? `*Benefits of ${product.name}:*` : `*Dosage & Directions for ${product.name}:*`;
+  const actionsHint = 'To add to cart, type "Add to Cart".\nTo return to the main menu, type Menu.';
+  return `${heading}\n${content}\n\n${actionsHint}`;
+}
+
 interface LiveProductDetails {
   found?: boolean;
   id?: string;
@@ -1516,6 +1559,23 @@ export async function processTurn(
               awaitingQuantity: false,
               lastAction: productAction.action,
             };
+
+            if (channel === 'text' && (productAction.action === 'benefits' || productAction.action === 'dosage')) {
+              const replyText = buildProductKnowledgeReply(
+                knowledge,
+                actionProduct,
+                productAction.action,
+                state.currentLanguage,
+              );
+              state.messages.push({ role: 'assistant', content: replyText });
+              return {
+                state,
+                replyText,
+                policyViolations: [],
+                outboundActions,
+              };
+            }
+
             turnContextMessages.push({
               role: 'system',
               content:
@@ -1566,7 +1626,7 @@ export async function processTurn(
       systemMessage,
       ...turnContextMessages,
       ...state.messages,
-      ...(productAction && actionProduct ? [{
+      ...(channel !== 'text' && productAction && actionProduct ? [{
         role: 'user' as const,
         content: productAction.action === 'benefits'
           ? `What are the benefits of ${actionProduct.name}?`

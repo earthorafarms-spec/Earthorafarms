@@ -1,6 +1,6 @@
 import { supabase } from '../voice-service/src/lib/supabaseClient.js';
 import { createInitialState } from '../voice-service/src/conversation/state.js';
-import type { ConversationState } from '../voice-service/src/conversation/state.js';
+import type { ConversationState, ConversationMessage } from '../voice-service/src/conversation/state.js';
 
 // WhatsApp sessions live for 24 h of inactivity; each message resets the clock.
 const SESSION_TTL_HOURS = 24;
@@ -12,6 +12,60 @@ function ttlTimestamp(): string {
 export interface WhatsAppSessionResult {
   voiceSessionId: string;
   state: ConversationState;
+}
+
+/**
+ * Sanitizes WhatsApp persisted message history so that orphan/malformed role:"tool"
+ * messages (e.g. from historical checkout-direct flows) are omitted before reaching
+ * turn processing or OpenAI.
+ *
+ * Rules:
+ * - Preserves valid assistant -> tool-call -> tool message sequences.
+ * - Removes only orphan/malformed role:"tool" messages that do not immediately follow
+ *   an assistant message containing a matching tool_call.
+ * - Does not invent tool_calls or modify valid messages.
+ */
+export function sanitizeWhatsAppSessionMessages(messages: ConversationMessage[]): ConversationMessage[] {
+  const result: ConversationMessage[] = [];
+  let pendingToolCallIds: Set<string> | null = null;
+
+  for (const m of messages) {
+    if (m.role === 'tool') {
+      if (m.toolCallId && pendingToolCallIds?.has(m.toolCallId)) {
+        pendingToolCallIds.delete(m.toolCallId);
+        result.push(m);
+      }
+      // Omit orphan/malformed tool message
+      continue;
+    }
+
+    if (m.role === 'assistant') {
+      const toolCalls = m.toolCalls && m.toolCalls.length > 0 ? m.toolCalls : undefined;
+      if (toolCalls) {
+        pendingToolCallIds = new Set(toolCalls.map((tc) => tc.id).filter(Boolean));
+      } else {
+        pendingToolCallIds = null;
+      }
+      result.push(m);
+      continue;
+    }
+
+    // Any other role (user, system) breaks active tool call sequence
+    pendingToolCallIds = null;
+    result.push(m);
+  }
+
+  return result;
+}
+
+export function sanitizeWhatsAppConversationState(state: ConversationState): ConversationState {
+  if (state && Array.isArray(state.messages)) {
+    return {
+      ...state,
+      messages: sanitizeWhatsAppSessionMessages(state.messages),
+    };
+  }
+  return state;
 }
 
 /**
@@ -46,7 +100,7 @@ export async function getOrCreateSession(phone: string): Promise<WhatsAppSession
     if (vsRow && typeof vsRow.expires_at === 'string' && new Date(vsRow.expires_at) > new Date()) {
       return {
         voiceSessionId: (vsRow.id ?? waRow.voice_session_id) as string,
-        state: (vsRow.conversation_state as ConversationState) ?? createInitialState(),
+        state: sanitizeWhatsAppConversationState((vsRow.conversation_state as ConversationState) ?? createInitialState()),
       };
     }
 
@@ -61,7 +115,7 @@ export async function getOrCreateSession(phone: string): Promise<WhatsAppSession
       if (directVs && typeof directVs.expires_at === 'string' && new Date(directVs.expires_at as string) > new Date()) {
         return {
           voiceSessionId: directVs.id as string,
-          state: (directVs.conversation_state as ConversationState) ?? createInitialState(),
+          state: sanitizeWhatsAppConversationState((directVs.conversation_state as ConversationState) ?? createInitialState()),
         };
       }
     }

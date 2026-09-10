@@ -398,75 +398,66 @@ describe('processTurn persisted state', () => {
     expect(chatMock).not.toHaveBeenCalled();
   });
 
-  it('handles the Benefits product-card button from approved product knowledge through the LLM and output policy', async () => {
-    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'Alpha helps support your immunity naturally.' });
+  it('handles the Benefits product-card button from approved product knowledge deterministically without invoking the LLM', async () => {
     const input = productActionInputFromButtonId(productButtonId('benefits', 'alpha-id'))!;
 
     const outcome = await processTurn('controller-test', createInitialState(), input, 'text');
 
-    expect(outcome.replyText).toBe('Alpha helps support your immunity naturally.');
+    expect(outcome.replyText).toContain('Admin-approved immunity support information.');
+    expect(outcome.replyText).toContain('*Benefits of Alpha:*');
     expect(knowledgeRepositoryMocks.getAllApprovedKnowledge).toHaveBeenCalledWith('alpha-id');
     expect(outcome.state.currentTurnFacts.map((fact) => fact.toolName)).toEqual([
       'list_products', 'get_product_details', 'get_product_knowledge',
     ]);
-    expect(chatMock).toHaveBeenCalledTimes(1);
-    const messages = chatMock.mock.calls[0][0] as { role: string; content: string }[];
-    expect(messages.some((m) => m.content.includes('selected the benefits button for Alpha'))).toBe(true);
-    expect(messages.some((m) => m.content.includes('Admin-approved immunity support information'))).toBe(true);
+    expect(chatMock).not.toHaveBeenCalled();
     expect(outcome.state.messages.some((m) => m.role === 'user')).toBe(false);
     expect(outcome.state.whatsAppProductContext).toEqual({
       productId: 'alpha-id', productName: 'Alpha', awaitingQuantity: false, lastAction: 'benefits',
     });
   });
 
-  it('handles the Dosage product-card button through the LLM and output policy', async () => {
+  it('handles the Dosage product-card button deterministically without invoking the LLM', async () => {
     knowledgeRepositoryMocks.getAllApprovedKnowledge.mockResolvedValueOnce([{
       id: 'knowledge-dose', productId: 'alpha-id', category: 'dosage', question: null,
       content: 'Take one capsule daily after food.', version: 1, locale: 'en-IN',
     }]);
-    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'Take one capsule of Alpha daily after food.' });
     const input = productActionInputFromButtonId(productButtonId('dosage', 'alpha-id'))!;
 
     const outcome = await processTurn('controller-test', createInitialState(), input, 'text');
 
-    expect(outcome.replyText).toBe('Take one capsule of Alpha daily after food.');
+    expect(outcome.replyText).toContain('Take one capsule daily after food.');
+    expect(outcome.replyText).toContain('*Dosage & Directions for Alpha:*');
     expect(knowledgeRepositoryMocks.getAllApprovedKnowledge).toHaveBeenCalledWith('alpha-id');
-    expect(chatMock).toHaveBeenCalledTimes(1);
-    const messages = chatMock.mock.calls[0][0] as { role: string; content: string }[];
-    expect(messages.some((m) => m.content.includes('selected the dosage button for Alpha'))).toBe(true);
+    expect(chatMock).not.toHaveBeenCalled();
     expect(outcome.state.messages.some((m) => m.role === 'user')).toBe(false);
     expect(outcome.state.whatsAppProductContext).toEqual({
       productId: 'alpha-id', productName: 'Alpha', awaitingQuantity: false, lastAction: 'dosage',
     });
   });
 
-  it('enforces output policy on Benefits button responses', async () => {
-    chatMock
-      .mockResolvedValueOnce({ kind: 'message', content: 'Alpha costs ₹9999 and gives great energy.' })
-      .mockResolvedValueOnce({ kind: 'message', content: 'Alpha provides approved immunity support.' });
+  it('returns grounded approved knowledge without invoking the LLM', async () => {
     const input = productActionInputFromButtonId(productButtonId('benefits', 'alpha-id'))!;
 
     const outcome = await processTurn('controller-test', createInitialState(), input, 'text');
 
-    expect(outcome.replyText).toBe('Alpha provides approved immunity support.');
-    expect(chatMock).toHaveBeenCalledTimes(2);
+    expect(outcome.replyText).toContain('Admin-approved immunity support information.');
+    expect(chatMock).not.toHaveBeenCalled();
     expect(outcome.state.messages.some((m) => m.role === 'user')).toBe(false);
   });
 
   it('handles Benefits and Dosage from raw provider button ID strings', async () => {
-    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'Alpha provides approved immunity support.' });
     const rawButtonId = productButtonId('benefits', 'alpha-id');
 
     const outcome = await processTurn('controller-test', createInitialState(), rawButtonId, 'text');
 
-    expect(outcome.replyText).toBe('Alpha provides approved immunity support.');
+    expect(outcome.replyText).toContain('Admin-approved immunity support information.');
     expect(knowledgeRepositoryMocks.getAllApprovedKnowledge).toHaveBeenCalledWith('alpha-id');
+    expect(chatMock).not.toHaveBeenCalled();
     expect(outcome.state.messages.some((m) => m.role === 'user')).toBe(false);
     expect(outcome.state.whatsAppProductContext?.lastAction).toBe('benefits');
   });
 
   it('handles button text clicks ("Benefits", "Dosage") using active product context', async () => {
-    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'Alpha supports your natural immunity.' });
     const state = createInitialState();
     state.whatsAppProductContext = {
       productId: 'alpha-id',
@@ -476,27 +467,23 @@ describe('processTurn persisted state', () => {
 
     const outcome = await processTurn('controller-test', state, 'Benefits', 'text');
 
-    expect(outcome.replyText).toBe('Alpha supports your natural immunity.');
+    expect(outcome.replyText).toContain('Admin-approved immunity support information.');
     expect(knowledgeRepositoryMocks.getAllApprovedKnowledge).toHaveBeenCalledWith('alpha-id');
+    expect(chatMock).not.toHaveBeenCalled();
     expect(outcome.state.whatsAppProductContext?.lastAction).toBe('benefits');
     expect(outcome.state.messages.some((m) => m.role === 'user')).toBe(false);
   });
 
   it('does not hallucinate Benefits/Dosage when knowledge is unavailable', async () => {
     knowledgeRepositoryMocks.getAllApprovedKnowledge.mockResolvedValueOnce([]);
-    chatMock.mockResolvedValueOnce({
-      kind: 'message',
-      content: 'I do not have approved information for Alpha right now. Would you like to order it or ask about another product?',
-    });
     const input = productActionInputFromButtonId(productButtonId('benefits', 'alpha-id'))!;
 
     const outcome = await processTurn('controller-test', createInitialState(), input, 'text');
 
-    expect(outcome.replyText).toContain('I do not have approved information for Alpha');
+    expect(outcome.replyText).toContain('Approved benefits information is not available for Alpha.');
     expect(knowledgeRepositoryMocks.getAllApprovedKnowledge).toHaveBeenCalledWith('alpha-id');
+    expect(chatMock).not.toHaveBeenCalled();
     expect(outcome.state.messages.some((m) => m.role === 'user')).toBe(false);
-    const messages = chatMock.mock.calls[0][0] as { role: string; content: string }[];
-    expect(messages.some((m) => m.content.includes('If approved benefits knowledge is not available or empty'))).toBe(true);
   });
 
   it('handles Add to Cart deterministically and keeps the next number in the quantity flow', async () => {
@@ -1347,6 +1334,93 @@ describe('processTurn persisted state', () => {
         expect(turn.state.checkoutFields.name).toBeUndefined();
         expect(turn.replyText).toBe('How else can I assist you today?');
         expect(chatMock).toHaveBeenCalled();
+      });
+    });
+
+    describe('deterministic Benefits and Dosage actions', () => {
+      it('returns approved Benefits reply without invoking the LLM and retains product context', async () => {
+        const state = createInitialState();
+        const input = productActionInputFromButtonId(productButtonId('benefits', 'alpha-id'))!;
+
+        const outcome = await processTurn('controller-test', state, input, 'text');
+
+        expect(chatMock).not.toHaveBeenCalled();
+        expect(outcome.replyText).toContain('Admin-approved immunity support information.');
+        expect(outcome.replyText).toContain('*Benefits of Alpha:*');
+        expect(outcome.state.whatsAppProductContext).toEqual({
+          productId: 'alpha-id',
+          productName: 'Alpha',
+          awaitingQuantity: false,
+          lastAction: 'benefits',
+        });
+      });
+
+      it('returns approved Dosage reply without invoking the LLM and retains product context', async () => {
+        knowledgeRepositoryMocks.getAllApprovedKnowledge.mockResolvedValueOnce([
+          {
+            id: 'knowledge-dosage-1',
+            productId: 'alpha-id',
+            category: 'dosage',
+            question: null,
+            content: 'Take 1-2 tablets daily with warm water.',
+            version: 1,
+            locale: 'en-IN',
+          },
+        ]);
+
+        const state = createInitialState();
+        const input = productActionInputFromButtonId(productButtonId('dosage', 'alpha-id'))!;
+
+        const outcome = await processTurn('controller-test', state, input, 'text');
+
+        expect(chatMock).not.toHaveBeenCalled();
+        expect(outcome.replyText).toContain('Take 1-2 tablets daily with warm water.');
+        expect(outcome.replyText).toContain('*Dosage & Directions for Alpha:*');
+        expect(outcome.state.whatsAppProductContext).toEqual({
+          productId: 'alpha-id',
+          productName: 'Alpha',
+          awaitingQuantity: false,
+          lastAction: 'dosage',
+        });
+      });
+
+      it('falls back safely without invoking LLM when approved knowledge entry is unavailable', async () => {
+        knowledgeRepositoryMocks.getAllApprovedKnowledge.mockResolvedValueOnce([]);
+
+        const state = createInitialState();
+        const input = productActionInputFromButtonId(productButtonId('benefits', 'alpha-id'))!;
+
+        const outcome = await processTurn('controller-test', state, input, 'text');
+
+        expect(chatMock).not.toHaveBeenCalled();
+        expect(outcome.replyText).toContain('Approved benefits information is not available for Alpha.');
+        expect(outcome.state.whatsAppProductContext?.productId).toBe('alpha-id');
+      });
+
+      it('retains product context after Benefits to allow direct Add to Cart follow-up', async () => {
+        const state = createInitialState();
+        const benefitsInput = productActionInputFromButtonId(productButtonId('benefits', 'alpha-id'))!;
+        const benefitsTurn = await processTurn('controller-test', state, benefitsInput, 'text');
+
+        expect(chatMock).not.toHaveBeenCalled();
+        expect(benefitsTurn.state.whatsAppProductContext?.productId).toBe('alpha-id');
+
+        // Follow up with text "Add to Cart"
+        const addTurn = await processTurn('controller-test', benefitsTurn.state, 'Add to Cart', 'text');
+        expect(chatMock).not.toHaveBeenCalled();
+        expect(addTurn.replyText).toBe('How many units of Alpha would you like to add to your cart?');
+        expect(addTurn.state.whatsAppProductContext?.awaitingQuantity).toBe(true);
+      });
+
+      it('bypasses deterministic shortcut in voice mode and routes to conversational LLM', async () => {
+        chatMock.mockResolvedValueOnce({ kind: 'message', content: 'In voice, Alpha provides natural wellness.' });
+        const state = createInitialState();
+        const input = productActionInputFromButtonId(productButtonId('benefits', 'alpha-id'))!;
+
+        const outcome = await processTurn('controller-test', state, input, 'voice');
+
+        expect(chatMock).toHaveBeenCalledTimes(1);
+        expect(outcome.replyText).toBe('In voice, Alpha provides natural wellness.');
       });
     });
   });
