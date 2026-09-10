@@ -64,6 +64,19 @@ describe('Sarvam adapter failover', () => {
     ]);
   });
 
+  it('pins numeric checkout turns to the established Indic language', async () => {
+    mocks.transcribe.mockResolvedValueOnce({ transcript: 'तीन आठ दो चार सात शून्य' });
+    const { SarvamSttAdapter } = await import('../../src/adapters/sarvam-stt.js');
+
+    const result = await new SarvamSttAdapter().transcribe(Buffer.from('audio'), {
+      languageHint: 'hi', expectedInput: 'postalCode',
+    });
+
+    expect(mocks.transcribe).toHaveBeenCalledTimes(1);
+    expect(mocks.transcribe.mock.calls[0][1].language_code).toBe('hi-IN');
+    expect(result).toMatchObject({ detectedLanguage: 'hi', wasRetried: false });
+  });
+
   it.each(['synthesize', 'synthesizeMulaw8k'] as const)('rotates credits failures during %s', async (method) => {
     const wav = silentPcm16Wav();
     mocks.convert.mockRejectedValueOnce(quota).mockResolvedValue({ audios: [wav.toString('base64')] });
@@ -85,12 +98,24 @@ describe('Sarvam adapter failover', () => {
 
     expect(mocks.convert.mock.calls[0][1]).toMatchObject({
       language_code: 'hi-IN', speaker: 'priya', pace: 1,
+      temperature: 0.1, enable_preprocessing: true,
       speech_sample_rate: 24000, output_audio_codec: 'wav',
     });
     expect(mocks.convert.mock.calls[1][1]).toMatchObject({
       language_code: 'gu-IN', speaker: 'priya', pace: 1,
+      temperature: 0.1, enable_preprocessing: true,
       speech_sample_rate: 24000, output_audio_codec: 'wav',
     });
+  });
+
+  it('synthesizes a multi-sentence reply in one request to keep one voice', async () => {
+    mocks.convert.mockResolvedValue({ audios: [silentPcm16Wav().toString('base64')] });
+    const { SarvamTtsAdapter } = await import('../../src/adapters/sarvam-tts.js');
+
+    await new SarvamTtsAdapter().synthesize('આ પ્રથમ વાક્ય છે. આ બીજું વાક્ય છે.', 'gu');
+
+    expect(mocks.convert).toHaveBeenCalledTimes(1);
+    expect(mocks.convert.mock.calls[0][1].text).toContain('આ બીજું વાક્ય');
   });
 
   it('preserves chat tool calls after failover', async () => {

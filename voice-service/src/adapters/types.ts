@@ -34,6 +34,13 @@ export interface TranscriptionResult {
   wasRetried?: boolean;
 }
 
+export interface SttTranscriptionOptions {
+  languageHint?: SupportedLanguage;
+  format?: 'webm' | 'wav';
+  /** Expected semantic shape; callers may still ask a normal question instead. */
+  expectedInput?: 'phone' | 'postalCode' | 'quantity';
+}
+
 export interface SttAdapter {
   /**
    * Transcribes one utterance of raw audio into text. `languageHint`, if
@@ -45,7 +52,7 @@ export interface SttAdapter {
    * WebSocket streaming route sends wav (raw PCM wrapped locally, since
    * there's no browser-side encoder in that path — see telephony/audio-accumulator.ts).
    */
-  transcribe(audio: Buffer, opts?: { languageHint?: SupportedLanguage; format?: 'webm' | 'wav' }): Promise<TranscriptionResult>;
+  transcribe(audio: Buffer, opts?: SttTranscriptionOptions): Promise<TranscriptionResult>;
 }
 
 export interface TtsAdapter {

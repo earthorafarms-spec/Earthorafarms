@@ -6,6 +6,7 @@ import { sendMessageBodySchema } from '../schemas/voice.js';
 import { buildStt, buildTtsForLanguage } from '../providers.js';
 import { getCallSession } from '../repositories/callSessions.repository.js';
 import { normalizeVoiceTranscript } from '../conversation/transcript.js';
+import { getVoiceInputExpectation } from '../conversation/checkout-context.js';
 
 // Fastify only auto-parses application/json and text/plain by default — a
 // browser-recorded audio blob (audio/webm, audio/ogg, etc.) needs an
@@ -59,9 +60,13 @@ export async function registerVoiceRoutes(app: FastifyInstance): Promise<void> {
 
         const stt = buildStt();
         const format = String(req.headers['content-type'] ?? '').includes('wav') ? 'wav' : 'webm';
+        const expectedInput = getVoiceInputExpectation(session.conversationState);
         const transcription = await stt.transcribe(audio, {
           format,
-          languageHint: session.conversationState.currentLanguage,
+          languageHint: session.conversationState.languageEstablished || expectedInput
+            ? session.conversationState.currentLanguage
+            : undefined,
+          expectedInput,
         });
         const decision = normalizeVoiceTranscript(transcription);
 

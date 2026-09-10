@@ -58,7 +58,7 @@ describe('toSpokenText', () => {
 describe('normalizeIndicSpeechText', () => {
   it('corrects recurring Gujarati agreement and doubled-particle artifacts', () => {
     expect(normalizeIndicSpeechText('અમારા પાસે Morilife+ છે. આ ટેબ્લેટ્સ એ એન્ટીઓક્સિડન્ટ્સથી ભરપૂર છે.', 'gu'))
-      .toBe('અમારી પાસે Morilife+ છે. આ ટેબ્લેટ્સ એન્ટીઓક્સિડન્ટ્સથી ભરપૂર છે.');
+      .toBe('અમારી પાસે મોરીલાઇફ પ્લસ છે. આ ટેબ્લેટ્સ એન્ટીઓક્સિડન્ટ્સથી ભરપૂર છે.');
   });
 
   it('does not rewrite English or Hindi text', () => {

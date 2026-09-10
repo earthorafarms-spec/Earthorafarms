@@ -47,3 +47,20 @@ export function buildCheckoutTurnInstruction(state: ConversationState): string |
     'to translate it into English, and do not ask them to repeat a value that is already clear.'
   );
 }
+
+export type VoiceInputExpectation = 'phone' | 'postalCode' | 'quantity' | undefined;
+
+/** Adds speech-recognition context without making numeric input mandatory. */
+export function getVoiceInputExpectation(state: ConversationState): VoiceInputExpectation {
+  if (state.pendingDigitConfirmation) return undefined;
+  if (state.cart.length > 0) {
+    const nextMissing = REQUIRED_CHECKOUT_FIELDS.find((field) => !state.checkoutFields[field]);
+    if (nextMissing === 'phone' || nextMissing === 'postalCode') return nextMissing;
+  }
+
+  const lastAssistant = [...state.messages].reverse().find((message) => message.role === 'assistant')?.content ?? '';
+  if (/\b(?:how many|quantity|units?|bottles?|packs?)\b|कितन(?:ा|ी|े)|यूनिट|बॉटल|પ(?:ેક|ૅક)|કેટલ(?:ા|ી)|યુનિટ|બોટલ/iu.test(lastAssistant)) {
+    return 'quantity';
+  }
+  return undefined;
+}

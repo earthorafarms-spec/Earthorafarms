@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCheckoutTurnInstruction } from '../../src/conversation/checkout-context.js';
+import { buildCheckoutTurnInstruction, getVoiceInputExpectation } from '../../src/conversation/checkout-context.js';
 import { createInitialState } from '../../src/conversation/state.js';
 
 describe('checkout turn context', () => {
@@ -27,5 +27,19 @@ describe('checkout turn context', () => {
     expect(buildCheckoutTurnInstruction(state)).toContain('OPTIONAL GST QUESTION REQUIRED NOW');
     state.checkoutFields.gst = '';
     expect(buildCheckoutTurnInstruction(state)).toContain('CHECKOUT READY NOW');
+  });
+
+  it('identifies PIN and quantity turns for speech recognition context', () => {
+    const state = createInitialState();
+    state.cart.push({ productId: 'p1', productName: 'Alpha', quantity: 1, unitPrice: 1 });
+    Object.assign(state.checkoutFields, {
+      name: 'Test User', email: 'test@example.com', phone: '+919876543210', address: '1 Test Road',
+      city: 'Ahmedabad', state: 'Gujarat',
+    });
+    expect(getVoiceInputExpectation(state)).toBe('postalCode');
+
+    const quantityState = createInitialState();
+    quantityState.messages.push({ role: 'assistant', content: 'How many bottles would you like?' });
+    expect(getVoiceInputExpectation(quantityState)).toBe('quantity');
   });
 });

@@ -211,12 +211,23 @@ describe('processTurn persisted state', () => {
     expect(chatMock).not.toHaveBeenCalled();
   });
 
+  it('waits for the first substantive sentence before establishing the call language', async () => {
+    const state = createInitialState();
+    const greeting = await processTurn('controller-test', state, 'नमस्ते', 'voice');
+    expect(greeting.state.languageEstablished).toBe(false);
+
+    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'Here is the product information.' });
+    const sentence = await processTurn('controller-test', greeting.state, 'I want to ask about the product details.', 'voice');
+    expect(sentence.state.currentLanguage).toBe('en');
+    expect(sentence.state.languageEstablished).toBe(true);
+  });
+
   it('keeps output-policy correction instructions turn-local', async () => {
     chatMock
       .mockResolvedValueOnce({ kind: 'message', content: 'It costs ₹5000.' })
       .mockResolvedValueOnce({ kind: 'message', content: 'I need to check the current price first.' });
 
-    const outcome = await processTurn('controller-test', createInitialState(), 'What does it cost?');
+    const outcome = await processTurn('controller-test', createInitialState(), 'Tell me about Alpha');
 
     expect(outcome.state.messages.some((m) => m.role === 'system' && m.content.includes('[Correction]'))).toBe(false);
     expect(outcome.replyText).toBe('I need to check the current price first.');
@@ -604,7 +615,7 @@ describe('processTurn persisted state', () => {
     expect(incomplete.replyText).toContain('पूरा नहीं');
     expect(incomplete.state.checkoutFields.phone).toBeUndefined();
 
-    const heard = await processTurn('controller-test', incomplete.state, 'सात नौ आठ चार सात छह नौ चार सात दो');
+    const heard = await processTurn('controller-test', incomplete.state, 'मेरा नंबर सात नौ आठ चार सात छह नौ चार सात दो है');
     expect(heard.replyText).toContain('क्या यह सही है?');
     expect(heard.state.pendingDigitConfirmation).toEqual({ field: 'phone', value: '+917984769472' });
     expect(heard.state.checkoutFields.phone).toBeUndefined();
@@ -641,22 +652,57 @@ describe('processTurn persisted state', () => {
     expect(incomplete.replyText).toContain('six digits');
     expect(incomplete.state.checkoutFields.postalCode).toBeUndefined();
 
-    const heard = await processTurn('controller-test', incomplete.state, '384470');
+    const heard = await processTurn('controller-test', incomplete.state, 'my PIN is three eight four four seven zero');
     expect(heard.state.pendingDigitConfirmation).toEqual({ field: 'postalCode', value: '384470' });
     const confirmed = await processTurn('controller-test', heard.state, 'yes');
     expect(confirmed.state.checkoutFields.postalCode).toBe('384470');
     expect(confirmed.replyText).toContain('delivery address in India');
   });
 
-  it('keeps detailed product questions in the model and tool loop', async () => {
-    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'Which product price would you like me to check?' });
-
-    await processTurn('controller-test', createInitialState(), 'What is the price of your available products?');
+  it('answers an unambiguous product price directly from the fresh website record', async () => {
+    const outcome = await processTurn('controller-test', createInitialState(), 'What is the price of your available product?');
 
     expect(productRepositoryMocks.listActiveProducts).toHaveBeenCalledTimes(1);
-    expect(chatMock).toHaveBeenCalledTimes(1);
+    expect(outcome.replyText).toBe('Alpha costs ₹90, including tax.');
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it('handles Romanized Gujarati price and cart questions without losing durable cart state', async () => {
+    const state = createInitialState();
+    state.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 3, unitPrice: 90 }];
+
+    const price = await processTurn('controller-test', state, 'kimmat su che product ni', 'voice');
+    expect(price.state.currentLanguage).toBe('gu');
+    expect(price.replyText).toContain('₹90');
+
+    const cart = await processTurn('controller-test', price.state, 'mara cart ma ketli bottle che', 'voice');
+    expect(cart.state.cart).toEqual([{ productId: 'alpha-id', productName: 'Alpha', quantity: 3, unitPrice: 90 }]);
+    expect(cart.replyText).toContain('₹270');
+    expect(cart.replyText).not.toContain('ખાલી');
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it('treats Romanized Gujarati agreement as a request for product details instead of repeating the offer', async () => {
+    const state = createInitialState();
+    state.currentLanguage = 'gu';
+    state.languageEstablished = true;
+    state.messages.push({ role: 'assistant', content: 'તમે પ્રોડક્ટ વિશે જાણવા માંગો છો કે ઓર્ડર કરવા માંગો છો?' });
+    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'આ પ્રોડક્ટની માન્ય માહિતી આ છે.' });
+
+    const outcome = await processTurn('controller-test', state, 'ha mare janvu che', 'voice');
+
+    expect(outcome.replyText).not.toMatch(/જાણવા.*ઓર્ડર/u);
     const messages = chatMock.mock.calls[0][0] as { role: string; content: string }[];
-    expect(messages.some((m) => m.role === 'system' && m.content.includes('LIVE PRODUCT CATALOG FOR THIS TURN'))).toBe(true);
+    expect(messages.some((message) => message.role === 'system' && message.content.includes('Do not repeat the question'))).toBe(true);
+  });
+
+  it('instructs the model to answer benefits and cautions as separate grounded parts', async () => {
+    chatMock.mockResolvedValueOnce({ kind: 'message', content: 'આના ફાયદા માન્ય માહિતી મુજબ આ છે. માન્ય ગેરફાયદા વિશે માહિતી ઉપલબ્ધ નથી.' });
+
+    await processTurn('controller-test', createInitialState(), 'faayda and gerfaayda batavo product na', 'voice');
+
+    const messages = chatMock.mock.calls[0][0] as { role: string; content: string }[];
+    expect(messages.some((message) => message.role === 'system' && message.content.includes('BOTH benefits and disadvantages'))).toBe(true);
   });
 
   it('grounds a terse WhatsApp product selection in fresh website and admin data', async () => {

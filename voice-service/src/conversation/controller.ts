@@ -57,7 +57,7 @@ function confirmedReviewReceipt(text: string): boolean {
 }
 
 const CART_SUMMARY_PATTERN =
-  /\b(?:my cart|cart total|what(?:'s| is) in (?:my )?cart|how many (?:bottles?|packs?|items?)|what did i add|my bill|bill total)\b|मेरे? कार्ट|कार्ट में|कितनी? (?:बॉटल|पैक|आइटम)|मेरा बिल|કાર્ટમાં|માર[ુંા] કાર્ટ|કેટલ[ાી] (?:બોટલ|પેક|આઇટમ)|મારું બિલ/iu;
+  /\b(?:my cart|cart total|what(?:'s| is) in (?:my )?cart|how many (?:bottles?|packs?|items?)|what did i add|my bill|bill total|(?:mere|mera) cart|cart (?:mein|me) (?:kya|kitna|kitne|kitni)|cart ma (?:su|shu|shun|ketla|ketli)|(?:mara|maru) cart)\b|मेरे? कार्ट|कार्ट में|कितनी? (?:बॉटल|पैक|आइटम)|मेरा बिल|કાર્ટમાં|માર[ુંા] કાર્ટ|કેટલ[ાી] (?:બોટલ|પેક|આઇટમ)|મારું બિલ/iu;
 
 const CART_PRICING_PATTERN =
   /\b(?:total(?:\s+(?:amount|price|cost))?|amount|subtotal|bill\s+total|cart\s+(?:price|cost))\b|टोटल|अमाउंट|कुल(?:\s+(?:कीमत|प्राइस|दाम))?|કુલ|રકમ/iu;
@@ -148,7 +148,7 @@ function openingClarification(language: ConversationState['currentLanguage']): s
 
 function hasExplicitOpeningIntent(text: string): boolean {
   return shouldPrefetchProductCatalog(text) ||
-    /\b(?:buy|order|add|cart|want|need|quantity|bottles?|packs?|price|cost)\b|खरीद|ऑर्डर|कार्ट|चाहिए|बोतल|पैक|कीमत|ઓર્ડર|કાર્ટ|જોઈએ|બોટલ|પેક|કિંમત/iu.test(text);
+    /\b(?:buy|order|add|cart|want|need|quantity|bottles?|packs?|price|cost|kimat|kimmat|keemat|bhav)\b|खरीद|ऑर्डर|कार्ट|चाहिए|बोतल|पैक|कीमत|ઓર્ડર|કાર્ટ|જોઈએ|બોટલ|પેક|કિંમત/iu.test(text);
 }
 
 function ensureCheckoutProgressQuestion(
@@ -184,7 +184,7 @@ const MAX_TOOL_LOOP_ITERATIONS = 6;
 const MAX_POLICY_REGENERATE_ATTEMPTS = 1;
 
 export function shouldPrefetchProductCatalog(text: string): boolean {
-  return /\b(products?|available|availability|stock|sell|selling|catalog(?:ue)?|details?|info(?:rmation)?|tell me about|benefits?|uses?|dosage|dose|ingredients?|directions?|warnings?|pregnan(?:t|cy)|breastfeed(?:ing)?)\b|प्रोडक्ट|उत्पाद|अवेलेबल|उपलब्ध|स्टॉक|जानकारी|फायदे|लाभ|खुराक|सामग्री|इस्तेमाल|चेतावनी|गर्भवती|गर्भावस्था|स्तनपान|प्रेग्नेंट|પ્રોડક્ટ|ઉપલબ્ધ|સ્ટોક|માહિતી|ફાયદા|લાભ|માત્રા|ઘટકો|ઉપયોગ|ચેતવણી|ગર્ભવતી|ગર્ભાવસ્થા|સ્તનપાન|પ્રેગ્નન્ટ/iu.test(text);
+  return /\b(products?|available|availability|stock|sell|selling|catalog(?:ue)?|details?|info(?:rmation)?|tell me about|benefits?|disadvantages?|downsides?|uses?|dosage|dose|ingredients?|directions?|warnings?|pregnan(?:t|cy)|breastfeed(?:ing)?|price|cost|how much|kimat|kimmat|keemat|bhav|faayda|faayde|fayda|fayde|gerfaayda|gerfayda|nuksan|janvu|jaanvu|janu|jaanu)\b|प्रोडक्ट|उत्पाद|अवेलेबल|उपलब्ध|स्टॉक|जानकारी|फायदे|नुकसान|लाभ|खुराक|सामग्री|इस्तेमाल|चेतावनी|गर्भवती|गर्भावस्था|स्तनपान|प्रेग्नेंट|कीमत|दाम|પ્રોડક્ટ|ઉપલબ્ધ|સ્ટોક|માહિતી|ફાયદા|ગેરફાયદા|નુકસાન|લાભ|માત્રા|ઘટકો|ઉપયોગ|ચેતવણી|ગર્ભવતી|ગર્ભાવસ્થા|સ્તનપાન|પ્રેગ્નન્ટ|કિંમત|ભાવ/iu.test(text);
 }
 
 const DIGIT_CONFIRM_YES = /\b(?:yes|yeah|yep|correct|right)\b|हाँ|हां|सही|હા|સાચું|બરાબર/iu;
@@ -236,7 +236,7 @@ export function shouldAnswerCatalogDirectly(text: string): boolean {
   // Specific price, benefit, usage, and purchase questions still require
   // the normal tool/LLM loop. A plain "what do you sell?" does not: the live
   // list_products result is already the complete, grounded answer.
-  return !/\b(price|cost|how much|details?|info(?:rmation)?|tell me about|benefits?|uses?|dosage|dose|ingredients?|directions?|warnings?|pregnan(?:t|cy)|breastfeed(?:ing)?|buy|order|add|want|need)\b|जानकारी|कीमत|दाम|फायदे|लाभ|खुराक|सामग्री|इस्तेमाल|गर्भवती|गर्भावस्था|स्तनपान|प्रेग्नेंट|खरीद|ऑर्डर|જાણકારી|કિંમત|ફાયદા|ઉપયોગ|ગર્ભવતી|ગર્ભાવસ્થા|સ્તનપાન|પ્રેગ્નન્ટ|ખરીદ|ઓર્ડર/iu.test(text);
+  return !/\b(price|cost|how much|details?|info(?:rmation)?|tell me about|benefits?|disadvantages?|downsides?|uses?|dosage|dose|ingredients?|directions?|warnings?|pregnan(?:t|cy)|breastfeed(?:ing)?|buy|order|add|want|need|kimat|kimmat|keemat|bhav|faayda|faayde|fayda|fayde|gerfaayda|gerfayda|nuksan|janvu|jaanvu|janu|jaanu)\b|जानकारी|कीमत|दाम|फायदे|नुकसान|लाभ|खुराक|सामग्री|इस्तेमाल|गर्भवती|गर्भावस्था|स्तनपान|प्रेग्नेंट|खरीद|ऑर्डर|જાણકારી|કિંમત|ભાવ|ફાયદા|ગેરફાયદા|નુકસાન|ઉપયોગ|ગર્ભવતી|ગર્ભાવસ્થા|સ્તનપાન|પ્રેગ્નન્ટ|ખરીદ|ઓર્ડર/iu.test(text);
 }
 
 interface LiveCatalogProduct {
@@ -249,6 +249,24 @@ interface LiveCatalogProduct {
 
 const MATERNAL_SAFETY_PATTERN =
   /\b(?:pregnan(?:t|cy)|breastfeed(?:ing)?|nursing mother)\b|गर्भवती|गर्भावस्था|स्तनपान|प्रेग्नेंट|પ્રેગ્નન્ટ|ગર્ભવતી|ગર્ભાવસ્થા|સ્તનપાન/iu;
+
+const PRODUCT_PRICE_PATTERN =
+  /\b(?:price|cost|how much|kimat|kimmat|keemat|bhav)\b|कीमत|दाम|કિંમત|ભાવ/iu;
+const WANTS_PRODUCT_INFO_PATTERN =
+  /\b(?:(?:yes|yeah|sure).*(?:know|hear|details?|info)|(?:ha|haan).*(?:janvu|jaanvu|janu|jaanu)|mare\s+(?:janvu|jaanvu|janu|jaanu))\b|हाँ.*जान|हां.*जान|હા.*જાણ/iu;
+const BENEFITS_AND_CAUTIONS_PATTERN =
+  /(?=.*(?:benefits?|advantages?|फायदे|लाभ|ફાયદા|faayda|faayde|fayda|fayde))(?=.*(?:disadvantages?|downsides?|side effects?|warnings?|risks?|नुकसान|चेतावनी|ગેરફાયદા|નુકસાન|ચેતવણી|gerfaayda|gerfayda|nuksan))/iu;
+
+function productPriceReply(
+  productName: string,
+  price: number,
+  language: ConversationState['currentLanguage'],
+): string {
+  const amount = price.toLocaleString('en-IN');
+  if (language === 'hi') return `${productName} की कीमत टैक्स सहित ₹${amount} है।`;
+  if (language === 'gu') return `${productName} ની કિંમત ટૅક્સ સહિત ₹${amount} છે.`;
+  return `${productName} costs ₹${amount}, including tax.`;
+}
 
 function maternalSafetyReply(
   knowledge: unknown,
@@ -700,7 +718,7 @@ function liveCatalogProducts(catalog: unknown): LiveCatalogProduct[] {
 }
 
 function isProductInformationFollowUp(text: string): boolean {
-  return /\b(product|details?|info(?:rmation)?|tell me|what (?:do|does|is)|benefits?|uses?|dosage|dose|ingredients?|directions?|warnings?|pregnan(?:t|cy)|breastfeed(?:ing)?|price|cost|stock|buy|order|it|that|yes|yeah|sure)\b|प्रोडक्ट|जानकारी|फायदे|खुराक|सामग्री|कीमत|दाम|गर्भवती|गर्भावस्था|स्तनपान|प्रेग्नेंट|हाँ|હા|પ્રોડક્ટ|માહિતી|ફાયદા|માત્રા|ઘટકો|ગર્ભવતી|ગર્ભાવસ્થા|સ્તનપાન|પ્રેગ્નન્ટ|કિંમત/iu.test(text);
+  return /\b(product|details?|info(?:rmation)?|tell me|what (?:do|does|is)|benefits?|disadvantages?|downsides?|uses?|dosage|dose|ingredients?|directions?|warnings?|pregnan(?:t|cy)|breastfeed(?:ing)?|price|cost|stock|buy|order|it|that|yes|yeah|sure|kimat|kimmat|keemat|bhav|faayda|faayde|fayda|fayde|gerfaayda|gerfayda|nuksan|janvu|jaanvu|janu|jaanu|mare)\b|प्रोडक्ट|जानकारी|फायदे|नुकसान|खुराक|सामग्री|कीमत|दाम|गर्भवती|गर्भावस्था|स्तनपान|प्रेग्नेंट|हाँ|હા|પ્રોડક્ટ|માહિતી|ફાયદા|ગેરફાયદા|નુકસાન|માત્રા|ઘટકો|ગર્ભવતી|ગર્ભાવસ્થા|સ્તનપાન|પ્રેગ્નન્ટ|કિંમત|ભાવ/iu.test(text);
 }
 
 function resolveProductForTurn(
@@ -911,17 +929,20 @@ export async function processTurn(
     state.messages.push({ role: 'user', content: userText });
   }
 
-  // Deterministic and per-turn. Confident full Hindi, Gujarati, or English
-  // utterances switch the reply language even after the cart/checkout has
-  // started. Short ambiguous values such as "yes", a PIN, or "Ahmedabad"
-  // return null from detectLanguage and therefore keep the current language.
+  // A greeting alone never locks the call language. The first substantive
+  // sentence establishes it, and later confident full sentences can switch
+  // it. Short field values such as "yes", a PIN, or "Ahmedabad" preserve it.
   const checkoutStarted = state.cart.length > 0 || Object.keys(state.checkoutFields).length > 0;
   const explicitLanguage = productAction ? null : requestedLanguage(userText);
   if (explicitLanguage) {
     state.currentLanguage = explicitLanguage;
-  } else if (!productAction) {
+    state.languageEstablished = true;
+  } else if (!productAction && !isCommonGreeting(userText)) {
     const detected = detectLanguage(userText);
-    if (detected) state.currentLanguage = detected;
+    if (detected) {
+      state.currentLanguage = detected;
+      state.languageEstablished = true;
+    }
   }
 
   // A clipped/noisy opening transcript must never trigger an unprompted
@@ -975,7 +996,10 @@ export async function processTurn(
         state.messages.push({ role: 'assistant', content: replyText });
         return { state, replyText, policyViolations: [], outboundActions };
       }
-      const digits = normalizeSpokenDigitSequence(userText);
+      const expectedLength = expectedField === 'phone' ? 10 : 6;
+      const digits = normalizeSpokenDigitSequence(userText, expectedLength) ??
+        (expectedField === 'phone' ? normalizeSpokenDigitSequence(userText, 11) : null) ??
+        (expectedField === 'phone' ? normalizeSpokenDigitSequence(userText, 12) : null);
       if (digits) {
         const storedValue = expectedField === 'phone' ? normalizeWhatsAppPhone(digits) : digits;
         const valid = expectedField === 'phone' ? Boolean(storedValue) : /^\d{6}$/.test(digits);
@@ -986,6 +1010,13 @@ export async function processTurn(
         }
         state.pendingDigitConfirmation = { field: expectedField, value: storedValue };
         const replyText = digitConfirmationPrompt(expectedField, storedValue, state.currentLanguage);
+        state.messages.push({ role: 'assistant', content: replyText });
+        return { state, replyText, policyViolations: [], outboundActions };
+      }
+      // A pure but incomplete numeric sequence must stay in the deterministic
+      // validation path rather than falling through to the LLM.
+      if (normalizeSpokenDigitSequence(userText)) {
+        const replyText = invalidDigitPrompt(expectedField, state.currentLanguage);
         state.messages.push({ role: 'assistant', content: replyText });
         return { state, replyText, policyViolations: [], outboundActions };
       }
@@ -1511,6 +1542,16 @@ export async function processTurn(
           const knowledgeJson = JSON.stringify(knowledge);
           state.currentTurnFacts.push({ toolName: 'get_product_details', resultJson: detailsJson });
           state.currentTurnFacts.push({ toolName: 'get_product_knowledge', resultJson: knowledgeJson });
+          const liveDetails = details && typeof details === 'object' ? details as LiveProductDetails : null;
+          const livePrice = typeof liveDetails?.price === 'number' ? liveDetails.price : selectedProduct.price;
+          if (!productAction && PRODUCT_PRICE_PATTERN.test(userText) && typeof livePrice === 'number') {
+            const groundedReply = productPriceReply(selectedProduct.name, livePrice, state.currentLanguage);
+            const finalText = channel === 'voice'
+              ? limitSpokenReply(normalizeIndicSpeechText(toSpokenText(groundedReply), state.currentLanguage))
+              : groundedReply;
+            state.messages.push({ role: 'assistant', content: finalText });
+            return { state, replyText: finalText, policyViolations: [], productImage, outboundActions };
+          }
           if (!productAction && MATERNAL_SAFETY_PATTERN.test(userText)) {
             const groundedReply = maternalSafetyReply(knowledge, selectedProduct.name, state.currentLanguage);
             const finalText = channel === 'voice'
@@ -1519,8 +1560,7 @@ export async function processTurn(
             state.messages.push({ role: 'assistant', content: finalText });
             return { state, replyText: finalText, policyViolations: [], productImage, outboundActions };
           }
-          if (details && typeof details === 'object') {
-            const liveDetails = details as LiveProductDetails;
+          if (liveDetails) {
             if (!productAction && liveDetails.found) {
               if (typeof liveDetails.imageUrl === 'string' && /^https:\/\//i.test(liveDetails.imageUrl)) {
                 productImage = {
@@ -1552,6 +1592,23 @@ export async function processTurn(
               'Treat the records as factual notes: synthesize them into polished, natural customer-facing sentences instead of ' +
               'copying field labels or knowledge entries. Never replace these records with remembered or general product claims.',
           });
+          if (!productAction && WANTS_PRODUCT_INFO_PATTERN.test(userText)) {
+            turnContextMessages.push({
+              role: 'system',
+              content:
+                `The customer just confirmed that they want to know about the single selected product, ${selectedProduct.name}. ` +
+                'Answer with its relevant live details now. Do not repeat the question asking whether they want information or an order.',
+            });
+          }
+          if (!productAction && BENEFITS_AND_CAUTIONS_PATTERN.test(userText)) {
+            turnContextMessages.push({
+              role: 'system',
+              content:
+                'The customer asked for BOTH benefits and disadvantages. Give benefits once, then separately explain only the approved ' +
+                'warnings, contraindications, risks, or side effects in the live knowledge. Do not repeat benefits and do not invent a ' +
+                'disadvantage; if no approved downside exists, say that plainly and suggest following the approved directions.',
+            });
+          }
           if (productAction && actionProduct) {
             state.whatsAppProductContext = {
               productId: actionProduct.id,

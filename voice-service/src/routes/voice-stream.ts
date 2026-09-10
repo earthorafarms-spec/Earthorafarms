@@ -7,6 +7,7 @@ import { getCallSession, updateCallSessionState } from '../repositories/callSess
 import { splitSentences } from '../adapters/wav-utils.js';
 import { normalizeVoiceTranscript } from '../conversation/transcript.js';
 import { config } from '../config.js';
+import { getVoiceInputExpectation } from '../conversation/checkout-context.js';
 
 // Real-time voice over a continuous WebSocket stream — no push-to-talk.
 // Client streams raw PCM16 mono 16kHz audio the whole time the call is
@@ -103,21 +104,24 @@ export async function registerVoiceStreamRoutes(app: FastifyInstance): Promise<v
         sessionBusy = true;
         clearTimers(); // user is actively talking — cancel any inactivity sequence
         try {
-          // STT and session load are independent — run them in parallel so the
-          // slower one (STT, ~600ms) sets the total rather than summing both.
+          // Load state first so numeric checkout turns receive an exact input
+          // hint and a greeting cannot accidentally lock STT to Hindi.
           const stt = buildStt();
-          const [session, transcription] = await Promise.all([
-            getCallSession(sessionId),
-            stt.transcribe(pcm16ToWav(pcmUtterance), {
-              format: 'wav',
-              languageHint: undefined, // no hint — auto-detect is more accurate
-            }),
-          ]);
+          const session = await getCallSession(sessionId);
 
           if (!session) {
             send(socket, { type: 'error', message: 'unknown_session' });
             return;
           }
+
+          const expectedInput = getVoiceInputExpectation(session.conversationState);
+          const transcription = await stt.transcribe(pcm16ToWav(pcmUtterance), {
+            format: 'wav',
+            languageHint: session.conversationState.languageEstablished || expectedInput
+              ? session.conversationState.currentLanguage
+              : undefined,
+            expectedInput,
+          });
 
           const decision = normalizeVoiceTranscript(transcription);
           if (!decision.accepted) {

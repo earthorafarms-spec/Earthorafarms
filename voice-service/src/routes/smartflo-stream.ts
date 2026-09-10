@@ -19,6 +19,7 @@ import { AudioAccumulator, pcm16ToWav } from '../telephony/audio-accumulator.js'
 import { mulaw8kToPcm16k, wavToMulaw8k } from '../telephony/mulaw.js';
 import { config } from '../config.js';
 import type { VoiceTurnMetric } from '../conversation/state.js';
+import { getVoiceInputExpectation } from '../conversation/checkout-context.js';
 
 interface PlatformEvent {
   event?: 'connected' | 'start' | 'media' | 'stop' | 'dtmf' | 'mark';
@@ -388,10 +389,14 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
         currentLanguage = session.conversationState.currentLanguage;
 
         const sttStartedAt = Date.now();
+        const expectedInput = getVoiceInputExpectation(session.conversationState);
         const transcription = await withTimeout(
           buildStt().transcribe(pcm16ToWav(utterance.pcm), {
             format: 'wav',
-            languageHint: session.conversationState.currentLanguage,
+            languageHint: session.conversationState.languageEstablished || expectedInput
+              ? session.conversationState.currentLanguage
+              : undefined,
+            expectedInput,
           }),
           config.VOICE_STT_TIMEOUT_MS,
           'STT'

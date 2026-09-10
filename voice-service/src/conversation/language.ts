@@ -39,10 +39,13 @@ const ROMAN_HI_WORDS = new Set([
   'hai', 'hain', 'nahi', 'nahin', 'kya', 'kyun', 'kaise', 'kitna', 'kitne', 'kitni',
   'chahiye', 'mujhe', 'aap', 'aapka', 'aapki', 'karna', 'karo', 'batao', 'bataiye',
   'dijiye', 'accha', 'theek', 'haan', 'shukriya', 'dhanyavaad', 'kab', 'kahan',
+  'faayda', 'faayde', 'fayda', 'fayde', 'nuksan', 'keemat', 'kimat', 'daam',
 ]);
 const ROMAN_GU_WORDS = new Set([
   'che', 'chhe', 'nathi', 'shu', 'kem', 'keva', 'ketla', 'ketli', 'joie', 'jarur',
-  'mane', 'tamaru', 'tamne', 'saru', 'thay', 'pachi', 'malse', 'kya', 'haji',
+  'su', 'shun', 'mane', 'mare', 'tamaru', 'tamne', 'saru', 'thay', 'pachi', 'malse', 'kya', 'haji',
+  'janvu', 'jaanvu', 'janu', 'jaanu', 'kimat', 'kimmat', 'bhav', 'faayda', 'fayda',
+  'gerfaayda', 'gerfayda', 'nuksan', 'ma', 'ni', 'no', 'na',
 ]);
 
 // Field values must not change the language of the conversation. In real
@@ -56,6 +59,8 @@ const SPOKEN_DIGIT_TOKENS = new Set([
   'एक', 'दो', 'तीन', 'चार', 'पांच', 'पाँच', 'छह', 'छः', 'सात', 'आठ', 'नौ',
   'શૂન્ય', 'ઝીરો', 'વન', 'ટુ', 'ટૂ', 'થ્રી', 'ફોર', 'ફાઇવ', 'સિક્સ', 'સેવન', 'એટ', 'એઇટ', 'નાઇન',
   'એક', 'બે', 'ત્રણ', 'ચાર', 'પાંચ', 'છ', 'સાત', 'આઠ', 'નવ',
+  'shunya', 'sunya', 'ek', 'do', 'teen', 'tin', 'char', 'chaar', 'panch', 'paanch',
+  'chhah', 'chha', 'saat', 'sat', 'aath', 'ath', 'nau', 'be', 'tran', 'nav',
 ]);
 
 function isFieldValueOnly(text: string): boolean {

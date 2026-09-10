@@ -80,6 +80,8 @@ export interface ConversationState {
    * in the language the caller has actually been using, not a default.
    */
   currentLanguage: SupportedLanguage;
+  /** True after a non-greeting, non-field utterance confidently establishes the call language. */
+  languageEstablished?: boolean;
   /** WhatsApp only: product behind the current interactive card and its quantity prompt. */
   whatsAppProductContext?: {
     productId: string;
@@ -120,6 +122,7 @@ export function createInitialState(): ConversationState {
     turnCount: 0,
     currentTurnFacts: [],
     currentLanguage: 'en',
+    languageEstablished: false,
     voiceTurnMetrics: [],
   };
 }

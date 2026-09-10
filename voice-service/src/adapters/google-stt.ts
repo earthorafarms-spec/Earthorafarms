@@ -1,6 +1,5 @@
 import { config } from '../config.js';
-import { AdapterNotConfiguredError, type SttAdapter, type TranscriptionResult } from './types.js';
-import type { SupportedLanguage } from '../conversation/language.js';
+import { AdapterNotConfiguredError, type SttAdapter, type SttTranscriptionOptions, type TranscriptionResult } from './types.js';
 
 /**
  * Real interface, stub implementation. Google Cloud credentials are not
@@ -13,7 +12,7 @@ import type { SupportedLanguage } from '../conversation/language.js';
  * change either way.
  */
 export class GoogleSttAdapter implements SttAdapter {
-  async transcribe(_audio: Buffer, _opts?: { languageHint?: SupportedLanguage; format?: 'webm' | 'wav' }): Promise<TranscriptionResult> {
+  async transcribe(_audio: Buffer, _opts?: SttTranscriptionOptions): Promise<TranscriptionResult> {
     if (!config.googleSttTtsConfigured) {
       throw new AdapterNotConfiguredError(
         'GoogleSttAdapter',

@@ -1,6 +1,6 @@
 import { requireSarvamKeys, withSarvamClient } from './sarvam-client.js';
 import { config } from '../config.js';
-import type { SttAdapter, TranscriptionResult } from './types.js';
+import type { SttAdapter, SttTranscriptionOptions, TranscriptionResult } from './types.js';
 import type { SupportedLanguage } from '../conversation/language.js';
 
 // Verified against the installed `sarvamai` SDK's type definitions before
@@ -26,15 +26,21 @@ export class SarvamSttAdapter implements SttAdapter {
     requireSarvamKeys();
   }
 
-  async transcribe(audio: Buffer, opts?: { languageHint?: SupportedLanguage; format?: 'webm' | 'wav' }): Promise<TranscriptionResult> {
+  async transcribe(audio: Buffer, opts?: SttTranscriptionOptions): Promise<TranscriptionResult> {
     const format = opts?.format ?? 'webm';
     const contentType = format === 'wav' ? 'audio/wav' : 'audio/webm';
 
+    // Numeric turns are especially vulnerable to auto-language mistakes
+    // (for example Hindi "teen" being heard as another number). Once the
+    // conversation language is known, pin only those turns to that language.
+    const requestedCode = opts?.expectedInput && opts.languageHint
+      ? SUPPORTED_TO_BCP47[opts.languageHint]
+      : 'unknown';
     const response = await withSarvamClient((client, requestOptions) => client.speechToText.transcribe({
       file: { data: audio, filename: `utterance.${format}`, contentType },
       model: config.SARVAM_STT_MODEL,
       mode: 'transcribe',
-      language_code: 'unknown',
+      language_code: requestedCode,
     }, requestOptions), config.VOICE_STT_TIMEOUT_MS);
 
     const autoCode = response.language_code;
@@ -42,7 +48,7 @@ export class SarvamSttAdapter implements SttAdapter {
     const unsupportedLanguage = Boolean(autoCode && !BCP47_TO_SUPPORTED[autoCode]);
     const lowConfidence = probability !== undefined && probability < config.SARVAM_STT_MIN_LANGUAGE_PROBABILITY;
 
-    if (opts?.languageHint && !unsupportedLanguage && lowConfidence) {
+    if (!opts?.expectedInput && opts?.languageHint && !unsupportedLanguage && lowConfidence) {
       const languageHint = opts.languageHint;
       const retry = await withSarvamClient((client, requestOptions) => client.speechToText.transcribe({
         file: { data: audio, filename: `utterance.${format}`, contentType },
@@ -60,7 +66,7 @@ export class SarvamSttAdapter implements SttAdapter {
       };
     }
 
-    const detectedLanguage = autoCode ? BCP47_TO_SUPPORTED[autoCode] : undefined;
+    const detectedLanguage = autoCode ? BCP47_TO_SUPPORTED[autoCode] : opts?.languageHint;
 
     return {
       text: response.transcript,

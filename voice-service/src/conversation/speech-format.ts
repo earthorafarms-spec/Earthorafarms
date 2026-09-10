@@ -29,6 +29,8 @@ function expandLongDigitSequences(text: string, language: 'hi' | 'gu'): string {
 export function normalizeIndicSpeechText(text: string, language: SupportedLanguage): string {
   if (language === 'hi') {
     return expandLongDigitSequences(text, language)
+      .replace(/Morilife\+/giu, 'मोरीलाइफ प्लस')
+      .replace(/\(Tax Included\)/giu, 'टैक्स सहित')
       .replace(/करता\s+हूं/gu, 'करती हूँ')
       .replace(/करता\s+हूँ/gu, 'करती हूँ')
       .replace(/कर\s+दूँगा/gu, 'कर दूँगी')
@@ -42,6 +44,8 @@ export function normalizeIndicSpeechText(text: string, language: SupportedLangua
   }
   if (language === 'gu') {
     return expandLongDigitSequences(text, language)
+      .replace(/Morilife\+/giu, 'મોરીલાઇફ પ્લસ')
+      .replace(/\(Tax Included\)/giu, 'ટૅક્સ સહિત')
       .replace(/અમારા પાસે/gu, 'અમારી પાસે')
       .replace(/તમારા પાસે/gu, 'તમારી પાસે')
       .replace(/આ ટેબ્લેટ્સ એ (?=[઀-૿A-Za-z])/gu, 'આ ટેબ્લેટ્સ ');

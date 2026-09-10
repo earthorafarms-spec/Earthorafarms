@@ -36,4 +36,13 @@ describe('OpenAI phone transcription', () => {
     await new OpenAiSttAdapter().transcribe(Buffer.alloc(100), { languageHint: 'en' });
     expect(create).toHaveBeenCalledTimes(1);
   });
+
+  it('adds exact Hindi and Gujarati numeral context for a PIN turn', async () => {
+    create.mockResolvedValueOnce({ text: 'तीन आठ दो चार सात शून्य' });
+    await new OpenAiSttAdapter().transcribe(Buffer.alloc(100), {
+      languageHint: 'hi', expectedInput: 'postalCode',
+    });
+    expect(create.mock.calls[0][0].prompt).toMatch(/six-digit Indian PIN code/i);
+    expect(create.mock.calls[0][0].prompt).toContain('Hindi teen means 3');
+  });
 });

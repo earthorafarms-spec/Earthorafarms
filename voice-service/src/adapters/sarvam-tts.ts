@@ -3,7 +3,6 @@ import { requireSarvamKeys, withSarvamClient } from './sarvam-client.js';
 import { config } from '../config.js';
 import type { TtsAdapter } from './types.js';
 import type { SupportedLanguage } from '../conversation/language.js';
-import { splitSentences, stitchWavs } from './wav-utils.js';
 import { wavToMulaw8k } from '../telephony/mulaw.js';
 
 // bulbul:v3 (default model) returns `audios: string[]` — base64-encoded WAV.
@@ -27,9 +26,8 @@ const PACE_BY_LANGUAGE: Record<SupportedLanguage, number> = {
 };
 
 // Lower temperature = more stable/consistent output, fewer word-mixing
-// artifacts. Default is 0.6; 0.3 is the fix for garbled long replies.
-const TTS_TEMPERATURE = 0.3;
-const SILENCE_GAP_MS = 100;
+// artifacts. Default is 0.6; 0.1 keeps pronunciation and timbre stable.
+const TTS_TEMPERATURE = 0.1;
 
 function speakerForLanguage(language: SupportedLanguage): string {
   if (language === 'hi') return config.SARVAM_TTS_HINDI_SPEAKER;
@@ -50,6 +48,7 @@ export class SarvamTtsAdapter implements TtsAdapter {
       speaker: speakerForLanguage(language),
       pace: PACE_BY_LANGUAGE[language],
       temperature: TTS_TEMPERATURE,
+      enable_preprocessing: true,
       speech_sample_rate: 24000,
       output_audio_codec: 'wav',
     };
@@ -65,16 +64,10 @@ export class SarvamTtsAdapter implements TtsAdapter {
   async synthesize(text: string, language: SupportedLanguage): Promise<Buffer> {
     // bulbul:v3 caps at 2500 characters.
     const clipped = text.length > 2500 ? text.slice(0, 2500) : text;
-    const sentences = splitSentences(clipped);
-
-    if (sentences.length === 1) {
-      return this.synthesizeOne(sentences[0], language);
-    }
-
-    // Sarvam is more reliable per-sentence than on a long paragraph AND
-    // parallel calls cut total TTS time from (n × ~600ms) to ~600ms.
-    const wavBuffers = await Promise.all(sentences.map((s) => this.synthesizeOne(s, language)));
-    return stitchWavs(wavBuffers, SILENCE_GAP_MS);
+    // Generate the complete reply in one request. Separate sentence calls can
+    // produce small timbre/accent changes even with the same named speaker,
+    // which sounds like the agent changed voices in the middle of a reply.
+    return this.synthesizeOne(clipped, language);
   }
 
   async synthesizeMulaw8k(text: string, language: SupportedLanguage): Promise<Buffer> {

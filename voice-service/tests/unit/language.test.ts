@@ -39,6 +39,8 @@ describe('detectLanguageHint', () => {
   it('detects romanized Gujarati via common word list', () => {
     const hint = detectLanguageHint('a product ni kimat shu che ane ketla che');
     expect(hint).toContain('Gujarati');
+    expect(detectLanguage('kimmat su che product ni')).toBe('gu');
+    expect(detectLanguage('ha mare janvu che')).toBe('gu');
   });
 
   it('returns null for very short/ambiguous text', () => {

@@ -2,7 +2,7 @@ import OpenAI, { toFile } from 'openai';
 import { config } from '../config.js';
 import { detectLanguage } from '../conversation/language.js';
 import { normalizeVoiceTranscript } from '../conversation/transcript.js';
-import type { SttAdapter, TranscriptionResult } from './types.js';
+import type { SttAdapter, SttTranscriptionOptions, TranscriptionResult } from './types.js';
 import type { SupportedLanguage } from '../conversation/language.js';
 
 const LANGUAGE_CODES: Record<SupportedLanguage, string> = {
@@ -24,7 +24,7 @@ export class OpenAiSttAdapter implements SttAdapter {
 
   async transcribe(
     audio: Buffer,
-    opts?: { languageHint?: SupportedLanguage; format?: 'webm' | 'wav' }
+    opts?: SttTranscriptionOptions
   ): Promise<TranscriptionResult> {
     const format = opts?.format ?? 'webm';
     const contentType = format === 'wav' ? 'audio/wav' : 'audio/webm';
@@ -34,7 +34,9 @@ export class OpenAiSttAdapter implements SttAdapter {
       file,
       model: config.OPENAI_STT_MODEL,
       response_format: 'json' as const,
-      prompt: TRANSCRIPTION_CONTEXT[opts?.languageHint ?? 'en'],
+      prompt: `${TRANSCRIPTION_CONTEXT[opts?.languageHint ?? 'en']}${opts?.expectedInput
+        ? ` The caller is currently answering a ${opts.expectedInput === 'postalCode' ? 'six-digit Indian PIN code' : opts.expectedInput === 'phone' ? 'ten-digit mobile number' : 'product quantity'} question. Preserve each spoken number exactly; Hindi teen means 3, do means 2, and Gujarati tran means 3, be means 2. If the caller asks a different question, transcribe that normally.`
+        : ''}`,
     };
     let response = await this.client.audio.transcriptions.create(request, { timeout: config.VOICE_STT_TIMEOUT_MS });
     let wasRetried = false;

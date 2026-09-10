@@ -21,6 +21,14 @@ describe('checkout field validation', () => {
     expect(normalizeSpokenDigitSequence('customer7@example.com')).toBeNull();
   });
 
+  it('extracts an exact PIN or phone from natural Hindi, Gujarati, and Romanized phrases', () => {
+    expect(normalizeSpokenDigitSequence('मेरा पिन कोड तीन आठ दो चार सात शून्य है', 6)).toBe('382470');
+    expect(normalizeSpokenDigitSequence('મારો પિન કોડ ત્રણ આઠ બે ચાર સાત શૂન્ય છે', 6)).toBe('382470');
+    expect(normalizeSpokenDigitSequence('maro pin tran aath be char saat shunya che', 6)).toBe('382470');
+    expect(normalizeSpokenDigitSequence('my phone is nine eight seven six five four three two one zero', 10)).toBe('9876543210');
+    expect(normalizeSpokenDigitSequence('my PIN is 38447', 6)).toBeNull();
+  });
+
   it('requires exactly ten Indian mobile digits and six PIN-code digits', async () => {
     const state = createInitialState();
     const ctx = { callSessionId: 'test', state, channel: 'voice' as const, outboundActions: [] };
@@ -79,6 +87,19 @@ describe('checkout field validation', () => {
 
     expect(result).toMatchObject({ ok: true, city: 'Ahmedabad', state: 'Gujarat' });
     expect(state.checkoutFields).toMatchObject({ city: 'Ahmedabad', state: 'Gujarat' });
+  });
+
+  it('stores Hindi and Gujarati names and addresses in Latin script for the review form', async () => {
+    const state = createInitialState();
+    const ctx = { callSessionId: 'session-1', state };
+
+    await setCheckoutFieldTool.handler({ field: 'name', value: 'મનોજભાઈ પટેલ' }, ctx);
+    await setCheckoutFieldTool.handler({ field: 'address', value: 'शांति नगर मेन रोड' }, ctx);
+
+    expect(state.checkoutFields.name).toMatch(/^Manoj/i);
+    expect(state.checkoutFields.address).toMatch(/^Shanti Nagar/i);
+    expect(state.checkoutFields.name).not.toMatch(/[\u0900-\u097F\u0A80-\u0AFF]/u);
+    expect(state.checkoutFields.address).not.toMatch(/[\u0900-\u097F\u0A80-\u0AFF]/u);
   });
 
   it('asks the optional GST question before creating the form and accepts a decline', async () => {

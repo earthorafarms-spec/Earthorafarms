@@ -5,6 +5,7 @@ import { createCheckoutSession, findCheckoutSessionByTokenHash } from '../reposi
 import { upsertCheckoutItem } from '../repositories/checkoutItems.repository.js';
 import { sendWhatsAppCheckoutForm } from '../../../whatsapp-chatbot/provider.js';
 import { config } from '../config.js';
+import { transliterateCheckoutValue } from '../conversation/checkout-transliteration.js';
 
 const ALLOWED_FIELDS = [
   'name', 'email', 'phone', 'address', 'city', 'state', 'postalCode', 'country', 'gst', 'couponCode', 'marketingConsent',
@@ -19,6 +20,9 @@ const SPOKEN_DIGITS: Record<string, string> = {
   'एक': '1', 'दो': '2', 'तीन': '3', 'चार': '4', 'पांच': '5', 'पाँच': '5', 'छह': '6', 'छः': '6', 'सात': '7', 'आठ': '8', 'नौ': '9',
   'શૂન્ય': '0', 'ઝીરો': '0', 'વન': '1', 'ટુ': '2', 'ટૂ': '2', 'થ્રી': '3', 'ફોર': '4', 'ફાઇવ': '5', 'સિક્સ': '6', 'સેવન': '7', 'એટ': '8', 'એઇટ': '8', 'નાઇન': '9',
   'એક': '1', 'બે': '2', 'ત્રણ': '3', 'ચાર': '4', 'પાંચ': '5', 'છ': '6', 'સાત': '7', 'આઠ': '8', 'નવ': '9',
+  shunya: '0', sunya: '0', ek: '1', do: '2', teen: '3', tin: '3', char: '4', chaar: '4',
+  panch: '5', paanch: '5', chha: '6', chhah: '6', saat: '7', sat: '7', aath: '8', ath: '8',
+  nau: '9', be: '2', tran: '3', nav: '9',
 };
 
 function normalizeNativeDigits(raw: string): string {
@@ -27,17 +31,29 @@ function normalizeNativeDigits(raw: string): string {
 }
 
 /** Converts a caller/LLM-provided digit-by-digit sequence without guessing a missing digit. */
-export function normalizeSpokenDigitSequence(raw: string): string | null {
+export function normalizeSpokenDigitSequence(raw: string, expectedLength?: number): string | null {
   const normalized = normalizeNativeDigits(raw).toLowerCase().trim();
-  if (/^[\d\s().,+-]+$/.test(normalized)) return normalized.replace(/\D/g, '');
-  const tokens = normalized.match(/[a-z]+|[\u0900-\u097f]+|[\u0a80-\u0aff]+|\d/gu) ?? [];
+  if (/^[\d\s().,+-]+$/.test(normalized)) {
+    const digits = normalized.replace(/\D/g, '');
+    return expectedLength === undefined || digits.length === expectedLength ? digits : null;
+  }
+  if (/@|https?:\/\//u.test(normalized)) return null;
+  const tokens = normalized.match(/[a-z]+|[\u0900-\u097f]+|[\u0a80-\u0aff]+|\d+/gu) ?? [];
   if (tokens.length === 0) return null;
 
   // Treat this as a digit sequence only when every spoken token is a digit.
   // Otherwise an email such as "customer7@example.com" can be reduced to
   // "7" and incorrectly rejected as a partial phone number.
-  const digits = tokens.map((token) => /^\d$/.test(token) ? token : SPOKEN_DIGITS[token]);
-  return digits.every((digit): digit is string => Boolean(digit)) ? digits.join('') : null;
+  const mapped = tokens.map((token) => /^\d+$/u.test(token) ? token : SPOKEN_DIGITS[token]);
+  if (expectedLength === undefined) {
+    return mapped.every((digit): digit is string => Boolean(digit)) ? mapped.join('') : null;
+  }
+
+  // STT commonly returns a correct value inside a natural phrase, for example
+  // "my PIN is three eight two four seven zero". During a known numeric field
+  // we can safely ignore filler words, but only accept an exact-length result.
+  const digits = mapped.filter((digit): digit is string => Boolean(digit)).join('');
+  return digits.length === expectedLength ? digits : null;
 }
 
 export function normalizeWhatsAppPhone(raw: string): string | null {
@@ -106,7 +122,7 @@ function normalizeSpokenPlace(field: 'city' | 'state', rawValue: unknown): strin
       'madhya pradesh': 'Madhya Pradesh', 'मध्य प्रदेश': 'Madhya Pradesh',
       delhi: 'Delhi', 'दिल्ली': 'Delhi', 'દિલ્હી': 'Delhi',
     };
-    return stateAliases[key] ?? value;
+    return stateAliases[key] ?? transliterateCheckoutValue(value);
   }
 
   const cityAliases: Record<string, string> = {
@@ -115,7 +131,7 @@ function normalizeSpokenPlace(field: 'city' | 'state', rawValue: unknown): strin
     surat: 'Surat', 'सूरत': 'Surat', 'સુરત': 'Surat',
     vadodara: 'Vadodara', baroda: 'Vadodara', 'वडोदरा': 'Vadodara', 'વડોદરા': 'Vadodara',
   };
-  return cityAliases[key] ?? value;
+  return cityAliases[key] ?? transliterateCheckoutValue(value);
 }
 
 function normalizeAndValidate(field: AllowedField, rawValue: unknown): { value: unknown; error?: string } {
@@ -128,12 +144,14 @@ function normalizeAndValidate(field: AllowedField, rawValue: unknown): { value: 
   }
   const value = String(rawValue ?? '').trim();
   if (field === 'phone') {
-    const spokenDigits = normalizeSpokenDigitSequence(value);
+    const spokenDigits = normalizeSpokenDigitSequence(value, 10) ??
+      normalizeSpokenDigitSequence(value, 11) ??
+      normalizeSpokenDigitSequence(value, 12);
     const phone = normalizeWhatsAppPhone(spokenDigits ?? value);
     return phone ? { value: phone } : { value, error: 'Please provide a valid WhatsApp mobile number with country code if outside India.' };
   }
   if (field === 'postalCode') {
-    const postalCode = normalizeSpokenDigitSequence(value);
+    const postalCode = normalizeSpokenDigitSequence(value, 6);
     return postalCode && /^\d{6}$/.test(postalCode)
       ? { value: postalCode }
       : { value, error: 'Please provide an Indian PIN code with exactly 6 digits.' };
@@ -147,6 +165,13 @@ function normalizeAndValidate(field: AllowedField, rawValue: unknown): { value: 
   if (field === 'city' || field === 'state') {
     return { value: normalizeSpokenPlace(field, value) };
   }
+  if (field === 'name' || field === 'address') {
+    return { value: transliterateCheckoutValue(value) };
+  }
+  if (field === 'country') {
+    if (/^(?:india|भारत|ભારત)$/iu.test(value)) return { value: 'India' };
+    return { value: transliterateCheckoutValue(value) };
+  }
   if (field === 'email' && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
     return { value, error: "That doesn't look like a valid email address." };
   }
@@ -158,7 +183,8 @@ export const setCheckoutFieldTool: ToolModule = {
     name: 'set_checkout_field',
     description:
       'Records one checkout field the caller has provided. Call once per field, or a couple of ' +
-      'closely related address fields together.',
+      'closely related address fields together. Names and delivery addresses spoken in Hindi or Gujarati ' +
+      'are automatically stored in readable Latin/English script for the review form.',
     parameters: {
       type: 'object',
       properties: {
