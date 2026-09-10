@@ -89,7 +89,7 @@ export default function AdminOrders() {
 
   const fetchOrders = async () => {
     try {
-      const { data, error } = await supabase
+      const orderSelect = (includeTracking: boolean) => supabase
         .from("orders")
         .select(`
           id,
@@ -104,8 +104,7 @@ export default function AdminOrders() {
           customer_zip,
           customer_country,
           customer_gst,
-          tracking_url,
-          tracking_sent_at,
+          ${includeTracking ? "tracking_url, tracking_sent_at," : ""}
           status,
           total_amount,
           created_at,
@@ -124,6 +123,13 @@ export default function AdminOrders() {
           )
         `)
         .order("created_at", { ascending: false });
+
+      let { data, error } = await orderSelect(true);
+      // Keep the existing orders view usable while an older production
+      // database is waiting for the tracking migration to be applied.
+      if (error && /tracking_(url|sent_at).*does not exist/i.test(error.message || "")) {
+        ({ data, error } = await orderSelect(false));
+      }
 
       if (error) throw error;
 
