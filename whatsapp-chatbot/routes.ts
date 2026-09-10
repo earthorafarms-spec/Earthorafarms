@@ -101,7 +101,14 @@ function verifyTimeoutTick(req: FastifyRequest): boolean {
   return Boolean(supplied && constantTimeEqual(supplied, configuredSecret));
 }
 
-export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void> {
+/**
+ * Registers the server-to-server shipment route independently from the
+ * customer-facing WhatsApp webhook. Shipment updates only need outbound
+ * provider credentials, while the webhook additionally needs its callback
+ * secret. Keeping them separate prevents a missing callback setting from
+ * making an otherwise valid admin tracking update return a 404.
+ */
+export async function registerWhatsAppTrackingRoute(app: FastifyInstance): Promise<void> {
   // Server-to-server route used by the verified Supabase admin function. It
   // never exposes the provider credentials or accepts browser-originated
   // requests directly.
@@ -131,6 +138,10 @@ export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void
       return reply.status(502).send({ error: 'tracking_delivery_failed' });
     }
   });
+}
+
+export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void> {
+  await registerWhatsAppTrackingRoute(app);
 
   // External scheduler tick for WhatsApp inactivity timeout drain
   app.post('/whatsapp/timeout-tick', async (req, reply) => {

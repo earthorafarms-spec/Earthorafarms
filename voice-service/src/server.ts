@@ -19,7 +19,7 @@ import { registerSmartfloStreamRoutes } from './routes/smartflo-stream.js';
 import { registerCheckoutRoutes } from './routes/checkout.js';
 import { registerPaymentWebhookRoutes } from './routes/payment-webhook.js';
 import { registerInvoiceRoutes } from './routes/invoice.js';
-import { registerWhatsAppRoutes } from '../../whatsapp-chatbot/routes.js';
+import { registerWhatsAppRoutes, registerWhatsAppTrackingRoute } from '../../whatsapp-chatbot/routes.js';
 import { startWhatsAppWorker } from '../../whatsapp-chatbot/worker.js';
 
 const publicDirectory = path.resolve(process.cwd(), 'public');
@@ -79,9 +79,17 @@ export async function buildApp(options: BuildAppOptions = {}) {
     await registerCheckoutRoutes(app);
   }
 
+  const whatsappOutboundConfigured = config.WHATSAPP_PROVIDER === 'tata_omni'
+    ? Boolean(config.TATA_OMNI_ACCESS_TOKEN)
+    : Boolean(config.WHATSAPP_PHONE_NUMBER_ID && config.WHATSAPP_TOKEN);
+
   if (config.whatsappConfigured) {
     await registerWhatsAppRoutes(app);
     startWhatsAppWorker(app);
+  } else if (whatsappOutboundConfigured && config.WHATSAPP_INTERNAL_KEY) {
+    // Shipment tracking is an authenticated internal route. It must stay
+    // available even if inbound WhatsApp callbacks are not configured yet.
+    await registerWhatsAppTrackingRoute(app);
   } else if (mode === 'whatsapp') {
     throw new Error('WhatsApp-only service cannot start: provider configuration is incomplete');
   }
