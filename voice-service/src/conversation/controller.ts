@@ -128,6 +128,21 @@ function nextCheckoutQuestion(state: ConversationState): string | null {
   return questions[field]?.[language] ?? null;
 }
 
+function nextWhatsAppCheckoutQuestion(state: ConversationState): string | null {
+  const nextDeliveryQuestion = nextCheckoutQuestion(state);
+  if (nextDeliveryQuestion) return nextDeliveryQuestion;
+
+  if (Boolean(state.checkoutFields.country) && state.checkoutFields.gst === undefined) {
+    const questions: Record<ConversationState['currentLanguage'], string> = {
+      en: 'Do you have a GST number for a business tax invoice?',
+      hi: 'क्या आपके पास बिजनेस टैक्स इनवॉइस के लिए GST नंबर है?',
+      gu: 'શું તમારી પાસે બિઝનેસ ટેક્સ ઇનવોઇસ માટે GST નંબર છે?',
+    };
+    return questions[state.currentLanguage] ?? questions.en;
+  }
+  return null;
+}
+
 function looksLikeEmailAddress(text: string): boolean {
   const value = text.trim();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value) ||
@@ -664,6 +679,11 @@ const CHECKOUT_QUESTION_MATCHERS: {
     field: 'country',
     matches: (text) => /Is the delivery address in India\?|क्या डिलीवरी एड्रेस भारत में है\?|શું ડિલિવરી એડ્રેસ ભારતમાં છે\?/i.test(text),
     isActive: (state) => !state.checkoutFields.country,
+  },
+  {
+    field: 'gst',
+    matches: (text) => /Do you have a GST number for a business tax invoice\?|क्या आपके पास बिजनेस टैक्स इनवॉइस के लिए GST नंबर है\?|શું તમારી પાસે બિઝનેસ ટેક્સ ઇનવોઇસ માટે GST નંબર છે\?/i.test(text),
+    isActive: (state) => Boolean(state.checkoutFields.country) && state.checkoutFields.gst === undefined,
   },
 ];
 
@@ -1307,7 +1327,7 @@ export async function processTurn(
     }
 
     if (/^(?:checkout|check\s*out|चेकआउट|ચેકઆઉટ)$/iu.test(trimmed)) {
-      const currentQuestion = nextCheckoutQuestion(state);
+      const currentQuestion = nextWhatsAppCheckoutQuestion(state);
       if (currentQuestion) {
         state.messages.push({ role: 'assistant', content: currentQuestion });
         return { state, replyText: currentQuestion, policyViolations: [], outboundActions };
@@ -1374,6 +1394,24 @@ export async function processTurn(
           { field: 'country', value: isIndia ? 'India' : trimmed },
           toolContext
         );
+      } else if (activeCheckoutField === 'gst') {
+        const isDecline = /^(?:no|nah|nope|none|skip|don'?t have|don't have one|no gst|nahi|nathi|नहीं|ना|ના|નથી)[.!?]*$/iu.test(trimmed);
+        const isBareAffirmative = /^(?:yes|yeah|yep|हाँ|हां|હા)[.!?]*$/iu.test(trimmed);
+        if (isBareAffirmative) {
+          const prompt = state.currentLanguage === 'hi'
+            ? 'कृपया अपना GST नंबर शेयर करें, या आगे बढ़ने के लिए No लिखें।'
+            : state.currentLanguage === 'gu'
+              ? 'કૃપા કરીને તમારો GST નંબર આપો, અથવા આગળ વધવા માટે No લખો.'
+              : 'Please share your GST number for a business tax invoice, or reply No to skip.';
+          state.messages.push({ role: 'assistant', content: prompt });
+          return { state, replyText: prompt, policyViolations: [], outboundActions };
+        }
+        const gstMatch = trimmed.match(/\b([0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1})\b/i);
+        const gstValue = isDecline ? '' : (gstMatch ? gstMatch[1].toUpperCase() : trimmed.replace(/^(?:gst\s*(?:is|number|no\.?)?:?|my\s+gst\s*(?:is|number)?:?|yes[,:\s]+)/iu, '').trim());
+        toolResult = await toolsByName.set_checkout_field.handler(
+          { field: 'gst', value: gstValue },
+          toolContext
+        );
       }
 
       if (toolResult && typeof toolResult === 'object') {
@@ -1386,14 +1424,28 @@ export async function processTurn(
         });
 
         if (toolOk) {
-          const nextQuestion = nextCheckoutQuestion(state);
+          const nextQuestion = nextWhatsAppCheckoutQuestion(state);
           if (nextQuestion) {
             state.messages.push({ role: 'assistant', content: nextQuestion });
             return { state, replyText: nextQuestion, policyViolations: [], outboundActions };
           }
+          if (isCheckoutReady(state)) {
+            let delivery: unknown;
+            try {
+              delivery = await toolsByName.create_verification_link.handler({}, toolContext);
+            } catch {
+              delivery = { ok: false, reason: 'checkout_preparation_failed' };
+            }
+            const resultJson = JSON.stringify(delivery);
+            state.currentTurnFacts.push({ toolName: 'create_verification_link', resultJson });
+            const reviewUrl = outboundActions.find((action) => action.type === 'checkout_review')?.url;
+            const replyText = reviewFormReply((delivery as { ok?: boolean }).ok === true, state.currentLanguage, reviewUrl);
+            state.messages.push({ role: 'assistant', content: replyText });
+            return { state, replyText, policyViolations: [], outboundActions };
+          }
         } else {
           const errMsg = (toolResult as { message?: string }).message;
-          const currentQuestion = nextCheckoutQuestion(state);
+          const currentQuestion = nextWhatsAppCheckoutQuestion(state);
           const replyText = [errMsg, currentQuestion].filter(Boolean).join(' ');
           state.messages.push({ role: 'assistant', content: replyText });
           return { state, replyText, policyViolations: [], outboundActions };

@@ -18,6 +18,11 @@ vi.mock('../../src/repositories/products.repository.js', () => ({
   listActiveFestivalDeals: mocks.listDeals,
   getProductById: mocks.getProduct,
 }));
+vi.mock('../../src/repositories/knowledge.repository.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/repositories/knowledge.repository.js')>()),
+  getAllApprovedKnowledge: vi.fn().mockResolvedValue([]),
+  getApprovedKnowledge: vi.fn().mockResolvedValue([]),
+}));
 vi.mock('../../src/config.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../src/config.js')>();
   return { config: { ...actual.config, whatsappCheckoutConfigured: true } };
@@ -172,5 +177,93 @@ describe('conversation checkout regressions', () => {
     expect(mocks.chat).toHaveBeenCalledTimes(2);
     expect(result.replyText).toContain('मेरे पास');
     expect(result.replyText).not.toContain('Здравствуйте');
+  });
+
+  describe('WhatsApp deterministic GST checkout flow', () => {
+    beforeEach(() => {
+      mocks.listProducts.mockResolvedValue([
+        { id: 'alpha', name: 'Alpha', price: 90, status: 'active', stockLabel: 'In Stock' },
+      ]);
+      mocks.getProduct.mockResolvedValue({
+        id: 'alpha', name: 'Alpha', price: 90, found: true, stockLabel: 'In Stock', imageUrl: 'https://cdn.example.com/alpha.png',
+      });
+    });
+
+    it('returns GST question only and NO product card when user answers country with Yes', async () => {
+      const state = checkoutState();
+      delete state.checkoutFields.country;
+      state.messages.push({ role: 'assistant', content: 'Is the delivery address in India?' });
+
+      const result = await processTurn('flow', state, 'Yes', 'text');
+
+      expect(result.state.checkoutFields.country).toBe('India');
+      expect(result.state.checkoutFields.gst).toBeUndefined();
+      expect(result.replyText).toBe('Do you have a GST number for a business tax invoice?');
+      expect(result.productCard).toBeUndefined();
+      expect(result.productImage).toBeUndefined();
+      expect(mocks.chat).not.toHaveBeenCalled();
+    });
+
+    it('continues checkout to review form when GST is declined with No', async () => {
+      const state = checkoutState();
+      state.messages.push({ role: 'assistant', content: 'Do you have a GST number for a business tax invoice?' });
+
+      const result = await processTurn('flow', state, 'No', 'text');
+
+      expect(result.state.checkoutFields.gst).toBe('');
+      expect(result.replyText).toMatch(/order-review form is ready/i);
+      expect(result.outboundActions?.find((a) => a.type === 'checkout_review')).toBeDefined();
+      expect(result.productCard).toBeUndefined();
+      expect(result.productImage).toBeUndefined();
+      expect(mocks.chat).not.toHaveBeenCalled();
+    });
+
+    it('continues checkout to review form when valid GST number is provided', async () => {
+      const state = checkoutState();
+      state.messages.push({ role: 'assistant', content: 'Do you have a GST number for a business tax invoice?' });
+
+      const result = await processTurn('flow', state, '27ABCDE1234F1Z5', 'text');
+
+      expect(result.state.checkoutFields.gst).toBe('27ABCDE1234F1Z5');
+      expect(result.replyText).toMatch(/order-review form is ready/i);
+      expect(result.outboundActions?.find((a) => a.type === 'checkout_review')).toBeDefined();
+      expect(result.productCard).toBeUndefined();
+      expect(result.productImage).toBeUndefined();
+      expect(mocks.chat).not.toHaveBeenCalled();
+    });
+
+    it('prompts for GST number and does not resolve to a product card when answering Yes while awaiting GST', async () => {
+      const state = checkoutState();
+      state.messages.push({ role: 'assistant', content: 'Do you have a GST number for a business tax invoice?' });
+
+      const result = await processTurn('flow', state, 'Yes', 'text');
+
+      expect(result.replyText).toContain('Please share your GST number for a business tax invoice, or reply No to skip.');
+      expect(result.state.checkoutFields.gst).toBeUndefined();
+      expect(result.productCard).toBeUndefined();
+      expect(result.productImage).toBeUndefined();
+      expect(mocks.chat).not.toHaveBeenCalled();
+    });
+
+    it('allows normal product browsing/card flow outside of checkout', async () => {
+      mocks.listProducts.mockResolvedValue([
+        { id: 'alpha', name: 'Alpha', price: 90, status: 'active', stockLabel: 'In Stock', description: 'Alpha description' },
+      ]);
+      mocks.getProduct.mockResolvedValue({
+        id: 'alpha', name: 'Alpha', price: 90, mrp: 100, stockLabel: 'In Stock',
+        description: 'Alpha description', imageUrl: 'https://cdn.example.com/alpha.png',
+      });
+      const state = createInitialState();
+      state.messages.push({
+        role: 'assistant',
+        content: '1. Alpha — ₹90 (Tax Included) — In Stock\n\nReply with the product number.\nTo return to the main menu, type Menu.',
+      });
+      mocks.chat.mockResolvedValueOnce({ kind: 'message', content: 'Here is information on Alpha.' });
+
+      const result = await processTurn('flow', state, '1', 'text');
+
+      expect(result.productCard).toBeDefined();
+      expect(result.productCard?.productId).toBe('alpha');
+    });
   });
 });
