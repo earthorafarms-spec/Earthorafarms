@@ -17,7 +17,7 @@ export interface CreatePaymentLinkResult {
  * Razorpay Payment Links API — a different endpoint/payload shape than the
  * Orders API used by ../../netlify/functions/create-razorpay-order.mjs (that
  * function powers the OLD checkout.js-modal flow; this one is for the
- * email-a-link voice flow). Same Basic-auth style, different surface.
+ * browser-redirect voice flow). Same Basic-auth style, different surface.
  */
 export async function createPaymentLink(input: CreatePaymentLinkInput): Promise<CreatePaymentLinkResult> {
   const authHeader = 'Basic ' + Buffer.from(`${config.RAZORPAY_KEY_ID}:${config.RAZORPAY_KEY_SECRET}`).toString('base64');
@@ -31,8 +31,10 @@ export async function createPaymentLink(input: CreatePaymentLinkInput): Promise<
       reference_id: input.referenceId,
       description: 'Earthora Farms order',
       customer: input.customer,
-      notify: { sms: true, email: true },
-      reminder_enable: true,
+      // The review page immediately redirects the customer to this URL.
+      // Do not send a duplicate payment link through Razorpay SMS/email.
+      notify: { sms: false, email: false },
+      reminder_enable: false,
       callback_url: input.callbackUrl,
       callback_method: 'get',
       // Partial payment must stay disabled — the finalizer asserts an exact

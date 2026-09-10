@@ -23,6 +23,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/voice/*"
+  to = "https://earthorafarms-mhwv.onrender.com/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

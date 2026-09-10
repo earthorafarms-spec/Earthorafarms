@@ -23,6 +23,14 @@ async function resolveSession(rawToken: string): Promise<
   return { ok: true, session };
 }
 
+async function findSession(rawToken: string): Promise<CheckoutSessionRow | null> {
+  return findCheckoutSessionByTokenHash(hashToken(rawToken));
+}
+
+function publicOrderNumber(orderId: string | null): string | null {
+  return orderId ? `ORD-${orderId.slice(0, 8).toUpperCase()}` : null;
+}
+
 async function itemsWithNames(checkoutSessionId: string) {
   const [items, products] = await Promise.all([listCheckoutItems(checkoutSessionId), listActiveProducts()]);
   const byId = new Map(products.map((p) => [p.id, p]));
@@ -36,10 +44,13 @@ async function itemsWithNames(checkoutSessionId: string) {
 
 export async function registerCheckoutRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { token: string } }>('/checkout/:token', async (req, reply) => {
-    const resolved = await resolveSession(req.params.token);
-    if (!resolved.ok) return reply.status(404).send({ error: resolved.reason });
-
-    const { session } = resolved;
+    const session = await findSession(req.params.token);
+    if (!session) return reply.status(404).send({ error: 'not_found' });
+    // A paid order remains readable after the short review/edit window ends,
+    // while expired unpaid links remain unusable.
+    if (new Date(session.tokenExpiresAt).getTime() < Date.now() && session.status !== 'order_created') {
+      return reply.status(404).send({ error: 'expired' });
+    }
     const items = await itemsWithNames(session.id);
 
     // Never return internal IDs beyond the opaque session shape the form needs.
@@ -53,6 +64,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance): Promise<void
       items,
       pricing: session.frozenPricing,
       tokenExpiresAt: session.tokenExpiresAt,
+      orderNumber: session.status === 'order_created' ? publicOrderNumber(session.orderId) : null,
     });
   });
 
@@ -198,13 +210,15 @@ export async function registerCheckoutRoutes(app: FastifyInstance): Promise<void
   });
 
   app.get<{ Params: { token: string } }>('/checkout/:token/status', async (req, reply) => {
-    const resolved = await resolveSession(req.params.token);
-    if (!resolved.ok) return reply.status(404).send({ error: resolved.reason });
-    const { session } = resolved;
+    // Payment may finish after the review token's edit window. The opaque
+    // token may still read status, but every mutating endpoint above keeps
+    // enforcing expiry and state locks.
+    const session = await findSession(req.params.token);
+    if (!session) return reply.status(404).send({ error: 'not_found' });
 
     return reply.send({
       status: session.status,
-      orderNumber: session.status === 'order_created' ? session.orderId : null,
+      orderNumber: session.status === 'order_created' ? publicOrderNumber(session.orderId) : null,
     });
   });
 }

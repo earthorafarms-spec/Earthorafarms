@@ -91,6 +91,9 @@ const optionalSchema = z.object({
   // existing send-invoice function after a voice order finalizes. Optional —
   // if unset, invoices can still be resent manually from the admin portal.
   MAIN_APP_NETLIFY_URL: z.string().url().optional(),
+  // Optional shared secret for authenticated server-to-server calls to the
+  // storefront's invoice function.
+  NETLIFY_INTERNAL_KEY: z.string().optional(),
 
   // Outbound checkout delivery can use either Meta Cloud directly or Tata
   // Omni, which fronts the same WhatsApp channel with its own API and token.
@@ -111,6 +114,11 @@ const optionalSchema = z.object({
   // contain one body text parameter: the secure review-form URL.
   WHATSAPP_CHECKOUT_TEMPLATE_NAME: z.string().optional(),
   WHATSAPP_CHECKOUT_TEMPLATE_LANGUAGE: z.string().default('en'),
+  // Optional approved utility template with a PDF document header and two
+  // body text parameters: order number and paid amount. If absent, the
+  // provider attempts a normal document message in an open service window.
+  WHATSAPP_INVOICE_TEMPLATE_NAME: z.string().optional(),
+  WHATSAPP_INVOICE_TEMPLATE_LANGUAGE: z.string().default('en'),
 
   // Tata SmartFlow SMS — same credentials as the send-sms-alert Supabase Edge
   // function. All three must be set for SMS delivery to work; if any is absent,

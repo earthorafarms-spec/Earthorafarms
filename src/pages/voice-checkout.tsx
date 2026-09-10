@@ -29,8 +29,20 @@ export default function VoiceCheckout({ params }: VoiceCheckoutProps) {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    if (query.has('razorpay_payment_link_id') || query.has('razorpay_payment_id')) {
+      // The payment-return effect below owns this state. Avoid racing it with
+      // the normal review-form loader, which may see an expired edit window.
+      setView('polling');
+      return;
+    }
     fetchVoiceCheckoutSession(token)
       .then((s) => {
+        if (s.status === 'order_created') {
+          setOrderNumber(s.orderNumber ?? null);
+          setView('success');
+          return;
+        }
         setSession(s);
         setItems(s.items);
         setView('edit');
@@ -175,10 +187,10 @@ export default function VoiceCheckout({ params }: VoiceCheckoutProps) {
         <div className="w-16 h-16 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
           <CheckCircle2 className="w-8 h-8 text-emerald-400" />
         </div>
-        <h1 className="font-dm text-2xl">Payment confirmed!</h1>
-        {orderNumber && <p className="text-sm text-white/50">Order #{orderNumber.slice(0, 12)}</p>}
+        <h1 className="font-dm text-2xl">Your order has been placed</h1>
+        {orderNumber && <p className="text-sm text-white/50">Order #{orderNumber}</p>}
         <p className="text-sm text-white/60 max-w-sm">
-          Thank you for your order — a confirmation and invoice will arrive by email shortly.
+          Thank you for your order. Your bill will be sent to your WhatsApp number shortly, and tracking details will be shared as soon as your order is dispatched.
         </p>
         <a href="/" className="mt-4 inline-flex items-center gap-2 bg-white text-black px-6 py-3 rounded-xl text-sm font-medium">
           <Leaf className="w-4 h-4" /> Back to Earthora Farms

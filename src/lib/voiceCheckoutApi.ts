@@ -55,6 +55,7 @@ export interface VoiceCheckoutSession {
   items: VoiceCheckoutItem[];
   pricing: VoiceCheckoutPricing | null;
   tokenExpiresAt: string;
+  orderNumber?: string | null;
 }
 
 function assertConfigured() {

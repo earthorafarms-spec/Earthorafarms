@@ -3,6 +3,8 @@ import {
   buildCheckoutTemplatePayload,
   buildMetaProductCardPayload,
   buildTataOmniImagePayload,
+  buildTataOmniDocumentPayload,
+  buildInvoiceTemplatePayload,
   buildTataOmniProductCardPayload,
   buildTataOmniTextPayload,
 } from '../../../whatsapp-chatbot/provider.js';
@@ -48,6 +50,27 @@ describe('WhatsApp checkout template payload', () => {
       type: 'image',
       source: 'external',
       image: { link: 'https://cdn.example.com/product.png', caption: 'Morilife+' },
+    });
+  });
+
+  it('builds a PDF bill document and utility-template payload', () => {
+    const documentUrl = 'https://earthorafarms.com/api/voice/payments/invoice/plink_1?signature=abc';
+    expect(buildTataOmniDocumentPayload(
+      '919876543210', documentUrl, 'Tax_Invoice_ORD-123.pdf', 'Paid invoice',
+    )).toEqual({
+      to: '+919876543210', type: 'document', source: 'external',
+      document: { link: documentUrl, filename: 'Tax_Invoice_ORD-123.pdf', caption: 'Paid invoice' },
+    });
+    expect(buildInvoiceTemplatePayload(
+      '919876543210', documentUrl, 'Tax_Invoice_ORD-123.pdf', 'ORD-123', 'INR 799.00',
+    )).toMatchObject({
+      to: '+919876543210', type: 'template', source: 'external',
+      template: {
+        components: [
+          { type: 'header', parameters: [{ type: 'document', document: { link: documentUrl } }] },
+          { type: 'body', parameters: [{ type: 'text', text: 'ORD-123' }, { type: 'text', text: 'INR 799.00' }] },
+        ],
+      },
     });
   });
 

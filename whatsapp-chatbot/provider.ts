@@ -91,6 +91,50 @@ export function buildTataOmniImagePayload(
   };
 }
 
+export function buildTataOmniDocumentPayload(
+  to: string,
+  documentUrl: string,
+  filename: string,
+  caption: string,
+): Record<string, unknown> {
+  const phone = to.startsWith('+') ? to : `+${to}`;
+  return {
+    to: phone,
+    type: 'document',
+    source: 'external',
+    document: { link: documentUrl, filename, caption },
+  };
+}
+
+export function buildInvoiceTemplatePayload(
+  to: string,
+  documentUrl: string,
+  filename: string,
+  orderNumber: string,
+  paidAmount: string,
+): Record<string, unknown> {
+  const phone = to.startsWith('+') ? to : `+${to}`;
+  return {
+    to: phone,
+    type: 'template',
+    source: 'external',
+    template: {
+      name: config.WHATSAPP_INVOICE_TEMPLATE_NAME,
+      language: { code: config.WHATSAPP_INVOICE_TEMPLATE_LANGUAGE },
+      components: [
+        {
+          type: 'header',
+          parameters: [{ type: 'document', document: { link: documentUrl, filename } }],
+        },
+        {
+          type: 'body',
+          parameters: [{ type: 'text', text: orderNumber }, { type: 'text', text: paidAmount }],
+        },
+      ],
+    },
+  };
+}
+
 function productCardInteractive(card: WhatsAppProductCard): Record<string, unknown> {
   const hasValidImage = typeof card.imageUrl === 'string' && /^https:\/\//i.test(card.imageUrl);
   const buttons = Array.isArray(card.buttons) && card.buttons.length > 0
@@ -184,6 +228,50 @@ export async function sendWhatsAppImage(to: string, imageUrl: string, caption?: 
     to: phone,
     type: 'image',
     image: { link: imageUrl, ...(caption ? { caption } : {}) },
+  });
+}
+
+/** Sends the verified paid-order invoice as a PDF document. */
+export async function sendWhatsAppInvoice(
+  to: string,
+  documentUrl: string,
+  filename: string,
+  orderNumber: string,
+  paidAmount: string,
+): Promise<void> {
+  if (!/^https:\/\//i.test(documentUrl)) throw new Error('WhatsApp invoice URL must use HTTPS');
+  const caption = `Earthora Farms bill for order ${orderNumber}. Paid amount: ${paidAmount}.`;
+
+  if (config.WHATSAPP_PROVIDER === 'tata_omni') {
+    if (!config.TATA_OMNI_ACCESS_TOKEN) throw new Error('Tata Omni WhatsApp delivery is not configured');
+    const payload = config.WHATSAPP_INVOICE_TEMPLATE_NAME
+      ? buildInvoiceTemplatePayload(to, documentUrl, filename, orderNumber, paidAmount)
+      : buildTataOmniDocumentPayload(to, documentUrl, filename, caption);
+    const url = `${config.TATA_OMNI_API_BASE_URL.replace(/\/$/, '')}/whatsapp-cloud/messages`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: config.TATA_OMNI_ACCESS_TOKEN },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) throw new WhatsAppDeliveryError(res.status);
+    return;
+  }
+
+  const phone = to.startsWith('+') ? to.slice(1) : to;
+  if (config.WHATSAPP_INVOICE_TEMPLATE_NAME) {
+    const payload = buildInvoiceTemplatePayload(phone, documentUrl, filename, orderNumber, paidAmount);
+    delete (payload as { source?: string }).source;
+    Object.assign(payload, { messaging_product: 'whatsapp', recipient_type: 'individual', to: phone });
+    await sendWhatsAppPayload(payload);
+    return;
+  }
+  await sendWhatsAppPayload({
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: phone,
+    type: 'document',
+    document: { link: documentUrl, filename, caption },
   });
 }
 

@@ -18,6 +18,7 @@ import { registerVoiceStreamRoutes } from './routes/voice-stream.js';
 import { registerSmartfloStreamRoutes } from './routes/smartflo-stream.js';
 import { registerCheckoutRoutes } from './routes/checkout.js';
 import { registerPaymentWebhookRoutes } from './routes/payment-webhook.js';
+import { registerInvoiceRoutes } from './routes/invoice.js';
 import { registerWhatsAppRoutes } from '../../whatsapp-chatbot/routes.js';
 import { startWhatsAppWorker } from '../../whatsapp-chatbot/worker.js';
 
@@ -70,6 +71,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
     // Payment webhook route is registered before any other body-parsing route
     // so Razorpay signatures are always checked against the exact bytes.
     await registerPaymentWebhookRoutes(app);
+    await registerInvoiceRoutes(app);
     await app.register(websocket);
     await registerVoiceRoutes(app);
     await registerVoiceStreamRoutes(app);

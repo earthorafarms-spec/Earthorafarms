@@ -57,6 +57,10 @@ services:
         sync: false
       - key: WHATSAPP_CHECKOUT_TEMPLATE_LANGUAGE
         value: en
+      - key: WHATSAPP_INVOICE_TEMPLATE_NAME
+        sync: false
+      - key: WHATSAPP_INVOICE_TEMPLATE_LANGUAGE
+        value: en
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET
@@ -73,6 +77,8 @@ services:
         sync: false
       - key: MAIN_APP_NETLIFY_URL
         sync: false     # same as PUBLIC_APP_URL — used to fire invoice emails
+      - key: NETLIFY_INTERNAL_KEY
+        sync: false
 
   # Text WhatsApp agent. Do not point the same number's callbacks at both agents.
   # Apply the WhatsApp integration migration and deploy the admin Edge Function first.
