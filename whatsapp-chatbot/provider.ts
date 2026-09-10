@@ -369,9 +369,14 @@ export async function sendWhatsAppTrackingUpdate(
 
   if (config.WHATSAPP_PROVIDER === 'tata_omni') {
     if (!config.TATA_OMNI_ACCESS_TOKEN) throw new Error('Tata Omni WhatsApp delivery is not configured');
-    const payload = config.WHATSAPP_TRACKING_TEMPLATE_NAME
-      ? buildTrackingTemplatePayload(to, orderNumber, trackingUrl)
-      : buildTataOmniTextPayload(to, message);
+    // Shipment notifications are usually sent after WhatsApp's 24-hour
+    // customer-service window. A plain text message can be accepted by the
+    // provider but never reach the customer, so fail explicitly instead of
+    // recording a false "tracking sent" result.
+    if (!config.WHATSAPP_TRACKING_TEMPLATE_NAME) {
+      throw new Error('An approved WhatsApp tracking template is required before tracking updates can be delivered');
+    }
+    const payload = buildTrackingTemplatePayload(to, orderNumber, trackingUrl);
     const url = `${config.TATA_OMNI_API_BASE_URL.replace(/\/$/, '')}/whatsapp-cloud/messages`;
     const res = await fetch(url, {
       method: 'POST',
