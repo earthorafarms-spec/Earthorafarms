@@ -36,6 +36,12 @@ Manual Render settings:
 - Health check: `/health`
 - Plan: Free (trial only)
 
+For admin shipment notifications, also set `WHATSAPP_INTERNAL_KEY` on this
+service and set the same value as the Supabase secret. Configure
+`WHATSAPP_TRACKING_TEMPLATE_NAME` with an approved two-parameter utility
+template (order number, tracking URL) when updates may be sent outside the
+24-hour WhatsApp service window.
+
 Copy the secret environment values from an authorized password manager or
 configure fresh values. Never commit them. `TOKEN_SIGNING_SECRET`, Supabase,
 provider, and checkout-related values must match the existing production flow.

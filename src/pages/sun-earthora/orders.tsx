@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Filter, ChevronRight, Clock, RefreshCw, PackageOpen, Plus, User, Package, X, Check, Minus, Mail, Phone, Building, MapPin } from "lucide-react";
+import { Search, Filter, ChevronRight, Clock, RefreshCw, PackageOpen, Plus, User, Package, X, Check, Minus, Mail, Phone, Building, MapPin, Link2, Send } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
@@ -51,6 +51,8 @@ export default function AdminOrders() {
   const [availableProducts, setAvailableProducts] = useState<ProductItem[]>([]);
   const [creatingOrder, setCreatingOrder] = useState(false);
   const [activeStatusMenuId, setActiveStatusMenuId] = useState<string | null>(null);
+  const [trackingLinkDraft, setTrackingLinkDraft] = useState("");
+  const [sendingTrackingId, setSendingTrackingId] = useState<string | null>(null);
   const { toast } = useToast();
 
   // New offline order form state — taking all checkout fields including GST Number
@@ -102,6 +104,8 @@ export default function AdminOrders() {
           customer_zip,
           customer_country,
           customer_gst,
+          tracking_url,
+          tracking_sent_at,
           status,
           total_amount,
           created_at,
@@ -155,6 +159,8 @@ export default function AdminOrders() {
           zip: shipping.zip || shipping.postalCode || o.customer_zip || "",
           country: shipping.country || o.customer_country || "India",
           gstNumber: shipping.gst || o.customer_gst || shipping.gstNumber || "",
+          trackingUrl: o.tracking_url || "",
+          trackingSentAt: o.tracking_sent_at || null,
           items: itemsCount,
           itemsList,
           total: Number(o.total_amount || 0),
@@ -227,6 +233,35 @@ export default function AdminOrders() {
       toast({ title: "Update failed", description: err.message, variant: "destructive" });
     } finally {
       setUpdatingId(null);
+    }
+  };
+
+  const sendTrackingUpdate = async () => {
+    if (!selectedOrder) return;
+    const trackingUrl = trackingLinkDraft.trim();
+    if (!/^https?:\/\//i.test(trackingUrl)) {
+      toast({ title: "Invalid tracking link", description: "Enter a complete HTTP(S) courier tracking URL.", variant: "destructive" });
+      return;
+    }
+
+    setSendingTrackingId(selectedOrder.id);
+    try {
+      const { data, error } = await supabase.functions.invoke("send-order-tracking", {
+        body: { orderId: selectedOrder.id, trackingUrl },
+        headers: { "x-admin-password": sessionStorage.getItem("admin_password") || "" },
+      });
+      if (error || data?.ok !== true) throw error || new Error(data?.error || "Tracking delivery failed");
+
+      const sentAt = data.trackingSentAt || new Date().toISOString();
+      const update = { trackingUrl, trackingSentAt: sentAt };
+      setOrders((prev) => prev.map((o) => o.id === selectedOrder.id ? { ...o, ...update } : o));
+      setFiltered((prev) => prev.map((o) => o.id === selectedOrder.id ? { ...o, ...update } : o));
+      setSelectedOrder((prev: any) => prev ? { ...prev, ...update } : prev);
+      toast({ title: "Tracking sent", description: "The tracking link was saved and sent to the customer on WhatsApp." });
+    } catch (err: any) {
+      toast({ title: "Tracking not sent", description: err.message || "Could not deliver the tracking link.", variant: "destructive" });
+    } finally {
+      setSendingTrackingId(null);
     }
   };
 
@@ -432,7 +467,7 @@ export default function AdminOrders() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: i * 0.04 }}
                 className="bg-white rounded-2xl border border-border/40 p-5 hover:border-primary/20 shadow-sm hover:shadow-[0_8px_30px_rgb(0,0,0,0.03)] transition-all duration-300 flex flex-col md:flex-row md:items-center justify-between gap-4 group/ord cursor-pointer relative"
-                onClick={() => setSelectedOrder(order)}
+                onClick={() => { setSelectedOrder(order); setTrackingLinkDraft(order.trackingUrl || ""); }}
               >
                 <div className="flex items-center gap-4 min-w-0">
                   <div className="w-10 h-10 rounded-full bg-primary/5 flex items-center justify-center text-xs font-bold text-primary border border-primary/10 shrink-0 group-hover/ord:bg-primary group-hover/ord:text-white transition-colors duration-300">
@@ -470,6 +505,27 @@ export default function AdminOrders() {
                       {order.items} unit{order.items !== 1 ? "s" : ""}
                     </p>
                   </div>
+
+                  {order.trackingSentAt && (
+                    <span className="hidden lg:inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1">
+                      <Link2 className="w-3 h-3" /> Tracking sent
+                    </span>
+                  )}
+
+                  <button
+                    type="button"
+                    disabled={!order.phone}
+                    title={order.phone ? "Add or update WhatsApp tracking" : "No WhatsApp phone number on this order"}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedOrder(order);
+                      setTrackingLinkDraft(order.trackingUrl || "");
+                    }}
+                    className="hidden sm:inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-sky-200 text-[10px] font-semibold text-sky-700 hover:bg-sky-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    <Link2 className="w-3 h-3" />
+                    {order.trackingSentAt ? "Update tracking" : "Add tracking"}
+                  </button>
 
                   <div className="text-left md:text-right">
                     <p className="text-xs text-foreground/45 font-medium">Total</p>
@@ -964,6 +1020,50 @@ export default function AdminOrders() {
                       </div>
                     ))}
                   </div>
+                </div>
+
+                {/* Shipment Tracking */}
+                <div className="bg-sky-50/60 p-4 rounded-2xl border border-sky-100 space-y-3">
+                  <h3 className="text-xs uppercase tracking-wider font-bold text-sky-800/70 flex items-center gap-2">
+                    <Link2 className="w-3.5 h-3.5 text-sky-600" />
+                    Shipment Tracking
+                  </h3>
+                  <p className="text-[11px] text-foreground/50">
+                    Save the courier link and send it to the customer&apos;s WhatsApp number.
+                    {selectedOrder.trackingSentAt ? " You can send an updated link again." : ""}
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="url"
+                      value={trackingLinkDraft}
+                      onChange={(e) => setTrackingLinkDraft(e.target.value)}
+                      placeholder="https://courier.example/track/..."
+                      className="flex-1 h-10 px-3 text-xs bg-white border border-sky-200 rounded-xl outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                    />
+                    <button
+                      type="button"
+                      onClick={sendTrackingUpdate}
+                      disabled={sendingTrackingId === selectedOrder.id || !selectedOrder.phone}
+                      className="h-10 px-4 rounded-xl bg-sky-700 text-white text-xs font-semibold hover:bg-sky-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shrink-0"
+                    >
+                      {sendingTrackingId === selectedOrder.id
+                        ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        : <Send className="w-3.5 h-3.5" />}
+                      {selectedOrder.trackingSentAt ? "Send Again" : "Save & Send"}
+                    </button>
+                  </div>
+                  {!selectedOrder.phone && <p className="text-[11px] text-rose-600">No WhatsApp phone number is saved for this order.</p>}
+                  {selectedOrder.trackingSentAt && selectedOrder.trackingUrl && (
+                    <a
+                      href={selectedOrder.trackingUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-[11px] text-sky-700 underline underline-offset-2 break-all"
+                    >
+                      {selectedOrder.trackingUrl}
+                    </a>
+                  )}
                 </div>
 
                 {/* Financial Summary */}

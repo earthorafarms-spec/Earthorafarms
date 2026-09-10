@@ -114,12 +114,20 @@ const optionalSchema = z.object({
   // contain one body text parameter: the secure review-form URL.
   WHATSAPP_CHECKOUT_TEMPLATE_NAME: z.string().optional(),
   WHATSAPP_CHECKOUT_TEMPLATE_LANGUAGE: z.string().default('en'),
+  // Approved utility template used when an admin sends a shipment tracking
+  // update outside an open WhatsApp customer-service window. It should have
+  // two body placeholders: order number and tracking URL.
+  WHATSAPP_TRACKING_TEMPLATE_NAME: z.string().optional(),
+  WHATSAPP_TRACKING_TEMPLATE_LANGUAGE: z.string().default('en'),
   // Optional approved utility template with a PDF document header and two
   // body text parameters: order number and paid amount. If absent, the
   // provider attempts a normal document message in an open service window.
   WHATSAPP_INVOICE_TEMPLATE_NAME: z.string().optional(),
   WHATSAPP_INVOICE_TEMPLATE_LANGUAGE: z.string().default('en'),
   WHATSAPP_TIMEOUT_TICK_SECRET: z.string().optional(),
+  // Shared secret used only by the Supabase admin function to request an
+  // outbound shipment update from the WhatsApp service.
+  WHATSAPP_INTERNAL_KEY: z.string().min(16).optional(),
 
   // Tata SmartFlow SMS — same credentials as the send-sms-alert Supabase Edge
   // function. All three must be set for SMS delivery to work; if any is absent,

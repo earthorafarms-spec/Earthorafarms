@@ -5,6 +5,7 @@ import { extractWhatsAppInboundMessages } from './inbound.js';
 import { enqueueWhatsAppMessage } from './events.repository.js';
 import { drainExpiredFlowTimeouts, wakeWhatsAppWorker } from './worker.js';
 import { getLastWhatsAppDiagnostic, recordWhatsAppDiagnostic } from './diagnostics.js';
+import { sendWhatsAppTrackingUpdate } from './provider.js';
 
 function describePayloadShape(value: unknown, depth = 0): unknown {
   if (value === null) return 'null';
@@ -101,6 +102,36 @@ function verifyTimeoutTick(req: FastifyRequest): boolean {
 }
 
 export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void> {
+  // Server-to-server route used by the verified Supabase admin function. It
+  // never exposes the provider credentials or accepts browser-originated
+  // requests directly.
+  app.post('/whatsapp/admin/tracking', async (req, reply) => {
+    const configuredKey = config.WHATSAPP_INTERNAL_KEY;
+    const suppliedKey = req.headers['x-whatsapp-internal-key'];
+    const key = Array.isArray(suppliedKey) ? suppliedKey[0] : suppliedKey;
+    if (!configuredKey || !key || !constantTimeEqual(key, configuredKey)) {
+      return reply.status(403).send({ error: 'forbidden' });
+    }
+
+    const body = req.body as { phone?: unknown; orderNumber?: unknown; trackingUrl?: unknown };
+    const phone = typeof body?.phone === 'string' ? body.phone.trim() : '';
+    const orderNumber = typeof body?.orderNumber === 'string' ? body.orderNumber.trim() : '';
+    const trackingUrl = typeof body?.trackingUrl === 'string' ? body.trackingUrl.trim() : '';
+    let parsedUrl: URL;
+    try { parsedUrl = new URL(trackingUrl); } catch { parsedUrl = null as unknown as URL; }
+    if (!phone || !orderNumber || !parsedUrl || !['http:', 'https:'].includes(parsedUrl.protocol)) {
+      return reply.status(400).send({ error: 'invalid tracking payload' });
+    }
+
+    try {
+      await sendWhatsAppTrackingUpdate(phone, orderNumber, trackingUrl);
+      return reply.status(200).send({ ok: true });
+    } catch (error) {
+      app.log.error({ err: error instanceof Error ? error.message : 'unknown error' }, 'WhatsApp tracking delivery failed');
+      return reply.status(502).send({ error: 'tracking_delivery_failed' });
+    }
+  });
+
   // External scheduler tick for WhatsApp inactivity timeout drain
   app.post('/whatsapp/timeout-tick', async (req, reply) => {
     if (!verifyTimeoutTick(req)) {

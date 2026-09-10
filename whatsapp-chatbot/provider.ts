@@ -334,3 +334,62 @@ export async function sendWhatsAppCheckoutForm(to: string, reviewUrl: string): P
     'Razorpay payment will be available only after you confirm the form.'
   );
 }
+
+function buildTrackingTemplatePayload(
+  to: string,
+  orderNumber: string,
+  trackingUrl: string,
+): Record<string, unknown> {
+  const phone = to.startsWith('+') ? to : `+${to}`;
+  return {
+    to: phone,
+    type: 'template',
+    source: 'external',
+    template: {
+      name: config.WHATSAPP_TRACKING_TEMPLATE_NAME,
+      language: { code: config.WHATSAPP_TRACKING_TEMPLATE_LANGUAGE },
+      components: [{
+        type: 'body',
+        parameters: [
+          { type: 'text', text: orderNumber },
+          { type: 'text', text: trackingUrl },
+        ],
+      }],
+    },
+  };
+}
+
+/** Sends a shipment tracking update requested by the verified admin portal. */
+export async function sendWhatsAppTrackingUpdate(
+  to: string,
+  orderNumber: string,
+  trackingUrl: string,
+): Promise<void> {
+  const message = `Your Earthora Farms order ${orderNumber} has a delivery tracking update. Track it here: ${trackingUrl}`;
+
+  if (config.WHATSAPP_PROVIDER === 'tata_omni') {
+    if (!config.TATA_OMNI_ACCESS_TOKEN) throw new Error('Tata Omni WhatsApp delivery is not configured');
+    const payload = config.WHATSAPP_TRACKING_TEMPLATE_NAME
+      ? buildTrackingTemplatePayload(to, orderNumber, trackingUrl)
+      : buildTataOmniTextPayload(to, message);
+    const url = `${config.TATA_OMNI_API_BASE_URL.replace(/\/$/, '')}/whatsapp-cloud/messages`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: config.TATA_OMNI_ACCESS_TOKEN },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) throw new WhatsAppDeliveryError(res.status);
+    return;
+  }
+
+  const phone = to.startsWith('+') ? to.slice(1) : to;
+  if (config.WHATSAPP_TRACKING_TEMPLATE_NAME) {
+    const payload = buildTrackingTemplatePayload(phone, orderNumber, trackingUrl);
+    delete (payload as { source?: string }).source;
+    Object.assign(payload, { messaging_product: 'whatsapp', recipient_type: 'individual', to: phone });
+    await sendWhatsAppPayload(payload);
+    return;
+  }
+  await sendWhatsAppMessage(phone, message);
+}

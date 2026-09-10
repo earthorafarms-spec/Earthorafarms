@@ -115,6 +115,18 @@ number id, permanent token, verification token and app secret. Subscribe Meta's
 messages webhook to the same URL. Meta callbacks are verified against the exact
 raw request bytes using `X-Hub-Signature-256`.
 
+### Admin shipment tracking notifications
+
+The storefront admin order dialog can save a courier URL and request a WhatsApp
+shipment update. The Supabase `send-order-tracking` function verifies the admin
+password, persists the URL on `orders`, and calls the WhatsApp service's
+`/whatsapp/admin/tracking` endpoint using the shared `WHATSAPP_INTERNAL_KEY` and
+`WHATSAPP_SERVICE_URL` secrets. Configure an approved WhatsApp utility template
+in `WHATSAPP_TRACKING_TEMPLATE_NAME` with two body parameters (order number and
+tracking URL) so updates can be delivered outside the 24-hour customer-service
+window. Without a template, the service attempts a normal text message for an
+already-open WhatsApp conversation.
+
 ### Tata/VOICE Streaming WebSocket
 
 The service also exposes a telephony-compatible bidirectional socket at
