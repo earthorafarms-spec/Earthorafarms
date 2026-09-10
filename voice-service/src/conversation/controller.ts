@@ -128,19 +128,48 @@ function nextCheckoutQuestion(state: ConversationState): string | null {
   return questions[field]?.[language] ?? null;
 }
 
-function nextWhatsAppCheckoutQuestion(state: ConversationState): string | null {
-  const nextDeliveryQuestion = nextCheckoutQuestion(state);
-  if (nextDeliveryQuestion) return nextDeliveryQuestion;
+export const WHATSAPP_TIMEOUT_DISCLAIMER: Record<ConversationState['currentLanguage'], string> = {
+  en: "Please reply within 5 minutes. If we don't receive a response, we'll return you to the main menu.",
+  hi: 'कृपया 5 मिनट के भीतर उत्तर दें। यदि हमें कोई उत्तर नहीं मिलता है, तो हम आपको मुख्य मेन्यू पर वापस ले आएंगे।',
+  gu: 'કૃપા કરીને 5 મિનિટની અંદર જવાબ આપો. જો અમને કોઈ જવાબ નહીં મળે, તો અમે તમને મુખ્ય મેનુ પર પાછા લઈ જઈશું.',
+};
 
-  if (Boolean(state.checkoutFields.country) && state.checkoutFields.gst === undefined) {
+export const WHATSAPP_TIMEOUT_NOTICES: Record<ConversationState['currentLanguage'], string> = {
+  en: "It looks like you've been away for a while.\n\nTo keep things simple, I've returned you to the main menu.",
+  hi: 'ऐसा लगता है कि आप कुछ समय से दूर हैं।\n\nचीजों को सरल रखने के लिए, मैंने आपको मुख्य मेन्यू पर वापस ला दिया है।',
+  gu: 'એવું લાગે છે કે તમે થોડા સમય માટે દૂર છો.\n\nસરળતા ખાતર, હું તમને મુખ્ય મેનુ પર પાછો લાવ્યો છું.',
+};
+
+export function buildWhatsAppTimeoutReply(language: ConversationState['currentLanguage']): string {
+  const notice = WHATSAPP_TIMEOUT_NOTICES[language] ?? WHATSAPP_TIMEOUT_NOTICES.en;
+  return `${notice}\n\n${WHATSAPP_MENU}`;
+}
+
+export function resetWhatsAppTimeoutState(state: ConversationState): ConversationState {
+  delete state.whatsAppProductContext;
+  delete state.awaitingCartRemoval;
+  delete state.activeCheckoutReview;
+  state.checkoutFields = {};
+  return state;
+}
+
+export function nextWhatsAppCheckoutQuestion(state: ConversationState, includeTimeoutNotice = true): string | null {
+  const nextDeliveryQuestion = nextCheckoutQuestion(state);
+  let question = nextDeliveryQuestion;
+
+  if (!question && Boolean(state.checkoutFields.country) && state.checkoutFields.gst === undefined) {
     const questions: Record<ConversationState['currentLanguage'], string> = {
       en: 'Do you have a GST number for a business tax invoice?',
       hi: 'क्या आपके पास बिजनेस टैक्स इनवॉइस के लिए GST नंबर है?',
       gu: 'શું તમારી પાસે બિઝનેસ ટેક્સ ઇનવોઇસ માટે GST નંબર છે?',
     };
-    return questions[state.currentLanguage] ?? questions.en;
+    question = questions[state.currentLanguage] ?? questions.en;
   }
-  return null;
+
+  if (!question) return null;
+  if (!includeTimeoutNotice) return question;
+  const disclaimer = WHATSAPP_TIMEOUT_DISCLAIMER[state.currentLanguage] ?? WHATSAPP_TIMEOUT_DISCLAIMER.en;
+  return `${question}\n\n${disclaimer}`;
 }
 
 function looksLikeEmailAddress(text: string): boolean {
@@ -514,6 +543,7 @@ export function buildCartRemovalPromptReply(
   cart: CartSnapshotLine[],
   language: ConversationState['currentLanguage'],
   invalidSelection = false,
+  channel?: 'voice' | 'text',
 ): string {
   if (cart.length === 0) {
     if (language === 'hi') return 'अभी आपका कार्ट खाली है।';
@@ -554,7 +584,12 @@ export function buildCartRemovalPromptReply(
       ? 'દૂર કરવા માટે આઇટમ નંબર મોકલો.\nરદ કરવા માટે Cancel લખો.'
       : 'Reply with the item number to remove.\nTo cancel, type Cancel.';
 
-  return `${prefix}${heading}\n${lines.join('\n')}\n\n${prompt}`;
+  const baseReply = `${prefix}${heading}\n${lines.join('\n')}\n\n${prompt}`;
+  if (channel === 'text') {
+    const disclaimer = WHATSAPP_TIMEOUT_DISCLAIMER[language] ?? WHATSAPP_TIMEOUT_DISCLAIMER.en;
+    return `${baseReply}\n\n${disclaimer}`;
+  }
+  return baseReply;
 }
 
 function isPostAddToCartReply(text: string | null): boolean {
@@ -695,6 +730,27 @@ function getActiveCheckoutQuestionField(
   for (const entry of CHECKOUT_QUESTION_MATCHERS) {
     if (entry.isActive(state) && entry.matches(previousReply)) {
       return entry.field;
+    }
+  }
+  return null;
+}
+
+export type WhatsAppActiveSubFlow = 'quantity' | 'checkout' | 'cart_removal';
+
+export function getWhatsAppActiveSubFlow(
+  state: ConversationState,
+  replyText?: string,
+): WhatsAppActiveSubFlow | null {
+  if (state.whatsAppProductContext?.awaitingQuantity === true) {
+    return 'quantity';
+  }
+  if (state.awaitingCartRemoval === true) {
+    return 'cart_removal';
+  }
+  if (state.cart.length > 0) {
+    const activeField = getActiveCheckoutQuestionField(replyText ?? lastAssistantReply(state.messages), state);
+    if (activeField !== null) {
+      return 'checkout';
     }
   }
   return null;
@@ -899,10 +955,21 @@ function productActionFailure(language: ConversationState['currentLanguage']): s
   return 'Sorry, this product is not currently available. Please open the product menu again.';
 }
 
-function productQuantityPrompt(productName: string, language: ConversationState['currentLanguage']): string {
-  if (language === 'hi') return `आप ${productName} की कितनी यूनिट कार्ट में जोड़ना चाहते हैं?`;
-  if (language === 'gu') return `તમે ${productName} ના કેટલા યુનિટ કાર્ટમાં ઉમેરવા માંગો છો?`;
-  return `How many units of ${productName} would you like to add to your cart?`;
+function productQuantityPrompt(
+  productName: string,
+  language: ConversationState['currentLanguage'],
+  channel?: 'voice' | 'text',
+): string {
+  let basePrompt: string;
+  if (language === 'hi') basePrompt = `आप ${productName} की कितनी यूनिट कार्ट में जोड़ना चाहते हैं?`;
+  else if (language === 'gu') basePrompt = `તમે ${productName} ના કેટલા યુનિટ કાર્ટમાં ઉમેરવા માંગો છો?`;
+  else basePrompt = `How many units of ${productName} would you like to add to your cart?`;
+
+  if (channel === 'text') {
+    const disclaimer = WHATSAPP_TIMEOUT_DISCLAIMER[language] ?? WHATSAPP_TIMEOUT_DISCLAIMER.en;
+    return `${basePrompt}\n\n${disclaimer}`;
+  }
+  return basePrompt;
 }
 
 export interface TurnOutcome {
@@ -1067,7 +1134,7 @@ export async function processTurn(
   if (pendingProduct && /^\d+$/.test(userText.trim())) {
     const quantity = Number.parseInt(userText.trim(), 10);
     if (quantity < 1) {
-      const replyText = productQuantityPrompt(pendingProduct.productName, state.currentLanguage);
+      const replyText = productQuantityPrompt(pendingProduct.productName, state.currentLanguage, channel);
       state.messages.push({ role: 'assistant', content: replyText });
       return { state, replyText, policyViolations: [], outboundActions };
     }
@@ -1192,7 +1259,7 @@ export async function processTurn(
         };
       }
 
-      const replyText = buildCartRemovalPromptReply(state.cart, state.currentLanguage, true);
+      const replyText = buildCartRemovalPromptReply(state.cart, state.currentLanguage, true, channel);
       state.messages.push({ role: 'assistant', content: replyText });
       return { state, replyText, policyViolations: [], outboundActions };
     }
@@ -1228,7 +1295,7 @@ export async function processTurn(
       return { state, replyText: cartCard.body, productCard: cartCard, policyViolations: [], outboundActions };
     }
     state.awaitingCartRemoval = true;
-    const replyText = buildCartRemovalPromptReply(state.cart, state.currentLanguage, false);
+    const replyText = buildCartRemovalPromptReply(state.cart, state.currentLanguage, false, channel);
     state.messages.push({ role: 'assistant', content: replyText });
     return { state, replyText, policyViolations: [], outboundActions };
   }
@@ -1248,7 +1315,7 @@ export async function processTurn(
     const senderPhone = state.checkoutFields.phone;
     state.checkoutFields = { ...(senderPhone ? { phone: senderPhone } : {}) };
     delete state.activeCheckoutReview;
-    const nextQuestion = nextCheckoutQuestion(state);
+    const nextQuestion = nextWhatsAppCheckoutQuestion(state);
     if (nextQuestion) {
       state.messages.push({ role: 'assistant', content: nextQuestion });
       return { state, replyText: nextQuestion, policyViolations: [], outboundActions };
@@ -1398,11 +1465,13 @@ export async function processTurn(
         const isDecline = /^(?:no|nah|nope|none|skip|don'?t have|don't have one|no gst|nahi|nathi|नहीं|ना|ના|નથી)[.!?]*$/iu.test(trimmed);
         const isBareAffirmative = /^(?:yes|yeah|yep|हाँ|हां|હા)[.!?]*$/iu.test(trimmed);
         if (isBareAffirmative) {
-          const prompt = state.currentLanguage === 'hi'
+          const disclaimer = WHATSAPP_TIMEOUT_DISCLAIMER[state.currentLanguage] ?? WHATSAPP_TIMEOUT_DISCLAIMER.en;
+          const basePrompt = state.currentLanguage === 'hi'
             ? 'कृपया अपना GST नंबर शेयर करें, या आगे बढ़ने के लिए No लिखें।'
             : state.currentLanguage === 'gu'
               ? 'કૃપા કરીને તમારો GST નંબર આપો, અથવા આગળ વધવા માટે No લખો.'
               : 'Please share your GST number for a business tax invoice, or reply No to skip.';
+          const prompt = `${basePrompt}\n\n${disclaimer}`;
           state.messages.push({ role: 'assistant', content: prompt });
           return { state, replyText: prompt, policyViolations: [], outboundActions };
         }
@@ -1543,7 +1612,7 @@ export async function processTurn(
         };
         const replyText = actionProduct.stockLabel === 'Out of Stock'
           ? productActionFailure(state.currentLanguage)
-          : productQuantityPrompt(actionProduct.name, state.currentLanguage);
+          : productQuantityPrompt(actionProduct.name, state.currentLanguage, channel);
         state.messages.push({ role: 'assistant', content: replyText });
         return { state, replyText, policyViolations: [], outboundActions };
       }

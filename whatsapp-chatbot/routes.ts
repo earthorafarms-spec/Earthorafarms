@@ -3,7 +3,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { config } from '../voice-service/src/config.js';
 import { extractWhatsAppInboundMessages } from './inbound.js';
 import { enqueueWhatsAppMessage } from './events.repository.js';
-import { wakeWhatsAppWorker } from './worker.js';
+import { drainExpiredFlowTimeouts, wakeWhatsAppWorker } from './worker.js';
 import { getLastWhatsAppDiagnostic, recordWhatsAppDiagnostic } from './diagnostics.js';
 
 function describePayloadShape(value: unknown, depth = 0): unknown {
@@ -82,7 +82,39 @@ function rejectedWebhookDiagnostics(rawBody: unknown, req: FastifyRequest): Reco
   };
 }
 
+function verifyTimeoutTick(req: FastifyRequest): boolean {
+  const configuredSecret = config.WHATSAPP_TIMEOUT_TICK_SECRET
+    ?? config.TATA_OMNI_WEBHOOK_SECRET
+    ?? config.TOKEN_SIGNING_SECRET;
+  if (!configuredSecret) return false;
+
+  const headerSecret = req.headers['x-timeout-tick-secret'] ?? req.headers['x-webhook-secret'];
+  const rawHeader = Array.isArray(headerSecret) ? headerSecret[0] : headerSecret;
+  const authHeader = req.headers.authorization;
+  const bearerToken = typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
+    ? authHeader.slice(7).trim()
+    : undefined;
+  const queryToken = (req.query as Record<string, unknown> | undefined)?.token;
+  const supplied = rawHeader ?? bearerToken ?? (typeof queryToken === 'string' ? queryToken : undefined);
+
+  return Boolean(supplied && constantTimeEqual(supplied, configuredSecret));
+}
+
 export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void> {
+  // External scheduler tick for WhatsApp inactivity timeout drain
+  app.post('/whatsapp/timeout-tick', async (req, reply) => {
+    if (!verifyTimeoutTick(req)) {
+      return reply.status(403).send({ error: 'forbidden' });
+    }
+    try {
+      const claimed = await drainExpiredFlowTimeouts();
+      return reply.status(200).send({ ok: true, claimed });
+    } catch (err) {
+      app.log.error(err, 'WhatsApp timeout tick failed');
+      return reply.status(500).send({ error: 'timeout_tick_failed' });
+    }
+  });
+
   // Temporary-safe operational state: structural booleans only, with no URL,
   // token, message text, or customer identifier. This makes provider callback
   // mismatches diagnosable even when the hosting dashboard is unavailable.

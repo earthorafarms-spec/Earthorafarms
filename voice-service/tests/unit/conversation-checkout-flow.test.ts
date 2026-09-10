@@ -198,7 +198,8 @@ describe('conversation checkout regressions', () => {
 
       expect(result.state.checkoutFields.country).toBe('India');
       expect(result.state.checkoutFields.gst).toBeUndefined();
-      expect(result.replyText).toBe('Do you have a GST number for a business tax invoice?');
+      expect(result.replyText).toContain('Do you have a GST number for a business tax invoice?');
+      expect(result.replyText).toContain("Please reply within 5 minutes. If we don't receive a response, we'll return you to the main menu.");
       expect(result.productCard).toBeUndefined();
       expect(result.productImage).toBeUndefined();
       expect(mocks.chat).not.toHaveBeenCalled();

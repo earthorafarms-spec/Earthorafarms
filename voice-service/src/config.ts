@@ -119,6 +119,7 @@ const optionalSchema = z.object({
   // provider attempts a normal document message in an open service window.
   WHATSAPP_INVOICE_TEMPLATE_NAME: z.string().optional(),
   WHATSAPP_INVOICE_TEMPLATE_LANGUAGE: z.string().default('en'),
+  WHATSAPP_TIMEOUT_TICK_SECRET: z.string().optional(),
 
   // Tata SmartFlow SMS — same credentials as the send-sms-alert Supabase Edge
   // function. All three must be set for SMS delivery to work; if any is absent,

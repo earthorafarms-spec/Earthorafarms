@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { getOrCreateSession } from './sessions.repository.js';
 import {
   claimNextWhatsAppMessage,
+  claimExpiredWhatsAppFlowTimeout,
   markWhatsAppMessageFailed,
   markWhatsAppMessageProcessed,
   markWhatsAppMediaSent,
@@ -78,6 +79,23 @@ export async function processInboxEvent(event: WhatsAppInboxEvent): Promise<void
   await markWhatsAppMessageProcessed(event.id);
 }
 
+export async function drainExpiredFlowTimeouts(): Promise<number> {
+  let claimedCount = 0;
+  for (let count = 0; count < MAX_EVENTS_PER_DRAIN; count++) {
+    const claimed = await claimExpiredWhatsAppFlowTimeout();
+    if (!claimed) break;
+    claimedCount++;
+    try {
+      await sendWhatsAppMessage(claimed.phoneNumber, claimed.replyText);
+      await markWhatsAppMessageProcessed(claimed.eventId);
+    } catch (err) {
+      const message = (err as Error).message || 'WhatsApp timeout delivery error';
+      await markWhatsAppMessageFailed(claimed.eventId, message, 1).catch(() => {});
+    }
+  }
+  return claimedCount;
+}
+
 export function startWhatsAppWorker(app: FastifyInstance): void {
   let running = false;
   let stopped = false;
@@ -107,6 +125,7 @@ export function startWhatsAppWorker(app: FastifyInstance): void {
           });
         }
       }
+      await drainExpiredFlowTimeouts();
     } catch (err) {
       app.log.error(err, 'WhatsApp inbox drain failed');
     } finally {

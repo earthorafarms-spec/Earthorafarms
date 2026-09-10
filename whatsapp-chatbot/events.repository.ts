@@ -1,5 +1,6 @@
 import { supabase } from '../voice-service/src/lib/supabaseClient.js';
 import type { ConversationState } from '../voice-service/src/conversation/state.js';
+import { getWhatsAppActiveSubFlow } from '../voice-service/src/conversation/controller.js';
 import type { WhatsAppInboundMessage } from './inbound.js';
 import { serializeProductCard, type WhatsAppProductCard } from './product-card.js';
 
@@ -76,6 +77,11 @@ export async function saveWhatsAppTurn(
   media?: { url: string; caption: string },
   productCard?: WhatsAppProductCard,
 ): Promise<void> {
+  const activeSubFlow = getWhatsAppActiveSubFlow(state, replyText);
+  const flowTimeoutAt = activeSubFlow ? new Date(Date.now() + 5 * 60 * 1000).toISOString() : null;
+  const flowTurnCount = activeSubFlow ? state.turnCount : null;
+  const flowTimeoutKind = activeSubFlow ?? null;
+
   const persistedMedia = productCard
     ? { url: productCard.imageUrl ?? '', caption: serializeProductCard(productCard) }
     : media;
@@ -86,8 +92,37 @@ export async function saveWhatsAppTurn(
     p_reply_text: replyText,
     p_outbound_media_url: persistedMedia?.url ?? null,
     p_outbound_media_caption: persistedMedia?.caption ?? null,
+    p_flow_timeout_at: flowTimeoutAt,
+    p_flow_turn_count: flowTurnCount,
+    p_flow_timeout_kind: flowTimeoutKind,
   });
   if (error) throw new Error(`whatsapp: failed to save completed turn: ${error.message}`);
+}
+
+export interface ClaimedFlowTimeout {
+  eventId: string;
+  phoneNumber: string;
+  voiceSessionId: string;
+  flowTurnCount: number;
+  flowTimeoutKind: string;
+  replyText: string;
+}
+
+export async function claimExpiredWhatsAppFlowTimeout(): Promise<ClaimedFlowTimeout | null> {
+  const { data, error } = await supabase.rpc('claim_expired_whatsapp_flow_timeout');
+  if (error) throw new Error(`whatsapp: failed to claim expired flow timeout: ${error.message}`);
+  if (!data || !Array.isArray(data) || data.length === 0) {
+    return null;
+  }
+  const row = data[0] as Record<string, any>;
+  return {
+    eventId: String(row.event_id),
+    phoneNumber: String(row.phone_number),
+    voiceSessionId: String(row.voice_session_id),
+    flowTurnCount: Number(row.flow_turn_count),
+    flowTimeoutKind: String(row.flow_timeout_kind),
+    replyText: String(row.reply_text),
+  };
 }
 
 export async function markWhatsAppMediaSent(eventId: string): Promise<void> {

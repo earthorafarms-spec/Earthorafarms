@@ -504,7 +504,8 @@ describe('processTurn persisted state', () => {
 
     const buttonOutcome = await processTurn('controller-test', state, input, 'text');
 
-    expect(buttonOutcome.replyText).toBe('How many units of Alpha would you like to add to your cart?');
+    expect(buttonOutcome.replyText).toContain('How many units of Alpha would you like to add to your cart?');
+    expect(buttonOutcome.replyText).toContain("Please reply within 5 minutes. If we don't receive a response, we'll return you to the main menu.");
     expect(buttonOutcome.state.whatsAppProductContext?.awaitingQuantity).toBe(true);
     expect(buttonOutcome.state.whatsAppProductContext?.lastAction).toBe('add_to_cart');
     expect(buttonOutcome.state.messages.some((m) => m.role === 'user')).toBe(false);
@@ -902,7 +903,7 @@ describe('processTurn persisted state', () => {
       const addInput = productActionInputFromButtonId(productButtonId('add_to_cart', 'alpha-id'))!;
 
       const step1 = await processTurn('controller-test', state, addInput, 'text');
-      expect(step1.replyText).toBe('How many units of Alpha would you like to add to your cart?');
+      expect(step1.replyText).toContain('How many units of Alpha would you like to add to your cart?');
       expect(step1.state.whatsAppProductContext?.awaitingQuantity).toBe(true);
 
       const step2 = await processTurn('controller-test', step1.state, '2', 'text');
@@ -995,14 +996,14 @@ describe('processTurn persisted state', () => {
         productActionInputFromButtonId(cartButtonId('checkout'))!,
         'text',
       );
-      expect(checkoutOutcome.replyText).toBe('What is your full name?');
+      expect(checkoutOutcome.replyText).toContain('What is your full name?');
 
       // 2. Checkout from post-add confirmation via numeric reply '2'
       const stateNumber = createInitialState();
       stateNumber.cart = [{ productId: 'alpha-id', productName: 'Alpha', quantity: 2, unitPrice: 90 }];
       stateNumber.messages.push({ role: 'assistant', content: 'Alpha has been added to your cart.' });
       const checkoutNumber = await processTurn('controller-test', stateNumber, '2', 'text');
-      expect(checkoutNumber.replyText).toBe('What is your full name?');
+      expect(checkoutNumber.replyText).toContain('What is your full name?');
 
       // 3. Checkout from View Cart screen via numeric reply '2'
       const viewCartState = createInitialState();
@@ -1012,7 +1013,7 @@ describe('processTurn persisted state', () => {
         content: 'Your cart has two Alpha at ₹90 (Tax Included) each. The exact total is ₹180 (Tax Included).',
       });
       const checkoutFromCart = await processTurn('controller-test', viewCartState, '2', 'text');
-      expect(checkoutFromCart.replyText).toBe('What is your full name?');
+      expect(checkoutFromCart.replyText).toContain('What is your full name?');
     });
 
     it('navigates to Continue Shopping and displays catalog for further product selection', async () => {
@@ -1114,7 +1115,7 @@ describe('processTurn persisted state', () => {
       // 4. Add to Cart for Beta
       const addBeta = productActionInputFromButtonId(productButtonId('add_to_cart', 'beta-id'))!;
       const turn5 = await processTurn('controller-test', turn4.state, addBeta, 'text');
-      expect(turn5.replyText).toBe('How many units of Beta would you like to add to your cart?');
+      expect(turn5.replyText).toContain('How many units of Beta would you like to add to your cart?');
 
       // 5. Provide quantity 1 for Beta
       const turn6 = await processTurn('controller-test', turn5.state, '1', 'text');
@@ -1329,7 +1330,7 @@ describe('processTurn persisted state', () => {
         expect(checkoutTurn.state.checkoutFields.postalCode).toBeUndefined();
         expect(checkoutTurn.state.checkoutFields.gst).toBeUndefined();
         // Prompt asks for the first required missing field: Full Name
-        expect(checkoutTurn.replyText).toBe('What is your full name?');
+        expect(checkoutTurn.replyText).toContain('What is your full name?');
       });
 
       it('does not generate verification link prematurely when user enters checkout on empty cart', async () => {
@@ -1359,12 +1360,12 @@ describe('processTurn persisted state', () => {
           productActionInputFromButtonId(cartButtonId('checkout'))!,
           'text',
         );
-        expect(checkoutTurn.replyText).toBe('What is your full name?');
+        expect(checkoutTurn.replyText).toContain('What is your full name?');
 
         // Step 2: User enters name "ADARSH"
         const nameTurn = await processTurn('controller-test', checkoutTurn.state, 'ADARSH', 'text');
         expect(nameTurn.state.checkoutFields.name).toBe('ADARSH');
-        expect(nameTurn.replyText).toBe('What is your email address?');
+        expect(nameTurn.replyText).toContain('What is your email address?');
       });
 
       it('does not capture normal conversational messages that mention checkout keywords', async () => {
@@ -1454,7 +1455,7 @@ describe('processTurn persisted state', () => {
         // Follow up with text "Add to Cart"
         const addTurn = await processTurn('controller-test', benefitsTurn.state, 'Add to Cart', 'text');
         expect(chatMock).not.toHaveBeenCalled();
-        expect(addTurn.replyText).toBe('How many units of Alpha would you like to add to your cart?');
+        expect(addTurn.replyText).toContain('How many units of Alpha would you like to add to your cart?');
         expect(addTurn.state.whatsAppProductContext?.awaitingQuantity).toBe(true);
       });
 
