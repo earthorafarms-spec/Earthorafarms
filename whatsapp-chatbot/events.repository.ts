@@ -111,17 +111,21 @@ export interface ClaimedFlowTimeout {
 export async function claimExpiredWhatsAppFlowTimeout(): Promise<ClaimedFlowTimeout | null> {
   const { data, error } = await supabase.rpc('claim_expired_whatsapp_flow_timeout');
   if (error) throw new Error(`whatsapp: failed to claim expired flow timeout: ${error.message}`);
-  if (!data || !Array.isArray(data) || data.length === 0) {
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || typeof row !== 'object') {
     return null;
   }
-  const row = data[0] as Record<string, any>;
+  const rawRow = row as Record<string, any>;
+  if (!rawRow.event_id) {
+    return null;
+  }
   return {
-    eventId: String(row.event_id),
-    phoneNumber: String(row.phone_number),
-    voiceSessionId: String(row.voice_session_id),
-    flowTurnCount: Number(row.flow_turn_count),
-    flowTimeoutKind: String(row.flow_timeout_kind),
-    replyText: String(row.reply_text),
+    eventId: String(rawRow.event_id),
+    phoneNumber: String(rawRow.phone_number),
+    voiceSessionId: String(rawRow.voice_session_id),
+    flowTurnCount: Number(rawRow.flow_turn_count),
+    flowTimeoutKind: String(rawRow.flow_timeout_kind),
+    replyText: String(rawRow.reply_text),
   };
 }
 

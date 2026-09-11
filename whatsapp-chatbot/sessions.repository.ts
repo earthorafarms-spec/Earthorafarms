@@ -59,13 +59,20 @@ export function sanitizeWhatsAppSessionMessages(messages: ConversationMessage[])
 }
 
 export function sanitizeWhatsAppConversationState(state: ConversationState): ConversationState {
-  if (state && Array.isArray(state.messages)) {
-    return {
-      ...state,
-      messages: sanitizeWhatsAppSessionMessages(state.messages),
-    };
-  }
-  return state;
+  const initial = createInitialState();
+  if (!state || typeof state !== 'object') return initial;
+  return {
+    ...initial,
+    ...state,
+    checkoutFields: {
+      ...initial.checkoutFields,
+      ...(state.checkoutFields ?? {}),
+    },
+    cart: Array.isArray(state.cart) ? state.cart : initial.cart,
+    messages: Array.isArray(state.messages)
+      ? sanitizeWhatsAppSessionMessages(state.messages)
+      : initial.messages,
+  };
 }
 
 /**
@@ -143,7 +150,14 @@ export async function getOrCreateSession(phone: string): Promise<WhatsAppSession
   const { error: waErr } = await supabase
     .from('whatsapp_sessions')
     .upsert(
-      { phone_number: phone, voice_session_id: vsNew.id, last_active_at: new Date().toISOString() },
+      {
+        phone_number: phone,
+        voice_session_id: vsNew.id,
+        last_active_at: new Date().toISOString(),
+        flow_timeout_at: null,
+        flow_turn_count: null,
+        flow_timeout_kind: null,
+      },
       { onConflict: 'phone_number' }
     );
 

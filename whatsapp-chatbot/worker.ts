@@ -50,6 +50,7 @@ export async function processInboxEvent(event: WhatsAppInboxEvent): Promise<void
   }
 
   const { voiceSessionId, state } = await getOrCreateSession(event.phone);
+  if (!state.checkoutFields) state.checkoutFields = {};
   if (!state.checkoutFields.phone) state.checkoutFields.phone = event.phone;
 
   const input = event.messageText ??
