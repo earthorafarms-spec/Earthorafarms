@@ -13,7 +13,12 @@ function asRecord(value: unknown): Record<string, any> | null {
 
 function normalizePhone(value: unknown): string | null {
   if (typeof value !== 'string') return null;
-  const digits = value.replace(/\D/g, '');
+  let digits = value.replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('0') && /^[6-9]/.test(digits.slice(1))) {
+    digits = `91${digits.slice(1)}`;
+  } else if (digits.length === 10 && /^[6-9]/.test(digits)) {
+    digits = `91${digits}`;
+  }
   return /^[1-9]\d{7,14}$/.test(digits) ? `+${digits}` : null;
 }
 

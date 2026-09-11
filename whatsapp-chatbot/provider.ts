@@ -2,8 +2,17 @@ import { config } from '../voice-service/src/config.js';
 import { productButtonId, type WhatsAppProductCard } from './product-card.js';
 
 export class WhatsAppDeliveryError extends Error {
-  constructor(readonly status: number) {
-    super(`WhatsApp provider rejected delivery (HTTP ${status})`);
+  constructor(readonly status: number, readonly responseBody?: string) {
+    const details = responseBody ? `: ${responseBody.slice(0, 300)}` : '';
+    super(`WhatsApp provider rejected delivery (HTTP ${status})${details}`);
+    this.name = 'WhatsAppDeliveryError';
+  }
+}
+
+async function assertResponseOk(res: Response): Promise<void> {
+  if (!res.ok) {
+    const errorBody = await res.text().catch(() => '');
+    throw new WhatsAppDeliveryError(res.status, errorBody);
   }
 }
 
@@ -20,9 +29,7 @@ async function sendWhatsAppPayload(payload: Record<string, unknown>): Promise<vo
     signal: AbortSignal.timeout(8_000),
   });
 
-  if (!res.ok) {
-    throw new WhatsAppDeliveryError(res.status);
-  }
+  await assertResponseOk(res);
 }
 
 export function buildCheckoutTemplatePayload(to: string, reviewUrl: string): Record<string, unknown> {
@@ -59,9 +66,7 @@ async function sendTataOmniCheckoutTemplate(to: string, reviewUrl: string): Prom
     signal: AbortSignal.timeout(8_000),
   });
 
-  if (!res.ok) {
-    throw new WhatsAppDeliveryError(res.status);
-  }
+  await assertResponseOk(res);
 }
 
 export function buildTataOmniTextPayload(to: string, text: string): Record<string, unknown> {
@@ -185,7 +190,7 @@ async function sendTataOmniText(to: string, text: string): Promise<void> {
     body: JSON.stringify(buildTataOmniTextPayload(to, text)),
     signal: AbortSignal.timeout(8_000),
   });
-  if (!res.ok) throw new WhatsAppDeliveryError(res.status);
+  await assertResponseOk(res);
 }
 
 // Sends a customer-service-window reply through the configured provider.
@@ -217,7 +222,7 @@ export async function sendWhatsAppImage(to: string, imageUrl: string, caption?: 
       body: JSON.stringify(buildTataOmniImagePayload(to, imageUrl, caption)),
       signal: AbortSignal.timeout(8_000),
     });
-    if (!res.ok) throw new WhatsAppDeliveryError(res.status);
+    await assertResponseOk(res);
     return;
   }
 
@@ -254,7 +259,7 @@ export async function sendWhatsAppInvoice(
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(8_000),
     });
-    if (!res.ok) throw new WhatsAppDeliveryError(res.status);
+    await assertResponseOk(res);
     return;
   }
 
@@ -288,7 +293,7 @@ export async function sendWhatsAppProductCard(to: string, card: WhatsAppProductC
       body: JSON.stringify(buildTataOmniProductCardPayload(to, card)),
       signal: AbortSignal.timeout(8_000),
     });
-    if (!res.ok) throw new WhatsAppDeliveryError(res.status);
+    await assertResponseOk(res);
     return;
   }
 
@@ -397,7 +402,7 @@ export async function sendWhatsAppLowStockAlert(
       body: JSON.stringify(buildLowStockTemplatePayload(to, productName, stockAtAlert, threshold)),
       signal: AbortSignal.timeout(8_000),
     });
-    if (!res.ok) throw new WhatsAppDeliveryError(res.status);
+    await assertResponseOk(res);
     return;
   }
 
@@ -406,6 +411,43 @@ export async function sendWhatsAppLowStockAlert(
   delete (payload as { source?: string }).source;
   Object.assign(payload, { messaging_product: 'whatsapp', recipient_type: 'individual', to: phone });
   await sendWhatsAppPayload(payload);
+}
+
+/**
+ * Normalizes customer phone numbers for WhatsApp shipment tracking delivery.
+ * - 10-digit Indian numbers (e.g. 9825346884) -> +919825346884
+ * - 11-digit leading-zero Indian numbers (e.g. 09825346884) -> +919825346884
+ * - 12-digit Indian numbers without plus (e.g. 919825346884) -> +919825346884
+ * - Already prefixed +91 numbers (e.g. +919825346884) -> +919825346884
+ * - Valid international numbers (e.g. +14155552671, +447911123456, +971501234567) -> preserved
+ * - Invalid numbers (too short, non-numeric, invalid E.164) -> null
+ */
+export function normalizeTrackingPhone(raw: string): string | null {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  const digits = trimmed.replace(/\D/g, '');
+
+  if (trimmed.startsWith('+')) {
+    if (/^[1-9]\d{7,14}$/.test(digits)) {
+      return `+${digits}`;
+    }
+    return null;
+  }
+
+  // Raw numbers without leading +
+  if (/^[6-9]\d{9}$/.test(digits)) {
+    return `+91${digits}`;
+  }
+  if (/^0[6-9]\d{9}$/.test(digits)) {
+    return `+91${digits.slice(1)}`;
+  }
+  if (/^91[6-9]\d{9}$/.test(digits)) {
+    return `+${digits}`;
+  }
+  if (/^[1-9]\d{7,14}$/.test(digits)) {
+    return `+${digits}`;
+  }
+  return null;
 }
 
 function buildTrackingTemplatePayload(
@@ -438,6 +480,10 @@ export async function sendWhatsAppTrackingUpdate(
   orderNumber: string,
   trackingUrl: string,
 ): Promise<void> {
+  const normalizedPhone = normalizeTrackingPhone(to);
+  if (!normalizedPhone) {
+    throw new Error(`Invalid recipient phone number for tracking update: ${to}`);
+  }
   const message = `Your Earthora Farms order ${orderNumber} has a delivery tracking update. Track it here: ${trackingUrl}`;
 
   if (config.WHATSAPP_PROVIDER === 'tata_omni') {
@@ -449,7 +495,7 @@ export async function sendWhatsAppTrackingUpdate(
     if (!config.WHATSAPP_TRACKING_TEMPLATE_NAME) {
       throw new Error('An approved WhatsApp tracking template is required before tracking updates can be delivered');
     }
-    const payload = buildTrackingTemplatePayload(to, orderNumber, trackingUrl);
+    const payload = buildTrackingTemplatePayload(normalizedPhone, orderNumber, trackingUrl);
     const url = `${config.TATA_OMNI_API_BASE_URL.replace(/\/$/, '')}/whatsapp-cloud/messages`;
     const res = await fetch(url, {
       method: 'POST',
@@ -457,11 +503,11 @@ export async function sendWhatsAppTrackingUpdate(
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(8_000),
     });
-    if (!res.ok) throw new WhatsAppDeliveryError(res.status);
+    await assertResponseOk(res);
     return;
   }
 
-  const phone = to.startsWith('+') ? to.slice(1) : to;
+  const phone = normalizedPhone.startsWith('+') ? normalizedPhone.slice(1) : normalizedPhone;
   if (config.WHATSAPP_TRACKING_TEMPLATE_NAME) {
     const payload = buildTrackingTemplatePayload(phone, orderNumber, trackingUrl);
     delete (payload as { source?: string }).source;

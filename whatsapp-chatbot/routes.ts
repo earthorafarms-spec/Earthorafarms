@@ -5,7 +5,12 @@ import { extractWhatsAppInboundMessages } from './inbound.js';
 import { enqueueWhatsAppMessage } from './events.repository.js';
 import { drainExpiredFlowTimeouts, wakeWhatsAppWorker } from './worker.js';
 import { getLastWhatsAppDiagnostic, recordWhatsAppDiagnostic } from './diagnostics.js';
-import { sendWhatsAppLowStockAlert, sendWhatsAppMessage, sendWhatsAppTrackingUpdate } from './provider.js';
+import {
+  normalizeTrackingPhone,
+  sendWhatsAppLowStockAlert,
+  sendWhatsAppMessage,
+  sendWhatsAppTrackingUpdate,
+} from './provider.js';
 
 function describePayloadShape(value: unknown, depth = 0): unknown {
   if (value === null) return 'null';
@@ -121,7 +126,8 @@ export async function registerWhatsAppTrackingRoute(app: FastifyInstance): Promi
     }
 
     const body = req.body as { phone?: unknown; orderNumber?: unknown; trackingUrl?: unknown };
-    const phone = typeof body?.phone === 'string' ? body.phone.trim() : '';
+    const rawPhone = typeof body?.phone === 'string' ? body.phone.trim() : '';
+    const phone = normalizeTrackingPhone(rawPhone);
     const orderNumber = typeof body?.orderNumber === 'string' ? body.orderNumber.trim() : '';
     const trackingUrl = typeof body?.trackingUrl === 'string' ? body.trackingUrl.trim() : '';
     let parsedUrl: URL;

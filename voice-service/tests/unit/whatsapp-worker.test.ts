@@ -267,7 +267,7 @@ describe('WhatsApp worker inbox event processing & delivery retries', () => {
 
     vi.clearAllMocks();
 
-    // Retry when mediaSentAt is already populated: does not resend image, card, or duplicate text
+    // Retry when mediaSentAt is already populated: does not resend image or card, but sends text
     const retryImageAlreadySent: WhatsAppInboxEvent = {
       id: 'event-5',
       providerMessageId: 'wamid.5',
@@ -283,8 +283,51 @@ describe('WhatsApp worker inbox event processing & delivery retries', () => {
     await processInboxEvent(retryImageAlreadySent);
     expect(mockSendWhatsAppProductCard).not.toHaveBeenCalled();
     expect(mockSendWhatsAppImage).not.toHaveBeenCalled();
-    expect(mockSendWhatsAppMessage).not.toHaveBeenCalled();
+    expect(mockSendWhatsAppMessage).toHaveBeenCalledWith('+919876543210', 'Here is the product photo.');
     expect(mockMarkWhatsAppMessageProcessed).toHaveBeenCalledWith('event-5');
+  });
+
+  it('resends text on retry when media succeeded on previous attempt but text failed', async () => {
+    const retryEvent: WhatsAppInboxEvent = {
+      id: 'event-media-ok-text-failed',
+      providerMessageId: 'wamid.media-ok',
+      phone: '+919876543210',
+      messageText: 'Show photo',
+      replyText: 'Here is the product photo for Alpha.',
+      mediaUrl: 'https://cdn.example.com/alpha.png',
+      mediaCaption: 'Alpha',
+      mediaSentAt: '2026-09-11T10:00:00.000Z',
+      attemptCount: 2,
+    };
+
+    await processInboxEvent(retryEvent);
+
+    expect(mockSendWhatsAppImage).not.toHaveBeenCalled();
+    expect(mockSendWhatsAppProductCard).not.toHaveBeenCalled();
+    expect(mockSendWhatsAppMessage).toHaveBeenCalledWith('+919876543210', 'Here is the product photo for Alpha.');
+    expect(mockMarkWhatsAppMessageProcessed).toHaveBeenCalledWith('event-media-ok-text-failed');
+  });
+
+  it('resends text on retry when product card succeeded on previous attempt but text failed', async () => {
+    const separateCardReply = 'Here is more information about Alpha.';
+    const retryCardEvent: WhatsAppInboxEvent = {
+      id: 'event-card-ok-text-failed',
+      providerMessageId: 'wamid.card-ok',
+      phone: '+919876543210',
+      messageText: 'Alpha info',
+      replyText: separateCardReply,
+      mediaUrl: sampleCard.imageUrl ?? null,
+      mediaCaption: serializeProductCard(sampleCard),
+      mediaSentAt: '2026-09-11T10:00:00.000Z',
+      attemptCount: 2,
+    };
+
+    await processInboxEvent(retryCardEvent);
+
+    expect(mockSendWhatsAppProductCard).not.toHaveBeenCalled();
+    expect(mockSendWhatsAppImage).not.toHaveBeenCalled();
+    expect(mockSendWhatsAppMessage).toHaveBeenCalledWith('+919876543210', separateCardReply);
+    expect(mockMarkWhatsAppMessageProcessed).toHaveBeenCalledWith('event-card-ok-text-failed');
   });
 
   it('retries text message delivery when there is no media and replyText was persisted', async () => {

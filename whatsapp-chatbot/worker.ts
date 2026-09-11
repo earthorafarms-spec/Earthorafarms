@@ -35,7 +35,7 @@ export async function processInboxEvent(event: WhatsAppInboxEvent): Promise<void
         await sendWhatsAppProductCard(event.phone, productCard);
         await markWhatsAppMediaSent(event.id);
       }
-      if (!event.mediaSentAt && event.replyText !== productCard.body) {
+      if (event.replyText !== productCard.body) {
         await sendWhatsAppMessage(event.phone, event.replyText);
       }
     } else {
@@ -43,9 +43,7 @@ export async function processInboxEvent(event: WhatsAppInboxEvent): Promise<void
         await sendWhatsAppImage(event.phone, event.mediaUrl, event.mediaCaption ?? undefined);
         await markWhatsAppMediaSent(event.id);
       }
-      if (!event.mediaSentAt) {
-        await sendWhatsAppMessage(event.phone, event.replyText);
-      }
+      await sendWhatsAppMessage(event.phone, event.replyText);
     }
     await markWhatsAppMessageProcessed(event.id);
     return;
@@ -120,7 +118,10 @@ export function startWhatsAppWorker(app: FastifyInstance): void {
           recordWhatsAppDiagnostic('worker_failed', {
             attempt: event.attemptCount,
             failureType: err instanceof Error ? err.name : typeof err,
-            ...(err instanceof WhatsAppDeliveryError ? { providerStatus: err.status } : {}),
+            ...(err instanceof WhatsAppDeliveryError ? {
+              providerStatus: err.status,
+              ...(err.responseBody ? { providerResponse: err.responseBody.slice(0, 500) } : {}),
+            } : {}),
           });
           app.log.error({ err: message, messageId: event.providerMessageId, contact: phoneReference(event.phone) }, 'WhatsApp message processing failed');
           await markWhatsAppMessageFailed(event.id, message, event.attemptCount).catch((markErr) => {
