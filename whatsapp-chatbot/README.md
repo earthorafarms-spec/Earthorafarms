@@ -52,9 +52,11 @@ to prevent duplicate messages. If using the webhook, set that function's
 For alerts sent when the dispatch number has not messaged the business in the
 last 24 hours, create an approved Tata/Meta utility template with three body
 placeholders (product name, current stock, threshold) and set
-`WHATSAPP_LOW_STOCK_TEMPLATE_NAME` (and its language). If it is left blank, the
-service sends a normal text message, which is valid only in an open service
-window.
+`WHATSAPP_LOW_STOCK_TEMPLATE_NAME=earthora_low_stock_alert` (and its language).
+The Render configuration now uses this name. The template still must be
+created and approved once in Tata Omni with three body placeholders: product
+name, current stock, and threshold. If the variable is left blank, the service
+sends a normal text message, which is valid only in an open service window.
 
 Copy the secret environment values from an authorized password manager or
 configure fresh values. Never commit them. `TOKEN_SIGNING_SECRET`, Supabase,
