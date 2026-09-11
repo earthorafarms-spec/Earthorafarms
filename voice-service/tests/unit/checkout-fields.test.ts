@@ -78,28 +78,26 @@ describe('checkout field validation', () => {
     expect(result).toMatchObject({ ok: false, reason: 'invalid_value' });
   });
 
-  it('stores city and state together and normalizes common spoken forms', async () => {
+  it('stores city and state together without changing the caller\'s script', async () => {
     const state = createInitialState();
     const result = await setDeliveryLocationTool.handler(
       { city: 'अहमदाबाद', state: 'गुजरात' },
       { callSessionId: 'session-1', state }
     );
 
-    expect(result).toMatchObject({ ok: true, city: 'Ahmedabad', state: 'Gujarat' });
-    expect(state.checkoutFields).toMatchObject({ city: 'Ahmedabad', state: 'Gujarat' });
+    expect(result).toMatchObject({ ok: true, city: 'अहमदाबाद', state: 'गुजरात' });
+    expect(state.checkoutFields).toMatchObject({ city: 'अहमदाबाद', state: 'गुजरात' });
   });
 
-  it('stores Hindi and Gujarati names and addresses in Latin script for the review form', async () => {
+  it('keeps Hindi and Gujarati names and addresses in their caller-provided script', async () => {
     const state = createInitialState();
     const ctx = { callSessionId: 'session-1', state };
 
     await setCheckoutFieldTool.handler({ field: 'name', value: 'મનોજભાઈ પટેલ' }, ctx);
     await setCheckoutFieldTool.handler({ field: 'address', value: 'शांति नगर मेन रोड' }, ctx);
 
-    expect(state.checkoutFields.name).toMatch(/^Manoj/i);
-    expect(state.checkoutFields.address).toMatch(/^Shanti Nagar/i);
-    expect(state.checkoutFields.name).not.toMatch(/[\u0900-\u097F\u0A80-\u0AFF]/u);
-    expect(state.checkoutFields.address).not.toMatch(/[\u0900-\u097F\u0A80-\u0AFF]/u);
+    expect(state.checkoutFields.name).toBe('મનોજભાઈ પટેલ');
+    expect(state.checkoutFields.address).toBe('शांति नगर मेन रोड');
   });
 
   it('asks the optional GST question before creating the form and accepts a decline', async () => {

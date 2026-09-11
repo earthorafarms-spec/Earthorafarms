@@ -19,9 +19,9 @@ const SILENCE_CHECK_PROMPTS: Record<SupportedLanguage, string> = {
 };
 
 const REVIEW_RECEIVED_PROMPTS: Record<SupportedLanguage, string> = {
-  en: 'Thank you for confirming. Please review or edit the form before continuing to Razorpay. Goodbye!',
-  hi: 'कन्फर्म करने के लिए धन्यवाद। Razorpay पर जाने से पहले फॉर्म चेक या एडिट कर लीजिए। नमस्ते!',
-  gu: 'કન્ફર્મ કરવા બદલ આભાર. Razorpay પર જતાં પહેલાં ફોર્મ તપાસી અથવા બદલી લેજો. આવજો!',
+  en: 'Thank you for confirming. Please review or edit the form before secure payment. Thank you for calling Earthora Farms. Goodbye.',
+  hi: 'कन्फर्म करने के लिए धन्यवाद। सुरक्षित पेमेंट से पहले फॉर्म चेक या एडिट कर लीजिए। Earthora Farms से बात करने के लिए धन्यवाद। आपका दिन शुभ हो।',
+  gu: 'કન્ફર્મ કરવા બદલ આભાર. સુરક્ષિત પેમેન્ટ પહેલાં ફોર્મ તપાસી અથવા બદલી લેજો. Earthora Farms સાથે વાત કરવા માટે આભાર. તમારો દિવસ શુભ રહે.',
 };
 
 export function repeatPrompt(language: SupportedLanguage): string {

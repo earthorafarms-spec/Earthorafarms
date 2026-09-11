@@ -17,6 +17,8 @@ services:
       # Set in the Render dashboard — never commit real values.
       - key: PUBLIC_APP_URL
         sync: false
+      - key: PUBLIC_VOICE_SERVICE_URL
+        value: https://earthorafarms-mhwv.onrender.com
       - key: MAIN_APP_NETLIFY_URL
         sync: false
       - key: SUPABASE_URL

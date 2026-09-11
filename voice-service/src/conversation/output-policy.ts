@@ -90,13 +90,13 @@ const ORDER_STATUS_DEFLECTION: Record<SupportedLanguage, string> = {
 const PAYMENT_CREDENTIAL_REFUSAL: Record<SupportedLanguage, string> = {
   en:
     "I won't ask for that — please don't share payment passwords, PINs, OTPs, or card " +
-    'details with me. Payment happens securely on Razorpay after you verify the form.',
+    'details with me. Payment happens securely after you verify the form.',
   hi:
     'मैं यह नहीं पूछूंगी — कृपया मुझे भुगतान पासवर्ड, पिन, OTP या कार्ड की जानकारी न बताएं। ' +
-    'फॉर्म सत्यापित करने के बाद भुगतान सुरक्षित रूप से Razorpay पर होता है।',
+    'फॉर्म सत्यापित करने के बाद भुगतान सुरक्षित रूप से होता है।',
   gu:
     'હું એ નહીં પૂછું — કૃપા કરીને મને પેમેન્ટ પાસવર્ડ, પિન, OTP કે કાર્ડની વિગતો ન આપો. ' +
-    'ફોર્મ ચકાસ્યા પછી ચુકવણી સુરક્ષિત રીતે Razorpay પર થાય છે.',
+    'ફોર્મ ચકાસ્યા પછી ચુકવણી સુરક્ષિત રીતે થાય છે.',
 };
 
 const SAFE_DEFLECTION: Record<SupportedLanguage, string> = {

@@ -56,6 +56,7 @@ export async function registerCheckoutRoutes(app: FastifyInstance): Promise<void
     // Never return internal IDs beyond the opaque session shape the form needs.
     return reply.send({
       status: session.status,
+      language: session.language,
       customer: {
         name: session.name, email: session.email, phone: session.phone, address: session.address,
         city: session.city, state: session.state, postalCode: session.postalCode, country: session.country,

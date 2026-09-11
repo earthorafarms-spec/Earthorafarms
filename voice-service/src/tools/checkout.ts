@@ -5,7 +5,7 @@ import { createCheckoutSession, findCheckoutSessionByTokenHash } from '../reposi
 import { upsertCheckoutItem } from '../repositories/checkoutItems.repository.js';
 import { sendWhatsAppCheckoutForm } from '../../../whatsapp-chatbot/provider.js';
 import { config } from '../config.js';
-import { transliterateCheckoutValue } from '../conversation/checkout-transliteration.js';
+import type { SupportedLanguage } from '../conversation/language.js';
 
 const ALLOWED_FIELDS = [
   'name', 'email', 'phone', 'address', 'city', 'state', 'postalCode', 'country', 'gst', 'couponCode', 'marketingConsent',
@@ -113,28 +113,17 @@ function normalizeSpokenPlace(field: 'city' | 'state', rawValue: unknown): strin
     .replace(/[.,]+$/g, '')
     .trim();
 
-  const key = value.toLocaleLowerCase('en-IN').replace(/[\s-]+/g, ' ');
-  if (field === 'state') {
-    const stateAliases: Record<string, string> = {
-      gujarat: 'Gujarat', gujrat: 'Gujarat', gujrath: 'Gujarat', 'गुजरात': 'Gujarat', 'ગુજરાત': 'Gujarat',
-      maharashtra: 'Maharashtra', 'महाराष्ट्र': 'Maharashtra', 'મહારાષ્ટ્ર': 'Maharashtra',
-      rajasthan: 'Rajasthan', 'राजस्थान': 'Rajasthan', 'રાજસ્થાન': 'Rajasthan',
-      'madhya pradesh': 'Madhya Pradesh', 'मध्य प्रदेश': 'Madhya Pradesh',
-      delhi: 'Delhi', 'दिल्ली': 'Delhi', 'દિલ્હી': 'Delhi',
-    };
-    return stateAliases[key] ?? transliterateCheckoutValue(value);
-  }
-
-  const cityAliases: Record<string, string> = {
-    ahmedabad: 'Ahmedabad', ahemdabad: 'Ahmedabad', ahmedbad: 'Ahmedabad', amdavad: 'Ahmedabad',
-    'अहमदाबाद': 'Ahmedabad', 'અમદાવાદ': 'Ahmedabad',
-    surat: 'Surat', 'सूरत': 'Surat', 'સુરત': 'Surat',
-    vadodara: 'Vadodara', baroda: 'Vadodara', 'वडोदरा': 'Vadodara', 'વડોદરા': 'Vadodara',
-  };
-  return cityAliases[key] ?? transliterateCheckoutValue(value);
+  // Preserve the caller's wording and script. Earlier code transliterated
+  // Hindi/Gujarati values into English, which made the review form and bill
+  // contradict the language used throughout the call.
+  return value;
 }
 
-function normalizeAndValidate(field: AllowedField, rawValue: unknown): { value: unknown; error?: string } {
+function normalizeAndValidate(
+  field: AllowedField,
+  rawValue: unknown,
+  language: SupportedLanguage,
+): { value: unknown; error?: string } {
   if (field === 'marketingConsent') {
     if (typeof rawValue === 'boolean') return { value: rawValue };
     const normalized = String(rawValue).trim().toLowerCase();
@@ -165,12 +154,11 @@ function normalizeAndValidate(field: AllowedField, rawValue: unknown): { value: 
   if (field === 'city' || field === 'state') {
     return { value: normalizeSpokenPlace(field, value) };
   }
-  if (field === 'name' || field === 'address') {
-    return { value: transliterateCheckoutValue(value) };
-  }
   if (field === 'country') {
-    if (/^(?:india|भारत|ભારત)$/iu.test(value)) return { value: 'India' };
-    return { value: transliterateCheckoutValue(value) };
+    if (/^(?:india|भारत|ભારત)$/iu.test(value)) {
+      return { value: language === 'hi' ? 'भारत' : language === 'gu' ? 'ભારત' : 'India' };
+    }
+    return { value };
   }
   if (field === 'email' && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
     return { value, error: "That doesn't look like a valid email address." };
@@ -183,8 +171,8 @@ export const setCheckoutFieldTool: ToolModule = {
     name: 'set_checkout_field',
     description:
       'Records one checkout field the caller has provided. Call once per field, or a couple of ' +
-      'closely related address fields together. Names and delivery addresses spoken in Hindi or Gujarati ' +
-      'are automatically stored in readable Latin/English script for the review form.',
+      'closely related address fields together. Preserve the caller-provided name and delivery details ' +
+      'exactly in the established call language and script for the review form and invoice.',
     parameters: {
       type: 'object',
       properties: {
@@ -201,7 +189,7 @@ export const setCheckoutFieldTool: ToolModule = {
       return { ok: false, reason: 'unknown_field' };
     }
 
-    const { value, error } = normalizeAndValidate(field, args.value);
+    const { value, error } = normalizeAndValidate(field, args.value, ctx.state.currentLanguage);
     if (error) {
       return { ok: false, reason: 'invalid_value', message: error };
     }
@@ -314,6 +302,7 @@ export const createVerificationLinkTool: ToolModule = {
       tokenHash,
       tokenExpiresAt,
       draft: fields,
+      language: ctx.state.currentLanguage,
     });
 
     for (const line of ctx.state.cart) {

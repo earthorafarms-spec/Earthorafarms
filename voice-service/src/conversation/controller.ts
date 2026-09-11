@@ -34,9 +34,9 @@ function reviewFormReply(
 ): string {
   if (sent) {
     if (reviewUrl) {
-      if (language === 'hi') return `आपका ऑर्डर रिव्यू फॉर्म तैयार है:\n${reviewUrl}\n\nकृपया सामान और डिलीवरी की जानकारी जाँचें या बदलें, फिर फॉर्म कन्फर्म करें। अभी कोई पेमेंट या ऑर्डर पूरा नहीं हुआ है; कन्फर्म करने के बाद ही Razorpay खुलेगा।`;
-      if (language === 'gu') return `તમારું ઓર્ડર રિવ્યૂ ફોર્મ તૈયાર છે:\n${reviewUrl}\n\nકૃપા કરીને વસ્તુઓ અને ડિલિવરીની વિગતો તપાસો અથવા બદલો, પછી ફોર્મ કન્ફર્મ કરો. હજી કોઈ પેમેન્ટ કે ઓર્ડર પૂર્ણ થયો નથી; કન્ફર્મ કર્યા પછી જ Razorpay ખુલશે.`;
-      return `Your order-review form is ready:\n${reviewUrl}\n\nPlease check or edit the items and delivery details, then confirm the form. No order or payment has been completed yet; Razorpay opens only after your confirmation.`;
+      if (language === 'hi') return `आपका ऑर्डर रिव्यू फॉर्म तैयार है:\n${reviewUrl}\n\nकृपया सामान और डिलीवरी की जानकारी जाँचें या बदलें, फिर फॉर्म कन्फर्म करें। अभी कोई पेमेंट या ऑर्डर पूरा नहीं हुआ है; कन्फर्म करने के बाद ही सुरक्षित पेमेंट पेज खुलेगा।`;
+      if (language === 'gu') return `તમારું ઓર્ડર રિવ્યૂ ફોર્મ તૈયાર છે:\n${reviewUrl}\n\nકૃપા કરીને વસ્તુઓ અને ડિલિવરીની વિગતો તપાસો અથવા બદલો, પછી ફોર્મ કન્ફર્મ કરો. હજી કોઈ પેમેન્ટ કે ઓર્ડર પૂર્ણ થયો નથી; કન્ફર્મ કર્યા પછી જ સુરક્ષિત પેમેન્ટ પેજ ખુલશે.`;
+      return `Your order-review form is ready:\n${reviewUrl}\n\nPlease check or edit the items and delivery details, then confirm the form. No order or payment has been completed yet; the secure payment page opens only after your confirmation.`;
     }
     if (language === 'hi') return 'आपके WhatsApp पर ऑर्डर रिव्यू फॉर्म भेज दिया है। WhatsApp चेक करें और लिंक मिलने पर हाँ कहें। पेमेंट से पहले फॉर्म चेक या एडिट कर सकते हैं।';
     if (language === 'gu') return 'તમારા WhatsApp પર ઓર્ડર રિવ્યૂ ફોર્મ મોકલ્યું છે. WhatsApp તપાસો અને લિંક મળે પછી હા કહો. પેમેન્ટ પહેલાં ફોર્મ તપાસી અથવા બદલી શકો છો.';
@@ -54,6 +54,21 @@ const RECEIPT_NEGATION_PATTERN =
 
 function confirmedReviewReceipt(text: string): boolean {
   return !RECEIPT_NEGATION_PATTERN.test(text) && RECEIPT_CONFIRMATION_PATTERN.test(text);
+}
+
+const CALL_ENDING_PATTERN =
+  /(?:\b(?:bye|goodbye|good bye|see you|that'?s all|no thanks|nothing else|hang up)\b|अलविदा|बाय|फिर मिलेंगे|बस|नहीं चाहिए|આવજો|બાય|ફરી મળીએ|બસ|નથી જોઈએ)/iu;
+
+function callEndingReply(state: ConversationState): string {
+  const reviewAwaiting = state.awaitingReviewReceiptConfirmation || Boolean(state.activeCheckoutReview);
+  if (reviewAwaiting) {
+    if (state.currentLanguage === 'hi') return 'धन्यवाद। WhatsApp पर भेजा गया ऑर्डर रिव्यू फॉर्म जाँचकर कन्फर्म करें, फिर सुरक्षित पेमेंट पूरा करें। Earthora Farms से बात करने के लिए धन्यवाद।';
+    if (state.currentLanguage === 'gu') return 'આભાર. WhatsApp પર મોકલેલ ઓર્ડર રિવ્યૂ ફોર્મ તપાસીને કન્ફર્મ કરો, પછી સુરક્ષિત પેમેન્ટ પૂર્ણ કરો. Earthora Farms સાથે વાત કરવા માટે આભાર.';
+    return 'Thank you. Please review and confirm the order form sent on WhatsApp, then complete secure payment. Thank you for calling Earthora Farms.';
+  }
+  if (state.currentLanguage === 'hi') return 'Earthora Farms से बात करने के लिए धन्यवाद। आपका दिन शुभ हो।';
+  if (state.currentLanguage === 'gu') return 'Earthora Farms સાથે વાત કરવા માટે આભાર. તમારો દિવસ શુભ રહે.';
+  return 'Thank you for calling Earthora Farms. Have a great day.';
 }
 
 const CART_SUMMARY_PATTERN =
@@ -1017,19 +1032,33 @@ export async function processTurn(
   }
 
   // A greeting alone never locks the call language. The first substantive
-  // sentence establishes it, and later confident full sentences can switch
-  // it. Short field values such as "yes", a PIN, or "Ahmedabad" preserve it.
+  // caller sentence establishes a voice-call language permanently; later
+  // inputs can be data, names, or code-switched speech and must not make the
+  // agent change language halfway through checkout.
   const checkoutStarted = state.cart.length > 0 || Object.keys(state.checkoutFields).length > 0;
   const explicitLanguage = productAction ? null : requestedLanguage(userText);
-  if (explicitLanguage) {
+  if (explicitLanguage && (channel !== 'voice' || !state.languageEstablished)) {
     state.currentLanguage = explicitLanguage;
     state.languageEstablished = true;
-  } else if (!productAction && !isCommonGreeting(userText)) {
+  } else if (!productAction && !isCommonGreeting(userText) && (channel !== 'voice' || !state.languageEstablished)) {
     const detected = detectLanguage(userText);
     if (detected) {
       state.currentLanguage = detected;
       state.languageEstablished = true;
     }
+  }
+
+  if (channel === 'voice' && state.awaitingReviewReceiptConfirmation && confirmedReviewReceipt(userText)) {
+    state.awaitingReviewReceiptConfirmation = false;
+    const replyText = reviewReceivedPrompt(state.currentLanguage);
+    state.messages.push({ role: 'assistant', content: replyText });
+    return { state, replyText, policyViolations: [], outboundActions, callShouldEnd: true };
+  }
+
+  if (channel === 'voice' && CALL_ENDING_PATTERN.test(userText)) {
+    const replyText = callEndingReply(state);
+    state.messages.push({ role: 'assistant', content: replyText });
+    return { state, replyText, policyViolations: [], outboundActions, callShouldEnd: true };
   }
 
   // A clipped/noisy opening transcript must never trigger an unprompted
@@ -1039,13 +1068,6 @@ export async function processTurn(
     const replyText = openingClarification(state.currentLanguage);
     state.messages.push({ role: 'assistant', content: replyText });
     return { state, replyText, policyViolations: [], outboundActions };
-  }
-
-  if (channel === 'voice' && state.awaitingReviewReceiptConfirmation && confirmedReviewReceipt(userText)) {
-    state.awaitingReviewReceiptConfirmation = false;
-    const replyText = reviewReceivedPrompt(state.currentLanguage);
-    state.messages.push({ role: 'assistant', content: replyText });
-    return { state, replyText, policyViolations: [], outboundActions, callShouldEnd: true };
   }
 
   if (channel === 'voice' && state.pendingDigitConfirmation) {

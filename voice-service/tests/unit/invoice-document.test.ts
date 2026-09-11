@@ -13,8 +13,8 @@ describe('signed WhatsApp invoice URL', () => {
     expect(verifyInvoiceReference('plink_test_123', 'invalid')).toBe(false);
   });
 
-  it('uses the storefront proxy rather than exposing the Render hostname', () => {
+  it('uses the public voice-service document route so the link returns a PDF', () => {
     const url = buildPublicInvoiceUrl('plink_test_123');
-    expect(url).toMatch(/^http:\/\/localhost:5173\/api\/voice\/payments\/invoice\/plink_test_123\?signature=[a-f0-9]{64}$/u);
+    expect(url).toMatch(/^https:\/\/earthorafarms-mhwv\.onrender\.com\/payments\/invoice\/plink_test_123\?signature=[a-f0-9]{64}$/u);
   });
 });

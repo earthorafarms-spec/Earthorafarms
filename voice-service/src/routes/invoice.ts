@@ -17,7 +17,7 @@ export async function registerInvoiceRoutes(app: FastifyInstance): Promise<void>
       }
 
       try {
-        const pdf = await fetchInvoicePdf(session.orderId);
+        const pdf = await fetchInvoicePdf(session.orderId, session.language);
         const orderNumber = `ORD-${session.orderId.slice(0, 8).toUpperCase()}`;
         return reply
           .header('Cache-Control', 'private, no-store')

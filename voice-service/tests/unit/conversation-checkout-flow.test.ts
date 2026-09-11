@@ -169,6 +169,30 @@ describe('conversation checkout regressions', () => {
     expect(result.state.currentLanguage).toBe('hi');
   });
 
+  it('keeps a voice call in its initially established language through later code switching', async () => {
+    const state = checkoutState();
+    state.currentLanguage = 'hi';
+    state.languageEstablished = true;
+    mocks.chat.mockResolvedValueOnce({ kind: 'message', content: 'कृपया अपना ईमेल एड्रेस बताइए।' });
+
+    const result = await processTurn('flow', state, 'My email is customer@example.com');
+
+    expect(result.state.currentLanguage).toBe('hi');
+    expect(result.state.languageEstablished).toBe(true);
+  });
+
+  it('uses a proper Hindi farewell instead of namaste when the caller ends without an order', async () => {
+    const state = createInitialState();
+    state.currentLanguage = 'hi';
+    state.languageEstablished = true;
+
+    const result = await processTurn('flow', state, 'अलविदा');
+
+    expect(result.callShouldEnd).toBe(true);
+    expect(result.replyText).not.toMatch(/नमस्ते/u);
+    expect(result.replyText).toMatch(/धन्यवाद|फिर बात/u);
+  });
+
   it('regenerates an unrelated-language reply and uses a same-language fallback if it repeats', async () => {
     const state = checkoutState();
     state.currentLanguage = 'hi';

@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabaseClient.js';
 import type { PricedCart } from '../domain/types.js';
+import type { SupportedLanguage } from '../conversation/language.js';
 
 export type CheckoutSessionStatus =
   | 'draft' | 'link_sent' | 'opened' | 'verified' | 'repriced'
@@ -18,6 +19,7 @@ export interface CheckoutSessionRow {
   state: string;
   postalCode: string;
   country: string;
+  language: SupportedLanguage;
   gst: string | null;
   couponCode: string | null;
   marketingConsent: boolean;
@@ -45,6 +47,7 @@ interface DbRow {
   state: string;
   postal_code: string;
   country: string;
+  conversation_language: SupportedLanguage;
   gst: string | null;
   coupon_code: string | null;
   marketing_consent: boolean;
@@ -61,7 +64,7 @@ interface DbRow {
 }
 
 const SELECT_COLUMNS =
-  'id, call_session_id, status, name, email, phone, address, city, state, postal_code, country, ' +
+  'id, call_session_id, status, name, email, phone, address, city, state, postal_code, country, conversation_language, ' +
   'gst, coupon_code, marketing_consent, currency, frozen_pricing, token_expires_at, verified_at, ' +
   'pricing_frozen_at, razorpay_payment_link_id, razorpay_reference_id, razorpay_payment_id, ' +
   'payment_status, order_id';
@@ -79,6 +82,7 @@ function mapRow(row: DbRow): CheckoutSessionRow {
     state: row.state,
     postalCode: row.postal_code,
     country: row.country,
+    language: row.conversation_language,
     gst: row.gst,
     couponCode: row.coupon_code,
     marketingConsent: row.marketing_consent,
@@ -99,6 +103,7 @@ export async function createCheckoutSession(input: {
   callSessionId: string;
   tokenHash: string;
   tokenExpiresAt: string;
+  language: SupportedLanguage;
   draft: Partial<Pick<CheckoutSessionRow,
     'name' | 'email' | 'phone' | 'address' | 'city' | 'state' | 'postalCode' | 'country' | 'gst' | 'couponCode' | 'marketingConsent'
   >>;
@@ -118,6 +123,7 @@ export async function createCheckoutSession(input: {
       state: input.draft.state ?? '',
       postal_code: input.draft.postalCode ?? '',
       country: input.draft.country ?? 'India',
+      conversation_language: input.language,
       gst: input.draft.gst ?? null,
       coupon_code: input.draft.couponCode ?? null,
       marketing_consent: input.draft.marketingConsent ?? false,

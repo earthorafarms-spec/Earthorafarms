@@ -21,9 +21,11 @@ import { listActiveFestivalDeals, listActiveProducts } from '../repositories/pro
 
 /** Line-for-line port of checkout.tsx's `gstBreakdown` useMemo. Do not "improve" — must match exactly. */
 export function computeGst(totalAmount: number, country: string, state: string): GstBreakdown {
-  const isIndia = (country || '').trim().toLowerCase() === 'india';
+  const cleanCountry = (country || '').trim().toLowerCase();
+  const isIndia = cleanCountry === 'india' || cleanCountry === 'भारत' || cleanCountry === 'ભારત';
   const cleanState = (state || '').trim().toLowerCase();
-  const isGujarat = cleanState.includes('gujarat') || cleanState === 'gj' || cleanState === 'guj';
+  const isGujarat = cleanState.includes('gujarat') || cleanState === 'gj' || cleanState === 'guj' ||
+    cleanState.includes('गुजरात') || cleanState.includes('ગુજરાત');
 
   const taxableValue = totalAmount / 1.18;
   const totalGstAmount = totalAmount - taxableValue;

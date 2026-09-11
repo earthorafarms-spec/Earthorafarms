@@ -51,6 +51,7 @@ export interface VoiceCheckoutPricing {
 
 export interface VoiceCheckoutSession {
   status: string;
+  language: 'en' | 'hi' | 'gu';
   customer: VoiceCheckoutCustomer;
   items: VoiceCheckoutItem[];
   pricing: VoiceCheckoutPricing | null;

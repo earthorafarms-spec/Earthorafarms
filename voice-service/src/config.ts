@@ -91,6 +91,9 @@ const optionalSchema = z.object({
   // existing send-invoice function after a voice order finalizes. Optional —
   // if unset, invoices can still be resent manually from the admin portal.
   MAIN_APP_NETLIFY_URL: z.string().url().optional(),
+  // Public HTTPS origin of this Render voice service. Invoice document links
+  // use it directly because the storefront deployment may not proxy API paths.
+  PUBLIC_VOICE_SERVICE_URL: z.string().url().default('https://earthorafarms-mhwv.onrender.com'),
   // Optional shared secret for authenticated server-to-server calls to the
   // storefront's invoice function.
   NETLIFY_INTERNAL_KEY: z.string().optional(),

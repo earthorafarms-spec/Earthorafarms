@@ -1,5 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { config } from '../config.js';
+import { generateInvoicePdf } from './invoice-pdf.js';
+import type { SupportedLanguage } from '../conversation/language.js';
 
 function invoiceDigest(paymentLinkId: string): Buffer {
   return createHmac('sha256', config.TOKEN_SIGNING_SECRET)
@@ -19,33 +21,15 @@ export function verifyInvoiceReference(paymentLinkId: string, signature: string 
 }
 
 export function buildPublicInvoiceUrl(paymentLinkId: string): string {
-  const appUrl = config.PUBLIC_APP_URL.replace(/\/$/, '');
-  return `${appUrl}/api/voice/payments/invoice/${encodeURIComponent(paymentLinkId)}?signature=${signInvoiceReference(paymentLinkId)}`;
+  // The storefront currently serves its SPA fallback for /api/voice/*, which
+  // turns a valid invoice link into HTML. Serve the signed document directly
+  // from the voice service so WhatsApp always receives a real PDF response.
+  const serviceUrl = config.PUBLIC_VOICE_SERVICE_URL.replace(/\/$/, '');
+  return `${serviceUrl}/payments/invoice/${encodeURIComponent(paymentLinkId)}?signature=${signInvoiceReference(paymentLinkId)}`;
 }
 
-export async function fetchInvoicePdf(orderId: string): Promise<Buffer> {
-  if (!config.MAIN_APP_NETLIFY_URL) throw new Error('MAIN_APP_NETLIFY_URL is not configured');
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (config.NETLIFY_INTERNAL_KEY) headers['X-Internal-Key'] = config.NETLIFY_INTERNAL_KEY;
-
-  const response = await fetch(
-    `${config.MAIN_APP_NETLIFY_URL.replace(/\/$/, '')}/.netlify/functions/send-invoice`,
-    {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ orderId, mode: 'pdf' }),
-      signal: AbortSignal.timeout(25_000),
-    },
-  );
-  if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    throw new Error(`Invoice PDF generation failed (${response.status}): ${body.slice(0, 300)}`);
-  }
-  const contentType = response.headers.get('content-type') ?? '';
-  if (!contentType.toLowerCase().includes('application/pdf')) {
-    throw new Error(`Invoice generator returned unexpected content type: ${contentType || 'missing'}`);
-  }
-  const bytes = Buffer.from(await response.arrayBuffer());
+export async function fetchInvoicePdf(orderId: string, language: SupportedLanguage): Promise<Buffer> {
+  const bytes = await generateInvoicePdf(orderId, language);
   if (bytes.length < 100 || bytes.length > 10 * 1024 * 1024) {
     throw new Error(`Invoice generator returned invalid PDF size: ${bytes.length}`);
   }
