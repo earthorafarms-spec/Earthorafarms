@@ -376,6 +376,7 @@ export default function Checkout() {
       zip: postalCode,
       country,
       gst: gst || "",
+      source: "website",
     };
 
     // 3. Generate a unique order ID and insert into normalized orders table
@@ -386,7 +387,7 @@ export default function Checkout() {
       id: orderId,
       order_number: orderNumber,
       user_id: customerEmail,
-      status: "pending",
+      status: "processing",
       total_amount: verifiedAmount ?? totalAmount,
       shipping_address: shippingAddressPayload,
       // Flat columns for easy reading in KACC portal
@@ -457,7 +458,7 @@ export default function Checkout() {
     // 6. Insert order history
     await (supabase.from("Order_history") as any).insert({
       order_id: orderId,
-      order_status: status === "completed" ? "pending" : "cancelled",
+      order_status: status === "completed" ? "processing" : "cancelled",
     });
 
     return orderId;

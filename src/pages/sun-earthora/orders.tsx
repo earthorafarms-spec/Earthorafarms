@@ -8,25 +8,47 @@ import { useEscapeKey } from "@/hooks/useEscapeKey";
 function statusBadge(status: string) {
   const map: Record<string, string> = {
     delivered: "bg-emerald-50 text-emerald-700 border-emerald-200/80 shadow-xs",
-    shipped: "bg-sky-50 text-sky-700 border-sky-200/80 shadow-xs",
-    packed: "bg-amber-50 text-amber-700 border-amber-200/80 shadow-xs",
+    out_for_delivery: "bg-sky-50 text-sky-700 border-sky-200/80 shadow-xs",
     processing: "bg-indigo-50 text-indigo-700 border-indigo-200/80 shadow-xs",
-    pending: "bg-slate-50 text-slate-600 border-slate-200/80 shadow-xs",
-    cancelled: "bg-rose-50 text-rose-600 border-rose-200/80 shadow-xs",
-    refunded: "bg-purple-50 text-purple-700 border-purple-200/80 shadow-xs",
   };
-  const normalized = status?.toLowerCase() || "pending";
-  return `px-3 py-1 rounded-xl text-[11px] font-bold border capitalize transition-all duration-200 inline-flex items-center gap-1.5 ${map[normalized] || map.pending}`;
+  const normalized = status?.toLowerCase() || "processing";
+  return `px-3 py-1 rounded-xl text-[11px] font-bold border capitalize transition-all duration-200 inline-flex items-center gap-1.5 ${map[normalized] || map.processing}`;
 }
 
 const ALL_STATUSES = [
-  { id: "pending", label: "Pending", color: "bg-slate-500" },
   { id: "processing", label: "Processing", color: "bg-indigo-500" },
-  { id: "packed", label: "Packed", color: "bg-amber-500" },
-  { id: "shipped", label: "Shipped", color: "bg-sky-500" },
+  { id: "out_for_delivery", label: "Out for delivery", color: "bg-sky-500" },
   { id: "delivered", label: "Delivered", color: "bg-emerald-500" },
-  { id: "cancelled", label: "Cancelled", color: "bg-rose-500" },
 ];
+
+function orderStatusLabel(status: string) {
+  return ALL_STATUSES.find((item) => item.id === status)?.label || "Processing";
+}
+
+function displayOrderStatus(status: unknown, trackingSentAt?: string | null) {
+  const normalized = String(status || "").toLowerCase().replace(/-/g, "_");
+  if (normalized === "delivered") return "delivered";
+  if (trackingSentAt || ["out_for_delivery", "shipped", "packed", "ready_for_shipment"].includes(normalized)) {
+    return "out_for_delivery";
+  }
+  return "processing";
+}
+
+function displayOrderSource(shipping: Record<string, any>, userId: unknown) {
+  const rawSource = String(shipping.source || "").toLowerCase();
+  const rawUserId = String(userId || "").toLowerCase();
+  if (rawSource.includes("whatsapp") || rawUserId.startsWith("whatsapp:")) return "whatsapp";
+  if (rawSource.includes("voice") || rawSource.includes("smartflo")) return "voice_agent";
+  if (rawSource.includes("offline") || rawSource.includes("manual")) return "offline";
+  return "website";
+}
+
+function orderSourceLabel(source: string) {
+  if (source === "voice_agent") return "Voice agent";
+  if (source === "whatsapp") return "WhatsApp";
+  if (source === "offline") return "Offline order";
+  return "Website";
+}
 
 interface ProductItem {
   id: string;
@@ -67,7 +89,7 @@ export default function AdminOrders() {
     country: "India",
     gstNumber: "",
     paymentStatus: "completed",
-    orderStatus: "delivered",
+    orderStatus: "processing",
   });
   const [orderItems, setOrderItems] = useState<OrderLineItem[]>([]);
 
@@ -94,6 +116,7 @@ export default function AdminOrders() {
         .select(`
           id,
           order_number,
+          user_id,
           shipping_address,
           customer_name,
           customer_email,
@@ -170,8 +193,8 @@ export default function AdminOrders() {
           items: itemsCount,
           itemsList,
           total: Number(o.total_amount || 0),
-          source: shipping.source || (String(o.user_id || "").startsWith("whatsapp:") ? "whatsapp" : "website"),
-          status: ({ created: "pending", confirmed: "processing", ready_for_shipment: "packed" } as Record<string, string>)[String(o.status).toLowerCase()] || String(o.status || "pending").toLowerCase(),
+          source: displayOrderSource(shipping, o.user_id),
+          status: displayOrderStatus(o.status, o.tracking_sent_at),
           date: new Date(o.created_at || Date.now()).toLocaleDateString("en-IN", {
             day: "numeric",
             month: "short",
@@ -259,7 +282,11 @@ export default function AdminOrders() {
       if (error || data?.ok !== true) throw error || new Error(data?.error || "Tracking delivery failed");
 
       const sentAt = data.trackingSentAt || new Date().toISOString();
-      const update = { trackingUrl, trackingSentAt: sentAt };
+      const update = {
+        trackingUrl,
+        trackingSentAt: sentAt,
+        status: data.status || (selectedOrder.status === "delivered" ? "delivered" : "out_for_delivery"),
+      };
       setOrders((prev) => prev.map((o) => o.id === selectedOrder.id ? { ...o, ...update } : o));
       setFiltered((prev) => prev.map((o) => o.id === selectedOrder.id ? { ...o, ...update } : o));
       setSelectedOrder((prev: any) => prev ? { ...prev, ...update } : prev);
@@ -310,6 +337,7 @@ export default function AdminOrders() {
         zip: manualForm.zip,
         country: manualForm.country || "India",
         gst: manualForm.gstNumber || "",
+        source: "offline",
       };
 
       // 1. Update/Insert User_details
@@ -330,7 +358,7 @@ export default function AdminOrders() {
         id: orderId,
         order_number: orderId,
         user_id: customerEmail,
-        status: manualForm.orderStatus || "delivered",
+        status: manualForm.orderStatus || "processing",
         total_amount: totalAmount,
         shipping_address: shippingAddress,
         customer_name: manualForm.customerName,
@@ -386,7 +414,7 @@ export default function AdminOrders() {
         country: "India",
         gstNumber: "",
         paymentStatus: "completed",
-        orderStatus: "delivered",
+        orderStatus: "processing",
       });
       fetchOrders();
     } catch (err: any) {
@@ -486,8 +514,8 @@ export default function AdminOrders() {
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="truncate text-[15px] font-bold tracking-[-0.01em] text-foreground">{order.customer}</h3>
-                          <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] ${order.source === "whatsapp" ? "bg-emerald-50 text-emerald-700" : "bg-primary/7 text-primary"}`}>
-                            {order.source === "whatsapp" ? "WhatsApp" : "Website"}
+                          <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] ${order.source === "whatsapp" ? "bg-emerald-50 text-emerald-700" : order.source === "voice_agent" ? "bg-violet-50 text-violet-700" : order.source === "offline" ? "bg-amber-50 text-amber-700" : "bg-primary/7 text-primary"}`}>
+                            {orderSourceLabel(order.source)}
                           </span>
                           {order.gstNumber && (
                             <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-bold font-mono text-amber-700">GST {order.gstNumber}</span>
@@ -498,6 +526,7 @@ export default function AdminOrders() {
                           <span className="text-border">•</span>
                           <span>{order.date}</span>
                           {order.email && <><span className="text-border">•</span><span className="max-w-[220px] truncate">{order.email}</span></>}
+                          {order.phone && <><span className="text-border">•</span><span className="whitespace-nowrap">{order.phone}</span></>}
                         </div>
                       </div>
                     </div>
@@ -523,8 +552,7 @@ export default function AdminOrders() {
                         </span>
                       ) : (
                         <span className={statusBadge(order.status)}>
-                          <span>{order.status}</span>
-                          {order.source === "whatsapp" && <span className="text-emerald-700">· WhatsApp</span>}
+                          <span>{orderStatusLabel(order.status)}</span>
                           <ChevronRight className={`w-3 h-3 transition-transform duration-200 ${activeStatusMenuId === order.id ? "rotate-90 text-primary" : "rotate-0 text-foreground/40 group-hover/btn:text-foreground"}`} />
                         </span>
                       )}
@@ -567,14 +595,6 @@ export default function AdminOrders() {
                     </AnimatePresence>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); setSelectedOrder(order); setTrackingLinkDraft(order.trackingUrl || ""); }}
-                    className="rounded-xl border border-border/50 bg-[#fafaf8] p-2.5 text-foreground/35 transition-colors hover:border-primary/20 hover:bg-primary/5 hover:text-primary"
-                    title="View complete order details"
-                  >
-                    <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
-                  </button>
                 </div>
                 </div>
 
@@ -860,11 +880,9 @@ export default function AdminOrders() {
                         onChange={(e) => setManualForm({ ...manualForm, orderStatus: e.target.value })}
                         className="w-full h-9 px-2 rounded-xl border border-border/50 bg-[#fafaf8] outline-none focus:border-primary/50 text-foreground text-xs capitalize"
                       >
-                        <option value="delivered">Delivered</option>
-                        <option value="shipped">Shipped</option>
-                        <option value="packed">Packed</option>
                         <option value="processing">Processing</option>
-                        <option value="pending">Pending</option>
+                        <option value="out_for_delivery">Out for delivery</option>
+                        <option value="delivered">Delivered</option>
                       </select>
                     </div>
                   </div>
@@ -934,7 +952,7 @@ export default function AdminOrders() {
                       Order #{selectedOrder.orderNumber}
                     </h2>
                     <span className={statusBadge(selectedOrder.status)}>
-                      {selectedOrder.status}
+                      {orderStatusLabel(selectedOrder.status)}
                     </span>
                   </div>
                   <p className="text-xs text-foreground/40 mt-0.5">Placed on {selectedOrder.date}</p>

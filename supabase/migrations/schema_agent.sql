@@ -255,6 +255,7 @@ DECLARE
   v_session voice_checkout_sessions%ROWTYPE;
   v_order_id VARCHAR(255);
   v_shipping_address JSONB;
+  v_source TEXT := 'voice_agent';
 BEGIN
   -- Lock the row for the duration of this transaction so a concurrent
   -- (e.g. retried) call for the same session cannot race.
@@ -264,6 +265,11 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'No voice_checkout_sessions row for %', p_checkout_session_id;
   END IF;
+
+  SELECT CASE WHEN provider = 'whatsapp' THEN 'whatsapp' ELSE 'voice_agent' END
+    INTO v_source
+    FROM voice_call_sessions
+   WHERE id = v_session.call_session_id;
 
   IF v_session.order_id IS NOT NULL THEN
     RETURN v_session.order_id; -- already finalized: idempotent no-op
@@ -287,7 +293,7 @@ BEGIN
     'name', v_session.name, 'email', v_session.email, 'phone', v_session.phone,
     'address', v_session.address, 'city', v_session.city, 'state', v_session.state,
     'zip', v_session.postal_code, 'country', v_session.country, 'gst', coalesce(v_session.gst, ''),
-    'source', 'voice_agent'
+    'source', v_source
   );
 
   INSERT INTO orders (
@@ -296,7 +302,7 @@ BEGIN
     customer_state, customer_zip, customer_country, customer_gst
   ) VALUES (
     v_order_id, v_order_id, coalesce(nullif(v_session.email, ''), 'voice:' || v_session.id::text),
-    'pending', p_paid_amount, v_shipping_address,
+    'processing', p_paid_amount, v_shipping_address,
     v_session.name, v_session.email, v_session.phone, v_session.address, v_session.city,
     v_session.state, v_session.postal_code, v_session.country, coalesce(v_session.gst, '')
   );
@@ -315,7 +321,7 @@ BEGIN
 
   -- Fires the existing sync_order_status_trigger, which sets orders.status —
   -- do not UPDATE orders.status directly.
-  INSERT INTO "Order_history" (order_id, order_status) VALUES (v_order_id, 'pending');
+  INSERT INTO "Order_history" (order_id, order_status) VALUES (v_order_id, 'processing');
 
   UPDATE voice_checkout_sessions
     SET order_id = v_order_id,

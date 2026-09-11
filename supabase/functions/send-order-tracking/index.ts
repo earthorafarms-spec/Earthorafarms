@@ -51,7 +51,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: order, error: orderError } = await client
       .from("orders")
-      .select("id,order_number,customer_phone,shipping_address,tracking_url")
+      .select("id,order_number,customer_phone,shipping_address,tracking_url,status")
       .eq("id", orderId)
       .maybeSingle();
     if (orderError) throw orderError;
@@ -91,9 +91,17 @@ Deno.serve(async (req: Request) => {
     }
 
     const sentAt = new Date().toISOString();
-    const { error: markError } = await client.from("orders").update({ tracking_sent_at: sentAt }).eq("id", orderId);
+    const nextStatus = String(order.status || "").toLowerCase() === "delivered" ? "delivered" : "out_for_delivery";
+    const { error: markError } = await client.from("orders").update({
+      tracking_sent_at: sentAt,
+      status: nextStatus,
+    }).eq("id", orderId);
     if (markError) throw markError;
-    return json(200, { ok: true, trackingSentAt: sentAt });
+    if (nextStatus === "out_for_delivery") {
+      const { error: historyError } = await client.from("Order_history").insert({ order_id: orderId, order_status: nextStatus });
+      if (historyError) throw historyError;
+    }
+    return json(200, { ok: true, trackingSentAt: sentAt, status: nextStatus });
   } catch (error) {
     console.error("[send-order-tracking] failed", error instanceof Error ? error.message : "unknown error");
     return json(500, { ok: false, error: "Could not send the tracking update" });
