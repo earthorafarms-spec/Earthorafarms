@@ -44,6 +44,7 @@ interface InvoiceItem {
 
 interface InvoiceOrder {
   id: string;
+  order_number?: string | null;
   created_at: string | null;
   total_amount: number | string | null;
   customer_name: string | null;
@@ -137,7 +138,7 @@ export async function generateInvoicePdf(orderId: string, language: SupportedLan
   const tax = total - taxable;
   const customerName = shippingValue(order, 'name') || 'Customer';
   const address = [shippingValue(order, 'address'), shippingValue(order, 'city'), state, shippingValue(order, 'zip'), country].filter(Boolean).join(', ');
-  const orderNumber = `ORD-${orderId.slice(0, 8).toUpperCase()}`;
+  const orderNumber = String(order.order_number || orderId);
   const date = new Date(order.created_at ?? Date.now()).toLocaleDateString('en-IN');
 
   const pdf = await PDFDocument.create();

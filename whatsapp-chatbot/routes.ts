@@ -5,7 +5,7 @@ import { extractWhatsAppInboundMessages } from './inbound.js';
 import { enqueueWhatsAppMessage } from './events.repository.js';
 import { drainExpiredFlowTimeouts, wakeWhatsAppWorker } from './worker.js';
 import { getLastWhatsAppDiagnostic, recordWhatsAppDiagnostic } from './diagnostics.js';
-import { sendWhatsAppTrackingUpdate } from './provider.js';
+import { sendWhatsAppLowStockAlert, sendWhatsAppMessage, sendWhatsAppTrackingUpdate } from './provider.js';
 
 function describePayloadShape(value: unknown, depth = 0): unknown {
   if (value === null) return 'null';
@@ -140,8 +140,44 @@ export async function registerWhatsAppTrackingRoute(app: FastifyInstance): Promi
   });
 }
 
+/** Sends an authenticated internal low-stock alert to the dispatch team. */
+export async function registerWhatsAppLowStockRoute(app: FastifyInstance): Promise<void> {
+  app.post('/whatsapp/admin/low-stock', async (req, reply) => {
+    const configuredKey = config.WHATSAPP_INTERNAL_KEY;
+    const suppliedKey = req.headers['x-whatsapp-internal-key'];
+    const key = Array.isArray(suppliedKey) ? suppliedKey[0] : suppliedKey;
+    if (!configuredKey || !key || !constantTimeEqual(key, configuredKey)) {
+      return reply.status(403).send({ error: 'forbidden' });
+    }
+
+    const body = req.body as {
+      phone?: unknown;
+      productName?: unknown;
+      stockAtAlert?: unknown;
+      threshold?: unknown;
+    };
+    const digits = typeof body?.phone === 'string' ? body.phone.replace(/\D/g, '') : '';
+    const phone = digits.length === 10 ? `91${digits}` : digits;
+    const productName = typeof body?.productName === 'string' ? body.productName.trim().slice(0, 200) : '';
+    const stockAtAlert = Number(body?.stockAtAlert);
+    const threshold = Number(body?.threshold);
+    if (!/^[1-9]\d{11}$/.test(phone) || !productName || !Number.isInteger(stockAtAlert) || !Number.isInteger(threshold)) {
+      return reply.status(400).send({ error: 'invalid low-stock payload' });
+    }
+
+    try {
+      await sendWhatsAppLowStockAlert(phone, productName, stockAtAlert, threshold);
+      return reply.status(200).send({ ok: true });
+    } catch (error) {
+      app.log.error({ err: error instanceof Error ? error.message : 'unknown error' }, 'WhatsApp low-stock alert failed');
+      return reply.status(502).send({ error: 'low_stock_delivery_failed' });
+    }
+  });
+}
+
 export async function registerWhatsAppRoutes(app: FastifyInstance): Promise<void> {
   await registerWhatsAppTrackingRoute(app);
+  await registerWhatsAppLowStockRoute(app);
 
   // External scheduler tick for WhatsApp inactivity timeout drain
   app.post('/whatsapp/timeout-tick', async (req, reply) => {

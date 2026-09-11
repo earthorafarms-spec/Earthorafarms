@@ -9,6 +9,7 @@ import { useCart } from "@/contexts/cart-context";
 import { useAuth } from "@/contexts/auth-context";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
+import { createOrderId } from "@/lib/order-id";
 import { openRazorpayModal, loadRazorpayScript } from "@/lib/razorpay";
 import type { RazorpaySuccessResponse } from "@/lib/razorpay";
 
@@ -380,7 +381,7 @@ export default function Checkout() {
     };
 
     // 3. Generate a unique order ID and insert into normalized orders table
-    const orderId = `ORD-${Date.now()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const orderId = createOrderId("website");
     const orderNumber = orderId;
 
     const { error: orderErr } = await (supabase.from("orders") as any).insert({

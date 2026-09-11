@@ -40,7 +40,21 @@ For admin shipment notifications, also set `WHATSAPP_INTERNAL_KEY` on this
 service and set the same value as the Supabase secret. Configure
 `WHATSAPP_TRACKING_TEMPLATE_NAME` with an approved two-parameter utility
 template (order number, tracking URL) when updates may be sent outside the
-24-hour WhatsApp service window.
+24-hour WhatsApp service window. Low-stock alerts use the same authenticated
+internal route and are delivered to the dispatch number configured by the
+inventory trigger (`7572866635`). The service polls pending `sms_alert_logs`
+rows every 15 seconds, so alerts still deliver when the Supabase Database
+Webhook is unavailable. You may also configure the `sms_alert_logs` INSERT
+Database Webhook to invoke `send-sms-alert`; both paths atomically claim rows
+to prevent duplicate messages. If using the webhook, set that function's
+`WHATSAPP_SERVICE_URL` and `WHATSAPP_INTERNAL_KEY` secrets.
+
+For alerts sent when the dispatch number has not messaged the business in the
+last 24 hours, create an approved Tata/Meta utility template with three body
+placeholders (product name, current stock, threshold) and set
+`WHATSAPP_LOW_STOCK_TEMPLATE_NAME` (and its language). If it is left blank, the
+service sends a normal text message, which is valid only in an open service
+window.
 
 Copy the secret environment values from an authorized password manager or
 configure fresh values. Never commit them. `TOKEN_SIGNING_SECRET`, Supabase,

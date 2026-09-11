@@ -28,7 +28,12 @@ async function findSession(rawToken: string): Promise<CheckoutSessionRow | null>
 }
 
 function publicOrderNumber(orderId: string | null): string | null {
-  return orderId ? `ORD-${orderId.slice(0, 8).toUpperCase()}` : null;
+  if (!orderId) return null;
+  // New orders already carry their source prefix. Keep legacy voice sessions
+  // readable while they age out of the checkout table.
+  return /^(?:WEB|OFF|VA|WA)-[A-Z0-9]+$/i.test(orderId)
+    ? orderId
+    : `ORD-${orderId.slice(0, 8).toUpperCase()}`;
 }
 
 async function itemsWithNames(checkoutSessionId: string) {

@@ -81,7 +81,7 @@ async function triggerInvoiceWhatsApp(input: {
   total: number;
   currency: string;
 }): Promise<void> {
-  const orderNumber = `ORD-${input.orderId.slice(0, 8).toUpperCase()}`;
+  const orderNumber = input.orderId;
   const amount = `${input.currency} ${input.total.toFixed(2)}`;
   await sendWhatsAppInvoice(
     input.phone,

@@ -335,6 +335,79 @@ export async function sendWhatsAppCheckoutForm(to: string, reviewUrl: string): P
   );
 }
 
+function buildLowStockTemplatePayload(
+  to: string,
+  productName: string,
+  stockAtAlert: number,
+  threshold: number,
+): Record<string, unknown> {
+  const phone = to.startsWith('+') ? to : `+${to}`;
+  return {
+    to: phone,
+    type: 'template',
+    source: 'external',
+    template: {
+      name: config.WHATSAPP_LOW_STOCK_TEMPLATE_NAME,
+      language: { code: config.WHATSAPP_LOW_STOCK_TEMPLATE_LANGUAGE },
+      components: [{
+        type: 'body',
+        parameters: [
+          { type: 'text', text: productName },
+          { type: 'text', text: String(stockAtAlert) },
+          { type: 'text', text: String(threshold) },
+        ],
+      }],
+    },
+  };
+}
+
+/**
+ * Sends a dispatch-team low-stock alert. An approved utility template is
+ * used whenever configured so alerts can be delivered outside the 24-hour
+ * WhatsApp service window; otherwise the active-conversation text path is
+ * retained for local testing and open admin chats.
+ */
+export async function sendWhatsAppLowStockAlert(
+  to: string,
+  productName: string,
+  stockAtAlert: number,
+  threshold: number,
+): Promise<void> {
+  const message = [
+    '⚠️ Earthora Farms low-stock alert',
+    `Product: ${productName}`,
+    `Current stock: ${stockAtAlert} unit${stockAtAlert === 1 ? '' : 's'}`,
+    `Alert threshold: ${threshold} units`,
+    stockAtAlert <= 0
+      ? 'The latest order has exhausted the available stock. Please arrange replenishment before dispatch.'
+      : 'Please arrange fresh stock at the dispatch location soon.',
+  ].join('\n');
+
+  if (!config.WHATSAPP_LOW_STOCK_TEMPLATE_NAME) {
+    await sendWhatsAppMessage(to, message);
+    return;
+  }
+
+  if (config.WHATSAPP_PROVIDER === 'tata_omni') {
+    if (!config.TATA_OMNI_ACCESS_TOKEN) throw new Error('Tata Omni WhatsApp delivery is not configured');
+    const url = `${config.TATA_OMNI_API_BASE_URL.replace(/\/$/, '')}/whatsapp-cloud/messages`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: config.TATA_OMNI_ACCESS_TOKEN },
+      body: JSON.stringify(buildLowStockTemplatePayload(to, productName, stockAtAlert, threshold)),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) throw new WhatsAppDeliveryError(res.status);
+    return;
+  }
+
+  const phone = to.startsWith('+') ? to.slice(1) : to;
+  const payload = buildLowStockTemplatePayload(phone, productName, stockAtAlert, threshold);
+  delete (payload as { source?: string }).source;
+  Object.assign(payload, { messaging_product: 'whatsapp', recipient_type: 'individual', to: phone });
+  await sendWhatsAppPayload(payload);
+}
+
 function buildTrackingTemplatePayload(
   to: string,
   orderNumber: string,

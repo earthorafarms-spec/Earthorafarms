@@ -14,9 +14,11 @@ import { processTurn } from '../voice-service/src/conversation/controller.js';
 import { sendWhatsAppImage, sendWhatsAppMessage, sendWhatsAppProductCard, WhatsAppDeliveryError } from './provider.js';
 import { recordWhatsAppDiagnostic } from './diagnostics.js';
 import { parsePersistedProductCard } from './product-card.js';
+import { drainLowStockAlerts } from './low-stock.js';
 
 const POLL_INTERVAL_MS = 750;
 const MAX_EVENTS_PER_DRAIN = 10;
+const LOW_STOCK_POLL_INTERVAL_MS = 15_000;
 let wakeWorker: (() => void) | null = null;
 
 function phoneReference(phone: string): string {
@@ -135,13 +137,19 @@ export function startWhatsAppWorker(app: FastifyInstance): void {
   };
 
   const timer = setInterval(() => { void drain(); }, POLL_INTERVAL_MS);
+  const lowStockTimer = setInterval(() => {
+    void drainLowStockAlerts(app.log).catch((err) => app.log.error(err, 'low-stock alert drain failed'));
+  }, LOW_STOCK_POLL_INTERVAL_MS);
   timer.unref();
+  lowStockTimer.unref();
   wakeWorker = () => { void drain(); };
   void drain();
+  void drainLowStockAlerts(app.log).catch((err) => app.log.error(err, 'low-stock alert drain failed'));
 
   app.addHook('onClose', async () => {
     stopped = true;
     clearInterval(timer);
+    clearInterval(lowStockTimer);
     wakeWorker = null;
   });
 }

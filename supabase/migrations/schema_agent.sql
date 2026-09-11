@@ -256,6 +256,7 @@ DECLARE
   v_order_id VARCHAR(255);
   v_shipping_address JSONB;
   v_source TEXT := 'voice_agent';
+  v_order_prefix TEXT := 'VA';
 BEGIN
   -- Lock the row for the duration of this transaction so a concurrent
   -- (e.g. retried) call for the same session cannot race.
@@ -270,6 +271,8 @@ BEGIN
     INTO v_source
     FROM voice_call_sessions
    WHERE id = v_session.call_session_id;
+
+  v_order_prefix := CASE WHEN v_source = 'whatsapp' THEN 'WA' ELSE 'VA' END;
 
   IF v_session.order_id IS NOT NULL THEN
     RETURN v_session.order_id; -- already finalized: idempotent no-op
@@ -286,8 +289,7 @@ BEGIN
       p_paid_amount, p_paid_currency;
   END IF;
 
-  v_order_id := 'ORD-' || floor(extract(epoch from now()) * 1000)::text
-              || '-' || upper(substr(md5(random()::text || clock_timestamp()::text), 1, 6));
+  v_order_id := v_order_prefix || '-' || upper(substr(encode(gen_random_bytes(5), 'hex'), 1, 10));
 
   v_shipping_address := jsonb_build_object(
     'name', v_session.name, 'email', v_session.email, 'phone', v_session.phone,

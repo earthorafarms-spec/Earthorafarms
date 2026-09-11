@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, Filter, ChevronRight, Clock, RefreshCw, PackageOpen, Plus, User, Package, X, Check, Minus, Mail, Phone, Building, MapPin, Link2, Send } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { createOrderId } from "@/lib/order-id";
 import { useToast } from "@/hooks/use-toast";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 
@@ -324,7 +325,7 @@ export default function AdminOrders() {
     setCreatingOrder(true);
     try {
       const totalAmount = orderItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
-      const orderId = `OFFLINE-${Date.now().toString().slice(-6)}`;
+      const orderId = createOrderId("offline");
       const customerEmail = manualForm.customerEmail || `offline_${Date.now()}@earthorafarms.com`;
 
       const shippingAddress = {
@@ -500,10 +501,10 @@ export default function AdminOrders() {
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: i * 0.04 }}
-                className="group/ord relative overflow-hidden rounded-[26px] border border-border/50 bg-white shadow-[0_8px_28px_rgba(26,56,38,0.04)] transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_16px_40px_rgba(26,56,38,0.10)] cursor-pointer"
+                className="group/ord relative overflow-visible rounded-[26px] border border-border/50 bg-white shadow-[0_8px_28px_rgba(26,56,38,0.04)] transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_16px_40px_rgba(26,56,38,0.10)] cursor-pointer"
                 onClick={() => { setSelectedOrder(order); setTrackingLinkDraft(order.trackingUrl || ""); }}
               >
-                <div className="h-1 w-full bg-gradient-to-r from-primary via-primary/70 to-emerald-300" />
+                <div className="h-1 w-full rounded-t-[26px] bg-gradient-to-r from-primary via-primary/70 to-emerald-300" />
                 <div className="p-5 pb-4 sm:p-6 sm:pb-5">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="flex min-w-0 items-center gap-3.5">

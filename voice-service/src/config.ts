@@ -122,6 +122,12 @@ const optionalSchema = z.object({
   // two body placeholders: order number and tracking URL.
   WHATSAPP_TRACKING_TEMPLATE_NAME: z.string().optional(),
   WHATSAPP_TRACKING_TEMPLATE_LANGUAGE: z.string().default('en'),
+  // Optional utility template for business-initiated low-stock alerts. It
+  // should contain three body placeholders: product name, current stock, and
+  // alert threshold. Without it, a normal text message is attempted, which
+  // only works inside an open WhatsApp customer-service window.
+  WHATSAPP_LOW_STOCK_TEMPLATE_NAME: z.string().optional(),
+  WHATSAPP_LOW_STOCK_TEMPLATE_LANGUAGE: z.string().default('en'),
   // Optional approved utility template with a PDF document header and two
   // body text parameters: order number and paid amount. If absent, the
   // provider attempts a normal document message in an open service window.

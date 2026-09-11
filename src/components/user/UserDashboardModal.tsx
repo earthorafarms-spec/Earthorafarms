@@ -659,7 +659,7 @@ export function UserDashboardModal({ isOpen, onClose }: UserDashboardModalProps)
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-black/8 font-inter text-xs text-black/60">
                                 <div className="flex items-center gap-3">
                                   <span className="font-dm font-normal text-base text-black">
-                                    Order #{String(order.order_number || order.id || '').slice(0, 8)}
+                                    Order #{String(order.order_number || order.id || '')}
                                   </span>
                                   <span className={`px-3 py-1 rounded-full text-[11px] font-medium uppercase tracking-wider ${
                                     order.status === 'completed' || order.status === 'delivered'

@@ -13,6 +13,7 @@ DECLARE
   v_order_id VARCHAR(255);
   v_shipping_address JSONB;
   v_source TEXT := 'voice_agent';
+  v_order_prefix TEXT := 'VA';
 BEGIN
   SELECT * INTO v_session FROM voice_checkout_sessions
     WHERE id = p_checkout_session_id FOR UPDATE;
@@ -41,8 +42,9 @@ BEGIN
     FROM voice_call_sessions
    WHERE id = v_session.call_session_id;
 
-  v_order_id := 'ORD-' || floor(extract(epoch from now()) * 1000)::text
-              || '-' || upper(substr(md5(random()::text || clock_timestamp()::text), 1, 6));
+  v_order_prefix := CASE WHEN v_source = 'whatsapp' THEN 'WA' ELSE 'VA' END;
+
+  v_order_id := v_order_prefix || '-' || upper(substr(encode(gen_random_bytes(5), 'hex'), 1, 10));
 
   v_shipping_address := jsonb_build_object(
     'name', v_session.name, 'email', v_session.email, 'phone', v_session.phone,

@@ -102,6 +102,7 @@ Deno.serve(async (req: Request) => {
         const firstRow = capOrders[0];
         order = {
           id: firstRow.id,
+          order_number: firstRow.order_number || firstRow.id,
           created_at: firstRow.order_created_at || new Date().toISOString(),
           total_amount: Number(firstRow.order_amount || 0),
           customer_email: firstRow.order_user_id,
@@ -116,6 +117,8 @@ Deno.serve(async (req: Request) => {
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const orderNumber = String(order.order_number || orderId);
 
     // 2. Fetch Order items
     let orderItems = [];
@@ -222,7 +225,7 @@ Deno.serve(async (req: Request) => {
     page.drawText("GSTIN: 24AAACE1234F1Z5  Mobile: 9825346884", { x: leftMargin + 6, y: sellerY, size: 8, font: fontBold, color: black });
 
     page.drawText("Invoice No.", { x: 340, y: topBoxY - 18, size: 8.5, font: fontBold, color: black });
-    page.drawText(`ORD-${orderId.substring(0, 8).toUpperCase()}/26-27`, { x: 340, y: topBoxY - 30, size: 9, font: fontBold, color: black });
+    page.drawText(`${orderNumber}/26-27`, { x: 340, y: topBoxY - 30, size: 9, font: fontBold, color: black });
 
     page.drawText("Invoice Date", { x: 460, y: topBoxY - 18, size: 8.5, font: fontBold, color: black });
     page.drawText(invoiceDateStr, { x: 460, y: topBoxY - 30, size: 9, font: fontBold, color: black });
@@ -465,7 +468,7 @@ Deno.serve(async (req: Request) => {
         <div style="background: #ffffff; border-radius: 14px; padding: 24px; border: 1px solid #E1E8E3; margin-bottom: 24px;">
           <p style="margin: 0 0 12px; font-size: 15px; color: #15271D;">Hi <strong>${recipientName}</strong>,</p>
           <p style="margin: 0 0 12px; font-size: 14px; color: #444; line-height: 1.6;">
-            We have successfully received your payment of <strong>₹${totalAmount.toFixed(2)}</strong> for order <strong>#ORD-${orderId.substring(0, 8).toUpperCase()}</strong>.
+            We have successfully received your payment of <strong>₹${totalAmount.toFixed(2)}</strong> for order <strong>#${orderNumber}</strong>.
           </p>
           <p style="margin: 0 0 12px; font-size: 14px; color: #444; line-height: 1.6;">
             Please find your official <strong>Tax Invoice / Bill of Supply PDF</strong> attached to this email.
@@ -495,11 +498,11 @@ Deno.serve(async (req: Request) => {
         from: fromEmail,
         to: [recipientEmail],
         bcc: ["orders@earthorafarms.com", "contactus@earthorafarms.com"],
-        subject: `Tax Invoice for your Earthora Farms Order #ORD-${orderId.substring(0, 8).toUpperCase()}`,
+        subject: `Tax Invoice for your Earthora Farms Order #${orderNumber}`,
         html: emailHtmlBody,
         attachments: [
           {
-            filename: `Tax_Invoice_ORD-${orderId.substring(0, 8).toUpperCase()}.pdf`,
+            filename: `Tax_Invoice_${orderNumber}.pdf`,
             content: pdfBase64,
           },
         ],

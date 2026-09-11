@@ -53,9 +53,15 @@ services:
         value: https://wb.omni.tatatelebusiness.com
       - key: TATA_OMNI_WEBHOOK_SECRET
         sync: false
+      - key: WHATSAPP_INTERNAL_KEY
+        sync: false
       - key: WHATSAPP_CHECKOUT_TEMPLATE_NAME
         sync: false
       - key: WHATSAPP_CHECKOUT_TEMPLATE_LANGUAGE
+        value: en
+      - key: WHATSAPP_LOW_STOCK_TEMPLATE_NAME
+        sync: false
+      - key: WHATSAPP_LOW_STOCK_TEMPLATE_LANGUAGE
         value: en
       - key: VOICE_CHECKOUT_TTL_MINUTES
         value: "30"
