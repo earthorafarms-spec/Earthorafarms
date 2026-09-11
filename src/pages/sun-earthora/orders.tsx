@@ -472,73 +472,43 @@ export default function AdminOrders() {
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: i * 0.04 }}
-                className="bg-white rounded-2xl border border-border/40 p-5 hover:border-primary/20 shadow-sm hover:shadow-[0_8px_30px_rgb(0,0,0,0.03)] transition-all duration-300 flex flex-col md:flex-row md:items-center justify-between gap-4 group/ord cursor-pointer relative"
+                className="group/ord relative overflow-hidden rounded-[26px] border border-border/50 bg-white shadow-[0_8px_28px_rgba(26,56,38,0.04)] transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_16px_40px_rgba(26,56,38,0.10)] cursor-pointer"
                 onClick={() => { setSelectedOrder(order); setTrackingLinkDraft(order.trackingUrl || ""); }}
               >
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="w-10 h-10 rounded-full bg-primary/5 flex items-center justify-center text-xs font-bold text-primary border border-primary/10 shrink-0 group-hover/ord:bg-primary group-hover/ord:text-white transition-colors duration-300">
-                    {order.customer.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-semibold text-foreground truncate">{order.customer}</h3>
-                      {order.gstNumber && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                          GST: {order.gstNumber}
-                        </span>
-                      )}
+                <div className="h-1 w-full bg-gradient-to-r from-primary via-primary/70 to-emerald-300" />
+                <div className="p-5 pb-4 sm:p-6 sm:pb-5">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="flex min-w-0 items-center gap-3.5">
+                      <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/8 text-sm font-bold text-primary ring-1 ring-primary/10 transition-colors duration-300 group-hover/ord:bg-primary group-hover/ord:text-white">
+                        {order.customer.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase()}
+                        <span className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-white bg-emerald-400" title="Order received" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="truncate text-[15px] font-bold tracking-[-0.01em] text-foreground">{order.customer}</h3>
+                          <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] ${order.source === "whatsapp" ? "bg-emerald-50 text-emerald-700" : "bg-primary/7 text-primary"}`}>
+                            {order.source === "whatsapp" ? "WhatsApp" : "Website"}
+                          </span>
+                          {order.gstNumber && (
+                            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-bold font-mono text-amber-700">GST {order.gstNumber}</span>
+                          )}
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-foreground/45">
+                          <span className="rounded-md bg-muted/60 px-2 py-1 font-mono font-semibold text-foreground/60">#{order.orderNumber}</span>
+                          <span className="text-border">•</span>
+                          <span>{order.date}</span>
+                          {order.email && <><span className="text-border">•</span><span className="max-w-[220px] truncate">{order.email}</span></>}
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center flex-wrap gap-x-2 gap-y-0.5 mt-0.5 text-xs text-foreground/40">
-                      <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded font-medium">
-                        #{order.orderNumber}
-                      </span>
-                      <span>·</span>
-                      <span>{order.date}</span>
-                      {order.email && (
-                        <>
-                          <span>•</span>
-                          <span className="truncate max-w-[180px]">{order.email}</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
 
-                <div className="flex items-center justify-between md:justify-end gap-5 border-t md:border-t-0 pt-3 md:pt-0 border-border/10 shrink-0">
-                  <div className="text-left md:text-right">
-                    <p className="text-xs text-foreground/45 font-medium">Items</p>
-                    <p className="text-sm font-semibold text-foreground mt-0.5">
-                      {order.items} unit{order.items !== 1 ? "s" : ""}
-                    </p>
-                  </div>
+                    <div className="flex items-center justify-between gap-3 lg:justify-end">
+                      <div className="text-left lg:text-right">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/35">Order total</p>
+                        <p className="mt-0.5 text-xl font-bold tracking-[-0.03em] text-primary">₹{order.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</p>
+                      </div>
 
-                  {order.trackingSentAt && (
-                    <span className="hidden lg:inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1">
-                      <Link2 className="w-3 h-3" /> Tracking sent
-                    </span>
-                  )}
-
-                  <button
-                    type="button"
-                    disabled={!order.phone}
-                    title={order.phone ? "Add or update WhatsApp tracking" : "No WhatsApp phone number on this order"}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedOrder(order);
-                      setTrackingLinkDraft(order.trackingUrl || "");
-                    }}
-                    className="hidden sm:inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg border border-sky-200 text-[10px] font-semibold text-sky-700 hover:bg-sky-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                  >
-                    <Link2 className="w-3 h-3" />
-                    {order.trackingSentAt ? "Update tracking" : "Add tracking"}
-                  </button>
-
-                  <div className="text-left md:text-right">
-                    <p className="text-xs text-foreground/45 font-medium">Total</p>
-                    <p className="text-sm font-bold text-foreground mt-0.5">₹{order.total.toFixed(2)}</p>
-                  </div>
-
-                  {/* ── Redesigned Interactive Custom Status Dropdown ── */}
+                      {/* Interactive status control */}
                   <div className="relative" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
@@ -598,12 +568,50 @@ export default function AdminOrders() {
                   </div>
 
                   <button
-                    onClick={(e) => { e.stopPropagation(); setSelectedOrder(order); }}
-                    className="p-2 rounded-lg bg-[#fafaf8] text-foreground/30 group-hover/ord:text-primary group-hover/ord:bg-primary/5 transition-colors"
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); setSelectedOrder(order); setTrackingLinkDraft(order.trackingUrl || ""); }}
+                    className="rounded-xl border border-border/50 bg-[#fafaf8] p-2.5 text-foreground/35 transition-colors hover:border-primary/20 hover:bg-primary/5 hover:text-primary"
                     title="View complete order details"
                   >
-                    <ChevronRight className="w-4 h-4" strokeWidth={1.5} />
+                    <ChevronRight className="h-4 w-4" strokeWidth={1.75} />
                   </button>
+                </div>
+                </div>
+
+                  <div className="mt-5 grid gap-3 border-t border-border/40 pt-4 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex shrink-0 -space-x-2">
+                        {(order.itemsList || []).slice(0, 3).map((item: any, index: number) => (
+                          <div key={item.id || index} className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border-2 border-white bg-[#f5f7f1] text-[10px] font-bold text-primary shadow-sm">
+                            {item.image ? <img src={item.image} alt="" className="h-full w-full object-cover" /> : <Package className="h-4 w-4" strokeWidth={1.5} />}
+                          </div>
+                        ))}
+                        {order.items > 3 && <div className="flex h-10 w-10 items-center justify-center rounded-xl border-2 border-white bg-primary/8 text-[10px] font-bold text-primary shadow-sm">+{order.items - 3}</div>}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/35">Items in order</p>
+                        <p className="mt-0.5 truncate text-xs font-semibold text-foreground/75">
+                          {order.itemsList?.length ? `${order.itemsList[0].name}${order.itemsList.length > 1 ? ` + ${order.itemsList.length - 1} more` : ""}` : "No item details available"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-xs text-foreground/55 sm:border-l sm:border-border/40 sm:pl-5">
+                      <Package className="h-3.5 w-3.5 text-primary/70" strokeWidth={1.6} />
+                      <span><strong className="text-foreground">{order.items}</strong> unit{order.items !== 1 ? "s" : ""}</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={!order.phone}
+                      title={order.phone ? "Add or update WhatsApp tracking" : "No WhatsApp phone number on this order"}
+                      onClick={(e) => { e.stopPropagation(); setSelectedOrder(order); setTrackingLinkDraft(order.trackingUrl || ""); }}
+                      className={`inline-flex h-9 items-center justify-center gap-2 rounded-xl border px-3 text-[10px] font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${order.trackingSentAt ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100" : "border-sky-200 bg-sky-50/60 text-sky-700 hover:bg-sky-100"}`}
+                    >
+                      {order.trackingSentAt ? <Check className="h-3.5 w-3.5" /> : <Link2 className="h-3.5 w-3.5" />}
+                      {order.trackingSentAt ? "Tracking sent" : "Add tracking"}
+                    </button>
+                  </div>
                 </div>
               </motion.div>
             ))
