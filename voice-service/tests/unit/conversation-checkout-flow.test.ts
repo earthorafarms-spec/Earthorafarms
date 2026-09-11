@@ -229,6 +229,42 @@ describe('conversation checkout regressions', () => {
       expect(mocks.chat).not.toHaveBeenCalled();
     });
 
+    it.each([
+      'Yes', 'Yup', 'Yep', 'Yeah', 'Sure', 'Correct', 'Haan', 'हाँ', 'હા', 'India',
+      'haanji', 'ji haan', 'हां', 'જી હા', 'in india', 'Bharat',
+    ])('normalizes affirmative answer "%s" to country India deterministically and asks GST question', async (input) => {
+      const state = checkoutState();
+      delete state.checkoutFields.country;
+      state.messages.push({ role: 'assistant', content: 'Is the delivery address in India?' });
+
+      const result = await processTurn('flow', state, input, 'text');
+
+      expect(['India', 'भारत', 'ભારત']).toContain(result.state.checkoutFields.country);
+      expect(result.state.checkoutFields.gst).toBeUndefined();
+      expect(result.replyText).toMatch(/Do you have a GST number for a business tax invoice\?|क्या आपके पास बिजनेस टैक्स इनवॉइस|શું તમારી પાસે બિઝનેસ ટેક્સ ઇનવોઇસ/i);
+      expect(result.replyText).toMatch(/Please reply within 5 minutes|कृपया 5 मिनट के भीतर उत्तर दें|કૃપા કરીને 5 મિનિટની અંદર જવાબ આપો/i);
+      expect(result.productCard).toBeUndefined();
+      expect(result.productImage).toBeUndefined();
+      expect(mocks.chat).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      'No', 'Nope', 'Nah', 'nahi', 'नहीं', 'ના', 'Dubai', 'USA',
+    ])('handles negative/non-India answer "%s" deterministically without storing country', async (input) => {
+      const state = checkoutState();
+      delete state.checkoutFields.country;
+      state.messages.push({ role: 'assistant', content: 'Is the delivery address in India?' });
+
+      const result = await processTurn('flow', state, input, 'text');
+
+      expect(result.state.checkoutFields.country).toBeUndefined();
+      expect(result.replyText).toMatch(/deliver(?:y)?\s+only\s+within\s+India|केवल\s+भारत|ફક્ત\s+ભારતમાં/iu);
+      expect(result.replyText).toMatch(/Is the delivery address in India\?|क्या डिलीवरी एड्रेस भारत में है\?|શું ડિલિવરી એડ્રેસ ભારતમાં છે\?/i);
+      expect(result.productCard).toBeUndefined();
+      expect(result.productImage).toBeUndefined();
+      expect(mocks.chat).not.toHaveBeenCalled();
+    });
+
     it('continues checkout to review form when GST is declined with No', async () => {
       const state = checkoutState();
       state.messages.push({ role: 'assistant', content: 'Do you have a GST number for a business tax invoice?' });

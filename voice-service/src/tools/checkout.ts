@@ -67,6 +67,20 @@ export function normalizeWhatsAppPhone(raw: string): string | null {
   return null;
 }
 
+export const INDIA_AFFIRMATIVE_PATTERN =
+  /^(?:yes|yup|yep|yeah|ya|sure|correct|right|definitely|certainly|of\s+course|ha|haa|haan|han|ji|ji\s+ha|ji\s+haan|ji\s+han|haan\s*ji|hanji|haji|sahi|bilkul|barabar|sachu|हाँ|हां|जी|जी\s*हाँ|जी\s*हां|हाँ\s*जी|हां\s*जी|सही|बिल्कुल|હા|હાં|જી|હા\s*જી|જી\s*હા|બરાબર|સાચું|india|in\s+india|bharat|in\s+bharat|hindustan|भारत|भारत\s*में|हिंदुस्तान|ભારત|ભારતમાં|હિન્દુસ્તાન|(?:yes|yup|yep|yeah|ya|sure|correct|right|ha|haa|haan|han|ji|हाँ|हां|હા)[,\s]+(?:india|in\s+india|bharat|in\s+bharat|hindustan|भारत|ભારત))[.!?]*$/iu;
+
+export const NON_INDIA_NEGATIVE_PATTERN =
+  /^(?:no|nope|nah|not\s+in\s+india|outside\s+india|nahi|naa?|nathi|not\s+india|नहीं|ना|ના|નથી|(?:no|nope|nah|nahi|नहीं|ના)[,\s]+(?:not\s+in\s+india|outside\s+india|other\s+country))[.!?]*$/iu;
+
+export function isIndiaAffirmative(raw: string): boolean {
+  return INDIA_AFFIRMATIVE_PATTERN.test(raw.trim());
+}
+
+export function isNonIndiaOrNegative(raw: string): boolean {
+  return NON_INDIA_NEGATIVE_PATTERN.test(raw.trim());
+}
+
 export function isCheckoutReady(state: ToolContext['state']): boolean {
   return state.cart.length > 0 && missingRequiredFields(state.checkoutFields).length === 0 &&
     state.checkoutFields.gst !== undefined;
@@ -155,10 +169,16 @@ function normalizeAndValidate(
     return { value: normalizeSpokenPlace(field, value) };
   }
   if (field === 'country') {
-    if (/^(?:india|भारत|ભારત)$/iu.test(value)) {
+    if (isIndiaAffirmative(value)) {
       return { value: language === 'hi' ? 'भारत' : language === 'gu' ? 'ભારત' : 'India' };
     }
-    return { value };
+    if (isNonIndiaOrNegative(value)) {
+      return { value, error: 'We currently deliver only within India. Please provide an Indian delivery address.' };
+    }
+    if (/^(?:yes|no|ok(?:ay)?|hello|hi|thanks)[.!?]*$/iu.test(value)) {
+      return { value, error: 'Please confirm if the delivery address is in India.' };
+    }
+    return { value, error: 'We currently deliver only within India. Please provide an Indian delivery address.' };
   }
   if (field === 'email' && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
     return { value, error: "That doesn't look like a valid email address." };

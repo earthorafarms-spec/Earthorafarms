@@ -115,6 +115,43 @@ describe('checkout field validation', () => {
     const declined = await createVerificationLinkTool.handler({}, { callSessionId: 'session-1', state });
     expect(declined).toMatchObject({ ok: false, reason: 'whatsapp_not_configured' });
   });
+
+  it.each([
+    'Yes', 'Yup', 'Yep', 'Yeah', 'Sure', 'Correct', 'Haan', 'हाँ', 'હા', 'India',
+    'yes', 'yup', 'yep', 'yeah', 'sure', 'correct', 'right', 'ha', 'haan', 'ji',
+    'ji haan', 'Haanji', 'हाँ', 'हां', 'जी', 'जी हाँ', 'હા', 'હાં', 'જી', 'હાજી',
+    'bharat', 'Bharat', 'in india', 'In India',
+  ])('normalizes affirmative country response "%s" to India', async (input) => {
+    const state = createInitialState();
+    const ctx = { callSessionId: 'session-1', state };
+    const result = await setCheckoutFieldTool.handler({ field: 'country', value: input }, ctx);
+    expect(result).toMatchObject({ ok: true });
+    expect(state.checkoutFields.country).toBe('India');
+  });
+
+  it('normalizes affirmative country response to localized script according to call language', async () => {
+    const hindiState = createInitialState();
+    hindiState.currentLanguage = 'hi';
+    const hindiResult = await setCheckoutFieldTool.handler({ field: 'country', value: 'Yup' }, { callSessionId: 'session-1', state: hindiState });
+    expect(hindiResult).toMatchObject({ ok: true });
+    expect(hindiState.checkoutFields.country).toBe('भारत');
+
+    const gujaratiState = createInitialState();
+    gujaratiState.currentLanguage = 'gu';
+    const gujaratiResult = await setCheckoutFieldTool.handler({ field: 'country', value: 'Yes' }, { callSessionId: 'session-1', state: gujaratiState });
+    expect(gujaratiResult).toMatchObject({ ok: true });
+    expect(gujaratiState.checkoutFields.country).toBe('ભારત');
+  });
+
+  it.each([
+    'No', 'Nope', 'Nah', 'nahi', 'nathi', 'नहीं', 'ना', 'ના', 'USA', 'United States', 'UAE', 'London', 'okay', 'hello',
+  ])('rejects non-India and negative country response "%s" and never stores it', async (input) => {
+    const state = createInitialState();
+    const ctx = { callSessionId: 'session-1', state };
+    const result = await setCheckoutFieldTool.handler({ field: 'country', value: input }, ctx);
+    expect(result).toMatchObject({ ok: false, reason: 'invalid_value' });
+    expect(state.checkoutFields.country).toBeUndefined();
+  });
 });
 
 describe('payment confirmation validation', () => {

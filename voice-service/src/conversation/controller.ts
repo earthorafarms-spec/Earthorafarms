@@ -14,7 +14,13 @@ import { reviewReceivedPrompt, turnFailurePrompt } from './voice-copy.js';
 import { buildCheckoutTurnInstruction } from './checkout-context.js';
 import { chatWithRouting } from '../providers.js';
 import { allTools, toolsByName } from '../tools/index.js';
-import { isCheckoutReady, normalizeSpokenDigitSequence, normalizeWhatsAppPhone } from '../tools/checkout.js';
+import {
+  isCheckoutReady,
+  isIndiaAffirmative,
+  isNonIndiaOrNegative,
+  normalizeSpokenDigitSequence,
+  normalizeWhatsAppPhone,
+} from '../tools/checkout.js';
 import { spokenProductNameMatches } from '../tools/products.js';
 import { getAllApprovedProductKnowledge } from '../tools/knowledge.js';
 import type { OutboundAction, ToolContext } from '../tools/types.js';
@@ -1478,11 +1484,27 @@ export async function processTurn(
           toolContext
         );
       } else if (activeCheckoutField === 'country') {
-        const isIndia = /^(?:yes|yeah|हाँ|हां|હા|india|in india|भारत|ભારત)[.!?]*$/iu.test(trimmed);
-        toolResult = await toolsByName.set_checkout_field.handler(
-          { field: 'country', value: isIndia ? 'India' : trimmed },
-          toolContext
-        );
+        if (isIndiaAffirmative(trimmed)) {
+          toolResult = await toolsByName.set_checkout_field.handler(
+            { field: 'country', value: 'India' },
+            toolContext
+          );
+        } else if (isNonIndiaOrNegative(trimmed)) {
+          const shippingNotice = state.currentLanguage === 'hi'
+            ? 'हम वर्तमान में केवल भारत के भीतर ही डिलीवरी करते हैं। कृपया भारत का डिलीवरी एड्रेस दें।'
+            : state.currentLanguage === 'gu'
+              ? 'અમે હાલમાં ફક્ત ભારતમાં જ ડિલિવરી કરીએ છીએ. કૃપા કરીને ભારતનું ડિલિવરી એડ્રેસ આપો.'
+              : 'We currently deliver only within India. Please provide an Indian delivery address.';
+          const currentQuestion = nextWhatsAppCheckoutQuestion(state);
+          const replyText = `${shippingNotice}\n\n${currentQuestion}`;
+          state.messages.push({ role: 'assistant', content: replyText });
+          return { state, replyText, policyViolations: [], outboundActions };
+        } else {
+          toolResult = await toolsByName.set_checkout_field.handler(
+            { field: 'country', value: trimmed },
+            toolContext
+          );
+        }
       } else if (activeCheckoutField === 'gst') {
         const isDecline = /^(?:no|nah|nope|none|skip|don'?t have|don't have one|no gst|nahi|nathi|नहीं|ना|ના|નથી)[.!?]*$/iu.test(trimmed);
         const isBareAffirmative = /^(?:yes|yeah|yep|हाँ|हां|હા)[.!?]*$/iu.test(trimmed);
