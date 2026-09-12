@@ -8,7 +8,6 @@ interface LowStockAlert {
   product_name: string;
   stock_at_alert: number;
   threshold: number;
-  recipients: string[] | null;
 }
 
 /**
@@ -20,7 +19,7 @@ interface LowStockAlert {
 export async function drainLowStockAlerts(log: { error: (obj: unknown, message: string) => void }): Promise<number> {
   const { data: pending, error } = await supabase
     .from('sms_alert_logs')
-    .select('id,product_name,stock_at_alert,threshold,recipients')
+    .select('id,product_name,stock_at_alert,threshold')
     .eq('triggered_by', 'auto_trigger')
     .eq('status', 'pending')
     .order('created_at', { ascending: true })

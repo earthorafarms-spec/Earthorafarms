@@ -9,6 +9,10 @@ function ttlTimestamp(): string {
   return new Date(Date.now() + SESSION_TTL_HOURS * 60 * 60_000).toISOString();
 }
 
+function isUnexpired(timestamp: unknown): timestamp is string {
+  return typeof timestamp === 'string' && Date.parse(timestamp) > Date.now();
+}
+
 export interface WhatsAppSessionResult {
   voiceSessionId: string;
   state: ConversationState;
@@ -104,10 +108,10 @@ export async function getOrCreateSession(phone: string): Promise<WhatsAppSession
       expires_at?: string;
     } | null | undefined;
 
-    if (vsRow && typeof vsRow.expires_at === 'string' && new Date(vsRow.expires_at) > new Date()) {
+    if (vsRow && isUnexpired(vsRow.expires_at)) {
       return {
         voiceSessionId: (vsRow.id ?? waRow.voice_session_id) as string,
-        state: sanitizeWhatsAppConversationState((vsRow.conversation_state as ConversationState) ?? createInitialState()),
+        state: sanitizeWhatsAppConversationState(vsRow.conversation_state as ConversationState),
       };
     }
 
@@ -119,10 +123,10 @@ export async function getOrCreateSession(phone: string): Promise<WhatsAppSession
         .eq('id', waRow.voice_session_id)
         .maybeSingle();
 
-      if (directVs && typeof directVs.expires_at === 'string' && new Date(directVs.expires_at as string) > new Date()) {
+      if (directVs && isUnexpired(directVs.expires_at)) {
         return {
           voiceSessionId: directVs.id as string,
-          state: sanitizeWhatsAppConversationState((directVs.conversation_state as ConversationState) ?? createInitialState()),
+          state: sanitizeWhatsAppConversationState(directVs.conversation_state as ConversationState),
         };
       }
     }
@@ -166,23 +170,4 @@ export async function getOrCreateSession(phone: string): Promise<WhatsAppSession
   }
 
   return { voiceSessionId: vsNew.id as string, state: initialState };
-}
-
-/** Persist updated conversation state and extend the session TTL. */
-export async function updateSessionState(voiceSessionId: string, state: ConversationState): Promise<void> {
-  const [vsErr, waErr] = await Promise.all([
-    supabase
-      .from('voice_call_sessions')
-      .update({ conversation_state: state, expires_at: ttlTimestamp() })
-      .eq('id', voiceSessionId)
-      .then(({ error }) => error),
-    supabase
-      .from('whatsapp_sessions')
-      .update({ last_active_at: new Date().toISOString() })
-      .eq('voice_session_id', voiceSessionId)
-      .then(({ error }) => error),
-  ]);
-
-  if (vsErr) throw new Error(`whatsapp: failed to update session state: ${vsErr.message}`);
-  if (waErr) throw new Error(`whatsapp: failed to update last_active_at: ${waErr.message}`);
 }
