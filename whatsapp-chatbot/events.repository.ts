@@ -2,7 +2,7 @@ import { supabase } from '../voice-service/src/lib/supabaseClient.js';
 import type { ConversationState } from '../voice-service/src/conversation/state.js';
 import { getWhatsAppActiveSubFlow } from '../voice-service/src/conversation/controller.js';
 import type { WhatsAppInboundMessage } from './inbound.js';
-import { serializeProductCard, type WhatsAppProductCard } from './product-card.js';
+import { serializeProductCard, serializeProductCards, type WhatsAppProductCard } from './product-card.js';
 
 export interface WhatsAppInboxEvent {
   id: string;
@@ -76,14 +76,22 @@ export async function saveWhatsAppTurn(
   replyText: string,
   media?: { url: string; caption: string },
   productCard?: WhatsAppProductCard,
+  productCards?: WhatsAppProductCard[],
 ): Promise<void> {
   const activeSubFlow = getWhatsAppActiveSubFlow(state, replyText);
   const flowTimeoutAt = activeSubFlow ? new Date(Date.now() + 5 * 60 * 1000).toISOString() : null;
   const flowTurnCount = activeSubFlow ? state.turnCount : null;
   const flowTimeoutKind = activeSubFlow ?? null;
 
-  const persistedMedia = productCard
-    ? { url: productCard.imageUrl ?? '', caption: serializeProductCard(productCard) }
+  const cards = productCards && productCards.length > 0
+    ? productCards
+    : (productCard ? [productCard] : null);
+
+  const persistedMedia = cards && cards.length > 0
+    ? {
+        url: cards[0].imageUrl ?? '',
+        caption: cards.length === 1 ? serializeProductCard(cards[0]) : serializeProductCards(cards),
+      }
     : media;
   const { error } = await supabase.rpc('complete_whatsapp_message_turn_v2', {
     p_event_id: eventId,

@@ -297,41 +297,92 @@ describe('processTurn persisted state', () => {
     expect(chatMock).not.toHaveBeenCalled();
   });
 
-  it('turns menu option 1 into a numbered live product list', async () => {
-    productRepositoryMocks.listActiveProducts.mockResolvedValue([
+  it('turns menu option 1 into native interactive product cards for all available products', async () => {
+    const products = [
       {
         id: 'alpha-id', slug: 'alpha', name: 'Alpha', mrp: 100, price: 90,
         status: 'active', stockQty: 10, stockLabel: 'In Stock', tag: '', badge: '',
-        description: '', highlights: [], imageUrl: 'https://cdn.example.com/alpha.png',
+        description: 'Alpha description', highlights: [], imageUrl: 'https://cdn.example.com/alpha.png',
       },
       {
         id: 'beta-id', slug: 'beta', name: 'Beta', mrp: 120, price: 110,
         status: 'active', stockQty: 4, stockLabel: 'Low Stock', tag: '', badge: '',
-        description: '', highlights: [], imageUrl: 'https://cdn.example.com/beta.png',
+        description: 'Beta description', highlights: [], imageUrl: 'https://cdn.example.com/beta.png',
       },
-    ]);
+    ];
+    productRepositoryMocks.listActiveProducts.mockResolvedValue(products);
+    productRepositoryMocks.getProductById.mockImplementation(async (id: string) =>
+      products.find((product) => product.id === id) ?? null
+    );
     const state = createInitialState();
     state.messages.push({ role: 'assistant', content: `Hello!\n\n${WHATSAPP_MENU}` });
 
     const outcome = await processTurn('controller-test', state, '1', 'text');
 
-    expect(outcome.replyText).toContain('1. Alpha — ₹90 (Tax Included) — In Stock');
-    expect(outcome.replyText).toContain('2. Beta — ₹110 (Tax Included) — Low Stock');
-    expect(outcome.replyText).toContain('Reply with the product number.');
+    expect(outcome.productCards).toHaveLength(2);
+    expect(outcome.productCards?.[0]).toEqual({
+      productId: 'alpha-id',
+      imageUrl: 'https://cdn.example.com/alpha.png',
+      name: 'Alpha',
+      body: '*Alpha*\n₹90 (Tax Included) • MRP ₹100 • In Stock\nAlpha description\nTo return to the main menu, type Menu.',
+    });
+    expect(outcome.productCards?.[1]).toEqual({
+      productId: 'beta-id',
+      imageUrl: 'https://cdn.example.com/beta.png',
+      name: 'Beta',
+      body: '*Beta*\n₹110 (Tax Included) • MRP ₹120 • Low Stock\nBeta description\nTo return to the main menu, type Menu.',
+    });
+    expect(outcome.productCard).toEqual(outcome.productCards?.[0]);
+    expect(outcome.replyText).toBe(outcome.productCards?.map((c) => c.body).join('\n\n'));
     expect(productRepositoryMocks.listActiveProducts).toHaveBeenCalledTimes(1);
+    expect(productRepositoryMocks.getProductById).toHaveBeenCalledWith('alpha-id');
+    expect(productRepositoryMocks.getProductById).toHaveBeenCalledWith('beta-id');
     expect(chatMock).not.toHaveBeenCalled();
   });
 
-  it('keeps greeting then menu option 1 deterministic', async () => {
+  it('keeps greeting then menu option 1 deterministic and returns all product cards', async () => {
     const state = createInitialState();
 
     const greeting = await processTurn('controller-test', state, 'Hello', 'text');
     const catalog = await processTurn('controller-test', state, '1', 'text');
 
     expect(greeting.replyText).toContain(WHATSAPP_MENU);
-    expect(catalog.replyText).toContain('1. Alpha — ₹90 (Tax Included) — In Stock');
-    expect(catalog.replyText).toContain('Reply with the product number.');
+    expect(catalog.productCards).toHaveLength(1);
+    expect(catalog.productCards?.[0].name).toBe('Alpha');
     expect(productRepositoryMocks.listActiveProducts).toHaveBeenCalledTimes(1);
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it('handles zero products safely with appropriate fallback when menu option 1 is selected', async () => {
+    productRepositoryMocks.listActiveProducts.mockResolvedValue([]);
+    const state = createInitialState();
+    state.messages.push({ role: 'assistant', content: `Hello!\n\n${WHATSAPP_MENU}` });
+
+    const outcome = await processTurn('controller-test', state, '1', 'text');
+
+    expect(outcome.productCards).toBeUndefined();
+    expect(outcome.productCard).toBeUndefined();
+    expect(outcome.replyText).toContain('No products are available right now.');
+    expect(outcome.replyText).toContain(WHATSAPP_MENU);
+    expect(chatMock).not.toHaveBeenCalled();
+  });
+
+  it('deduplicates duplicate products when menu option 1 is selected', async () => {
+    const product = {
+      id: 'alpha-id', slug: 'alpha', name: 'Alpha', mrp: 100, price: 90,
+      status: 'active', stockQty: 10, stockLabel: 'In Stock', tag: '', badge: '',
+      description: 'Alpha description', highlights: [], imageUrl: 'https://cdn.example.com/alpha.png',
+    };
+    productRepositoryMocks.listActiveProducts.mockResolvedValue([product, product, { ...product }]);
+    productRepositoryMocks.getProductById.mockResolvedValue(product);
+    const state = createInitialState();
+    state.messages.push({ role: 'assistant', content: `Hello!\n\n${WHATSAPP_MENU}` });
+
+    const outcome = await processTurn('controller-test', state, '1', 'text');
+
+    expect(outcome.productCards).toHaveLength(1);
+    expect(outcome.productCards?.[0].productId).toBe('alpha-id');
+    expect(productRepositoryMocks.getProductById).toHaveBeenCalledTimes(1);
     expect(chatMock).not.toHaveBeenCalled();
   });
 
@@ -811,7 +862,7 @@ describe('processTurn persisted state', () => {
       }
     });
 
-    it('formats price in catalog with (Tax Included)', async () => {
+    it('formats price in catalog product card with (Tax Included)', async () => {
       productRepositoryMocks.listActiveProducts.mockResolvedValueOnce([
         {
           id: 'alpha-id', slug: 'alpha', name: 'Alpha', mrp: 100, price: 90,
@@ -824,8 +875,8 @@ describe('processTurn persisted state', () => {
 
       const outcome = await processTurn('controller-test', state, '1', 'text');
 
-      expect(outcome.replyText).toContain('1. Alpha — ₹90 (Tax Included) — In Stock');
-      expect(outcome.replyText).not.toContain('₹90 — In Stock');
+      expect(outcome.replyText).toContain('₹90 (Tax Included) • MRP ₹100 • In Stock');
+      expect(outcome.replyText).not.toContain('MRP ₹100 (Tax Included)');
     });
 
     it('formats price in product card with (Tax Included) and preserves MRP benchmark semantics', async () => {

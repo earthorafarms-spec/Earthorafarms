@@ -8,7 +8,12 @@ import {
   buildTataOmniProductCardPayload,
   buildTataOmniTextPayload,
 } from '../../../whatsapp-chatbot/provider.js';
-import { parsePersistedProductCard, serializeProductCard } from '../../../whatsapp-chatbot/product-card.js';
+import {
+  parsePersistedProductCard,
+  parsePersistedProductCards,
+  serializeProductCard,
+  serializeProductCards,
+} from '../../../whatsapp-chatbot/product-card.js';
 
 describe('WhatsApp checkout template payload', () => {
   it('uses Tata Omni international-number and template-variable format', () => {
@@ -164,6 +169,31 @@ describe('WhatsApp checkout template payload', () => {
       type: 'interactive', interactive,
     });
     expect(parsePersistedProductCard(serializeProductCard(viewCartCard))).toEqual(viewCartCard);
+  });
+
+  it('serializes and parses multiple product cards and falls back correctly', () => {
+    const cards = [
+      {
+        productId: 'alpha-id',
+        imageUrl: 'https://cdn.example.com/alpha.png',
+        name: 'Alpha',
+        body: '*Alpha*\n₹90 (Tax Included) • In Stock\nAlpha details\nTo return to the main menu, type Menu.',
+      },
+      {
+        productId: 'beta-id',
+        imageUrl: 'https://cdn.example.com/beta.png',
+        name: 'Beta',
+        body: '*Beta*\n₹110 (Tax Included) • MRP ₹120 • Low Stock\nBeta details\nTo return to the main menu, type Menu.',
+      },
+    ];
+
+    const serialized = serializeProductCards(cards);
+    expect(parsePersistedProductCards(serialized)).toEqual(cards);
+    expect(parsePersistedProductCard(serialized)).toEqual(cards[0]);
+
+    // Single card fallback for parsePersistedProductCards
+    const singleSerialized = serializeProductCard(cards[0]);
+    expect(parsePersistedProductCards(singleSerialized)).toEqual([cards[0]]);
   });
 });
 

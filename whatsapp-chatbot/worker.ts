@@ -13,7 +13,7 @@ import {
 import { processTurn } from '../voice-service/src/conversation/controller.js';
 import { sendWhatsAppImage, sendWhatsAppMessage, sendWhatsAppProductCard, WhatsAppDeliveryError } from './provider.js';
 import { recordWhatsAppDiagnostic } from './diagnostics.js';
-import { parsePersistedProductCard } from './product-card.js';
+import { parsePersistedProductCard, parsePersistedProductCards } from './product-card.js';
 import { drainLowStockAlerts } from './low-stock.js';
 
 const POLL_INTERVAL_MS = 750;
@@ -29,13 +29,16 @@ export async function processInboxEvent(event: WhatsAppInboxEvent): Promise<void
   // A reply already stored means the state transition committed previously;
   // retry delivery only, never run the user's turn or cart mutation twice.
   if (event.replyText) {
-    const productCard = parsePersistedProductCard(event.mediaCaption);
-    if (productCard) {
+    const productCards = parsePersistedProductCards(event.mediaCaption);
+    if (productCards && productCards.length > 0) {
       if (!event.mediaSentAt) {
-        await sendWhatsAppProductCard(event.phone, productCard);
+        for (const card of productCards) {
+          await sendWhatsAppProductCard(event.phone, card);
+        }
         await markWhatsAppMediaSent(event.id);
       }
-      if (event.replyText !== productCard.body) {
+      const allBodies = productCards.map((c) => c.body).join('\n\n');
+      if (event.replyText !== allBodies && !productCards.some((c) => c.body === event.replyText)) {
         await sendWhatsAppMessage(event.phone, event.replyText);
       }
     } else {
@@ -59,22 +62,48 @@ export async function processInboxEvent(event: WhatsAppInboxEvent): Promise<void
 
   // Persist conversation/cart state and the exact outbound reply atomically.
   // If delivery fails, the next attempt resends replyText without reprocessing.
-  await saveWhatsAppTurn(
-    event.id,
-    voiceSessionId,
-    outcome.state,
-    outcome.replyText,
-    outcome.productImage,
-    outcome.productCard,
-  );
-  if (outcome.productCard) {
-    await sendWhatsAppProductCard(event.phone, outcome.productCard);
+  if (outcome.productCards && outcome.productCards.length > 0) {
+    await saveWhatsAppTurn(
+      event.id,
+      voiceSessionId,
+      outcome.state,
+      outcome.replyText,
+      outcome.productImage,
+      outcome.productCard,
+      outcome.productCards,
+    );
+  } else {
+    await saveWhatsAppTurn(
+      event.id,
+      voiceSessionId,
+      outcome.state,
+      outcome.replyText,
+      outcome.productImage,
+      outcome.productCard,
+    );
+  }
+
+  const cards = outcome.productCards && outcome.productCards.length > 0
+    ? outcome.productCards
+    : (outcome.productCard ? [outcome.productCard] : null);
+
+  if (cards && cards.length > 0) {
+    for (const card of cards) {
+      await sendWhatsAppProductCard(event.phone, card);
+    }
     await markWhatsAppMediaSent(event.id);
   } else if (outcome.productImage) {
     await sendWhatsAppImage(event.phone, outcome.productImage.url, outcome.productImage.caption);
     await markWhatsAppMediaSent(event.id);
   }
-  if (!outcome.productCard || outcome.replyText !== outcome.productCard.body) {
+
+  const allBodies = cards ? cards.map((c) => c.body).join('\n\n') : null;
+  const isCardBody = cards && (
+    outcome.replyText === allBodies ||
+    cards.some((c) => c.body === outcome.replyText)
+  );
+
+  if (!isCardBody) {
     await sendWhatsAppMessage(event.phone, outcome.replyText);
   }
   await markWhatsAppMessageProcessed(event.id);

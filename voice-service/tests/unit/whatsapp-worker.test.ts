@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WhatsAppInboxEvent } from '../../../whatsapp-chatbot/events.repository.js';
 import type { WhatsAppProductCard } from '../../../whatsapp-chatbot/product-card.js';
-import { serializeProductCard } from '../../../whatsapp-chatbot/product-card.js';
+import { serializeProductCard, serializeProductCards } from '../../../whatsapp-chatbot/product-card.js';
 import { createInitialState } from '../../src/conversation/state.js';
 
 const mockGetOrCreateSession = vi.fn();
@@ -348,5 +348,108 @@ describe('WhatsApp worker inbox event processing & delivery retries', () => {
     expect(mockSendWhatsAppImage).not.toHaveBeenCalled();
     expect(mockSendWhatsAppMessage).toHaveBeenCalledWith('+919876543210', 'We are open 9am to 6pm.');
     expect(mockMarkWhatsAppMessageProcessed).toHaveBeenCalledWith('event-6');
+  });
+
+  it('delivers multiple native product cards when outcome.productCards is provided and suppresses duplicate plain text', async () => {
+    const card2: WhatsAppProductCard = {
+      productId: 'beta-id',
+      imageUrl: 'https://cdn.example.com/beta.png',
+      name: 'Beta Product',
+      body: '*Beta Product*\n₹110 • Low Stock\nNutritious booster.',
+    };
+    const event: WhatsAppInboxEvent = {
+      id: 'event-multi-1',
+      providerMessageId: 'wamid.multi1',
+      phone: '+919876543210',
+      messageText: '1',
+      replyText: null,
+      mediaUrl: null,
+      mediaCaption: null,
+      mediaSentAt: null,
+      attemptCount: 1,
+    };
+
+    mockProcessTurn.mockResolvedValueOnce({
+      state: createInitialState(),
+      replyText: `${sampleCard.body}\n\n${card2.body}`,
+      policyViolations: [],
+      productCard: sampleCard,
+      productCards: [sampleCard, card2],
+    });
+
+    await processInboxEvent(event);
+
+    expect(mockSaveWhatsAppTurn).toHaveBeenCalledWith(
+      'event-multi-1',
+      'session-uuid-1',
+      expect.anything(),
+      `${sampleCard.body}\n\n${card2.body}`,
+      undefined,
+      sampleCard,
+      [sampleCard, card2],
+    );
+
+    expect(mockSendWhatsAppProductCard).toHaveBeenCalledTimes(2);
+    expect(mockSendWhatsAppProductCard).toHaveBeenNthCalledWith(1, '+919876543210', sampleCard);
+    expect(mockSendWhatsAppProductCard).toHaveBeenNthCalledWith(2, '+919876543210', card2);
+    expect(mockMarkWhatsAppMediaSent).toHaveBeenCalledWith('event-multi-1');
+    expect(mockSendWhatsAppImage).not.toHaveBeenCalled();
+    expect(mockSendWhatsAppMessage).not.toHaveBeenCalled();
+    expect(mockMarkWhatsAppMessageProcessed).toHaveBeenCalledWith('event-multi-1');
+  });
+
+  it('retries multiple product cards when delivery previously failed and mediaSentAt is null', async () => {
+    const card2: WhatsAppProductCard = {
+      productId: 'beta-id',
+      imageUrl: 'https://cdn.example.com/beta.png',
+      name: 'Beta Product',
+      body: '*Beta Product*\n₹110 • Low Stock\nNutritious booster.',
+    };
+    const retryEvent: WhatsAppInboxEvent = {
+      id: 'event-multi-retry',
+      providerMessageId: 'wamid.multiretry',
+      phone: '+919876543210',
+      messageText: '1',
+      replyText: `${sampleCard.body}\n\n${card2.body}`,
+      mediaUrl: sampleCard.imageUrl ?? null,
+      mediaCaption: serializeProductCards([sampleCard, card2]),
+      mediaSentAt: null,
+      attemptCount: 2,
+    };
+
+    await processInboxEvent(retryEvent);
+
+    expect(mockSendWhatsAppProductCard).toHaveBeenCalledTimes(2);
+    expect(mockSendWhatsAppProductCard).toHaveBeenNthCalledWith(1, '+919876543210', sampleCard);
+    expect(mockSendWhatsAppProductCard).toHaveBeenNthCalledWith(2, '+919876543210', card2);
+    expect(mockMarkWhatsAppMediaSent).toHaveBeenCalledWith('event-multi-retry');
+    expect(mockSendWhatsAppMessage).not.toHaveBeenCalled();
+    expect(mockMarkWhatsAppMessageProcessed).toHaveBeenCalledWith('event-multi-retry');
+  });
+
+  it('does not resend multiple product cards on retry if mediaSentAt is already set', async () => {
+    const card2: WhatsAppProductCard = {
+      productId: 'beta-id',
+      imageUrl: 'https://cdn.example.com/beta.png',
+      name: 'Beta Product',
+      body: '*Beta Product*\n₹110 • Low Stock\nNutritious booster.',
+    };
+    const retryEvent: WhatsAppInboxEvent = {
+      id: 'event-multi-sent',
+      providerMessageId: 'wamid.multisent',
+      phone: '+919876543210',
+      messageText: '1',
+      replyText: `${sampleCard.body}\n\n${card2.body}`,
+      mediaUrl: sampleCard.imageUrl ?? null,
+      mediaCaption: serializeProductCards([sampleCard, card2]),
+      mediaSentAt: '2026-09-14T10:00:00.000Z',
+      attemptCount: 2,
+    };
+
+    await processInboxEvent(retryEvent);
+
+    expect(mockSendWhatsAppProductCard).not.toHaveBeenCalled();
+    expect(mockSendWhatsAppMessage).not.toHaveBeenCalled();
+    expect(mockMarkWhatsAppMessageProcessed).toHaveBeenCalledWith('event-multi-sent');
   });
 });

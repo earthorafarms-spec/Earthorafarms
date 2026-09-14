@@ -989,6 +989,7 @@ export interface TurnOutcome {
   policyViolations: string[];
   productImage?: { url: string; caption: string };
   productCard?: WhatsAppProductCard;
+  productCards?: WhatsAppProductCard[];
   outboundActions?: OutboundAction[];
   /** Voice transport closes only after this reply has fully played. */
   callShouldEnd?: boolean;
@@ -1622,9 +1623,87 @@ export async function processTurn(
       preloadedToolResults.set('list_products:{"query":null}', productCatalog);
 
       if (productMenuSelected) {
-        const finalText = buildNumberedCatalogReply(productCatalog, state.currentLanguage);
-        state.messages.push({ role: 'assistant', content: finalText });
-        return { state, replyText: finalText, policyViolations: [], outboundActions };
+        const currentProducts = liveCatalogProducts(productCatalog);
+        if (
+          !productCatalog ||
+          typeof productCatalog !== 'object' ||
+          'error' in productCatalog ||
+          currentProducts.length === 0
+        ) {
+          const fallbackText = buildNumberedCatalogReply(productCatalog, state.currentLanguage);
+          state.messages.push({ role: 'assistant', content: fallbackText });
+          return { state, replyText: fallbackText, policyViolations: [], outboundActions };
+        }
+
+        const seenIds = new Set<string>();
+        const uniqueProducts: LiveCatalogProduct[] = [];
+        for (const p of currentProducts) {
+          const key = (p.id || p.name || '').trim();
+          if (key && !seenIds.has(key)) {
+            seenIds.add(key);
+            uniqueProducts.push(p);
+          }
+        }
+
+        const detailsTool = toolsByName.get_product_details;
+        const cards: WhatsAppProductCard[] = [];
+        if (detailsTool) {
+          const detailedProducts = await Promise.all(
+            uniqueProducts.map(async (prod) => {
+              try {
+                const details = await detailsTool.handler({ productId: prod.id }, toolContext);
+                return { prod, details: details as LiveProductDetails };
+              } catch {
+                return { prod, details: null };
+              }
+            })
+          );
+
+          for (const item of detailedProducts) {
+            if (item.details) {
+              state.currentTurnFacts.push({
+                toolName: 'get_product_details',
+                resultJson: JSON.stringify(item.details),
+              });
+              if (item.details.found) {
+                const card = buildWhatsAppProductCard(item.details, item.prod.name);
+                if (card) {
+                  cards.push(card);
+                }
+              }
+            }
+          }
+        }
+
+        if (cards.length === 0) {
+          const fallbackText = buildNumberedCatalogReply(productCatalog, state.currentLanguage);
+          state.messages.push({ role: 'assistant', content: fallbackText });
+          return { state, replyText: fallbackText, policyViolations: [], outboundActions };
+        }
+
+        if (cards.length === 1) {
+          state.whatsAppProductContext = {
+            productId: cards[0].productId ?? uniqueProducts[0].id,
+            productName: cards[0].name ?? uniqueProducts[0].name,
+            awaitingQuantity: false,
+          };
+        } else {
+          delete state.whatsAppProductContext;
+        }
+
+        const replyText = cards.map((c) => c.body).join('\n\n');
+        state.messages.push({ role: 'assistant', content: replyText });
+        return {
+          state,
+          replyText,
+          productCards: cards,
+          productCard: cards[0],
+          productImage: cards[0].imageUrl
+            ? { url: cards[0].imageUrl, caption: cards[0].name ?? '' }
+            : undefined,
+          policyViolations: [],
+          outboundActions,
+        };
       }
 
       const currentProducts = liveCatalogProducts(productCatalog);

@@ -91,28 +91,70 @@ export function parseProductActionFromText(
   return null;
 }
 
+const PERSISTED_CARDS_PREFIX = '__earthora_whatsapp_product_cards__:';
+
+function validateProductCard(card: unknown): WhatsAppProductCard | null {
+  if (!card || typeof card !== 'object') return null;
+  const c = card as Partial<WhatsAppProductCard>;
+  const hasValidImage = c.imageUrl === undefined || c.imageUrl === null ||
+    (typeof c.imageUrl === 'string' && /^https:\/\//i.test(c.imageUrl));
+  const hasValidButtons = c.buttons === undefined || (Array.isArray(c.buttons) && c.buttons.every(
+    (b) => b && typeof b === 'object' && typeof b.id === 'string' && typeof b.title === 'string'
+  ));
+  if (typeof c.body !== 'string' || !hasValidImage || !hasValidButtons) return null;
+  return {
+    ...(typeof c.productId === 'string' ? { productId: c.productId } : {}),
+    ...(typeof c.name === 'string' ? { name: c.name } : {}),
+    body: c.body,
+    ...(c.imageUrl ? { imageUrl: c.imageUrl } : {}),
+    ...(Array.isArray(c.buttons) ? { buttons: c.buttons } : {}),
+  };
+}
+
 export function serializeProductCard(card: WhatsAppProductCard): string {
   return `${PERSISTED_CARD_PREFIX}${encodeURIComponent(JSON.stringify(card))}`;
 }
 
+export function serializeProductCards(cards: WhatsAppProductCard[]): string {
+  return `${PERSISTED_CARDS_PREFIX}${encodeURIComponent(JSON.stringify(cards))}`;
+}
+
 export function parsePersistedProductCard(value: string | null): WhatsAppProductCard | null {
-  if (!value?.startsWith(PERSISTED_CARD_PREFIX)) return null;
+  if (!value) return null;
+  if (value.startsWith(PERSISTED_CARDS_PREFIX)) {
+    try {
+      const parsed = JSON.parse(decodeURIComponent(value.slice(PERSISTED_CARDS_PREFIX.length)));
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return validateProductCard(parsed[0]);
+      }
+    } catch {
+      return null;
+    }
+  }
+  if (!value.startsWith(PERSISTED_CARD_PREFIX)) return null;
   try {
-    const card = JSON.parse(decodeURIComponent(value.slice(PERSISTED_CARD_PREFIX.length))) as Partial<WhatsAppProductCard>;
-    const hasValidImage = card.imageUrl === undefined || card.imageUrl === null ||
-      (typeof card.imageUrl === 'string' && /^https:\/\//i.test(card.imageUrl));
-    const hasValidButtons = card.buttons === undefined || (Array.isArray(card.buttons) && card.buttons.every(
-      (b) => b && typeof b === 'object' && typeof b.id === 'string' && typeof b.title === 'string'
-    ));
-    if (typeof card.body !== 'string' || !hasValidImage || !hasValidButtons) return null;
-    return {
-      ...(typeof card.productId === 'string' ? { productId: card.productId } : {}),
-      ...(typeof card.name === 'string' ? { name: card.name } : {}),
-      body: card.body,
-      ...(card.imageUrl ? { imageUrl: card.imageUrl } : {}),
-      ...(Array.isArray(card.buttons) ? { buttons: card.buttons } : {}),
-    };
+    const card = JSON.parse(decodeURIComponent(value.slice(PERSISTED_CARD_PREFIX.length)));
+    return validateProductCard(card);
   } catch {
     return null;
   }
+}
+
+export function parsePersistedProductCards(value: string | null): WhatsAppProductCard[] | null {
+  if (!value) return null;
+  if (value.startsWith(PERSISTED_CARDS_PREFIX)) {
+    try {
+      const parsed = JSON.parse(decodeURIComponent(value.slice(PERSISTED_CARDS_PREFIX.length)));
+      if (Array.isArray(parsed)) {
+        const validated = parsed
+          .map((card) => validateProductCard(card))
+          .filter((card): card is WhatsAppProductCard => Boolean(card));
+        return validated.length > 0 ? validated : null;
+      }
+    } catch {
+      return null;
+    }
+  }
+  const single = parsePersistedProductCard(value);
+  return single ? [single] : null;
 }
