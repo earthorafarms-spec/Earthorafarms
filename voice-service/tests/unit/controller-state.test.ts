@@ -505,7 +505,7 @@ describe('processTurn persisted state', () => {
     const buttonOutcome = await processTurn('controller-test', state, input, 'text');
 
     expect(buttonOutcome.replyText).toContain('How many units of Alpha would you like to add to your cart?');
-    expect(buttonOutcome.replyText).toContain("Please reply within 5 minutes. If we don't receive a response, we'll return you to the main menu.");
+    expect(buttonOutcome.replyText).not.toContain("Please reply within 5 minutes");
     expect(buttonOutcome.state.whatsAppProductContext?.awaitingQuantity).toBe(true);
     expect(buttonOutcome.state.whatsAppProductContext?.lastAction).toBe('add_to_cart');
     expect(buttonOutcome.state.messages.some((m) => m.role === 'user')).toBe(false);

@@ -188,9 +188,7 @@ export function nextWhatsAppCheckoutQuestion(state: ConversationState, includeTi
   }
 
   if (!question) return null;
-  if (!includeTimeoutNotice) return question;
-  const disclaimer = WHATSAPP_TIMEOUT_DISCLAIMER[state.currentLanguage] ?? WHATSAPP_TIMEOUT_DISCLAIMER.en;
-  return `${question}\n\n${disclaimer}`;
+  return question;
 }
 
 function looksLikeEmailAddress(text: string): boolean {
@@ -606,10 +604,6 @@ export function buildCartRemovalPromptReply(
       : 'Reply with the item number to remove.\nTo cancel, type Cancel.';
 
   const baseReply = `${prefix}${heading}\n${lines.join('\n')}\n\n${prompt}`;
-  if (channel === 'text') {
-    const disclaimer = WHATSAPP_TIMEOUT_DISCLAIMER[language] ?? WHATSAPP_TIMEOUT_DISCLAIMER.en;
-    return `${baseReply}\n\n${disclaimer}`;
-  }
   return baseReply;
 }
 
@@ -986,10 +980,6 @@ function productQuantityPrompt(
   else if (language === 'gu') basePrompt = `તમે ${productName} ના કેટલા યુનિટ કાર્ટમાં ઉમેરવા માંગો છો?`;
   else basePrompt = `How many units of ${productName} would you like to add to your cart?`;
 
-  if (channel === 'text') {
-    const disclaimer = WHATSAPP_TIMEOUT_DISCLAIMER[language] ?? WHATSAPP_TIMEOUT_DISCLAIMER.en;
-    return `${basePrompt}\n\n${disclaimer}`;
-  }
   return basePrompt;
 }
 
@@ -1509,13 +1499,12 @@ export async function processTurn(
         const isDecline = /^(?:no|nah|nope|none|skip|don'?t have|don't have one|no gst|nahi|nathi|नहीं|ना|ના|નથી)[.!?]*$/iu.test(trimmed);
         const isBareAffirmative = /^(?:yes|yeah|yep|हाँ|हां|હા)[.!?]*$/iu.test(trimmed);
         if (isBareAffirmative) {
-          const disclaimer = WHATSAPP_TIMEOUT_DISCLAIMER[state.currentLanguage] ?? WHATSAPP_TIMEOUT_DISCLAIMER.en;
           const basePrompt = state.currentLanguage === 'hi'
             ? 'कृपया अपना GST नंबर शेयर करें, या आगे बढ़ने के लिए No लिखें।'
             : state.currentLanguage === 'gu'
               ? 'કૃપા કરીને તમારો GST નંબર આપો, અથવા આગળ વધવા માટે No લખો.'
               : 'Please share your GST number for a business tax invoice, or reply No to skip.';
-          const prompt = `${basePrompt}\n\n${disclaimer}`;
+          const prompt = basePrompt;
           state.messages.push({ role: 'assistant', content: prompt });
           return { state, replyText: prompt, policyViolations: [], outboundActions };
         }

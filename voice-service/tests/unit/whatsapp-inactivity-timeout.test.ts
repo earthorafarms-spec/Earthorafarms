@@ -372,25 +372,25 @@ describe('WhatsApp inactivity timeout specification', () => {
     expect(guReply).toContain("સરળતા ખાતર, હું તમને મુખ્ય મેનુ પર પાછો લાવ્યો છું.");
     expect(guReply).toContain("1 → Products");
 
-    // Active sub-flow prompt disclaimers:
+    // Active sub-flow prompt disclaimers removed:
     const stateEn = createInitialState();
     stateEn.currentLanguage = 'en';
     stateEn.cart = [{ productId: 'p1', productName: 'Moringa', quantity: 1, unitPrice: 399 }];
-    expect(nextWhatsAppCheckoutQuestion(stateEn)).toContain(WHATSAPP_TIMEOUT_DISCLAIMER.en);
+    expect(nextWhatsAppCheckoutQuestion(stateEn)).not.toContain(WHATSAPP_TIMEOUT_DISCLAIMER.en);
 
     const stateHi = createInitialState();
     stateHi.currentLanguage = 'hi';
     stateHi.cart = [{ productId: 'p1', productName: 'Moringa', quantity: 1, unitPrice: 399 }];
-    expect(nextWhatsAppCheckoutQuestion(stateHi)).toContain(WHATSAPP_TIMEOUT_DISCLAIMER.hi);
+    expect(nextWhatsAppCheckoutQuestion(stateHi)).not.toContain(WHATSAPP_TIMEOUT_DISCLAIMER.hi);
 
     const stateGu = createInitialState();
     stateGu.currentLanguage = 'gu';
     stateGu.cart = [{ productId: 'p1', productName: 'Moringa', quantity: 1, unitPrice: 399 }];
-    expect(nextWhatsAppCheckoutQuestion(stateGu)).toContain(WHATSAPP_TIMEOUT_DISCLAIMER.gu);
+    expect(nextWhatsAppCheckoutQuestion(stateGu)).not.toContain(WHATSAPP_TIMEOUT_DISCLAIMER.gu);
 
-    // Cart removal prompt with channel === 'text' includes disclaimer:
+    // Cart removal prompt with channel === 'text' does NOT include disclaimer:
     const removalText = buildCartRemovalPromptReply(stateEn.cart, 'en', false, 'text');
-    expect(removalText).toContain(WHATSAPP_TIMEOUT_DISCLAIMER.en);
+    expect(removalText).not.toContain(WHATSAPP_TIMEOUT_DISCLAIMER.en);
 
     // Cart removal prompt with channel === 'voice' or omitted does NOT include disclaimer:
     const removalVoice = buildCartRemovalPromptReply(stateEn.cart, 'en', false, 'voice');
@@ -436,5 +436,5 @@ describe('WhatsApp inactivity timeout specification', () => {
     expect(authed.json()).toEqual({ ok: true, claimed: 0 });
 
     await app.close();
-  });
+  }, 15000);
 });

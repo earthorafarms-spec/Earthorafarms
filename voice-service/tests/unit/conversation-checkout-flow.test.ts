@@ -223,7 +223,7 @@ describe('conversation checkout regressions', () => {
       expect(result.state.checkoutFields.country).toBe('India');
       expect(result.state.checkoutFields.gst).toBeUndefined();
       expect(result.replyText).toContain('Do you have a GST number for a business tax invoice?');
-      expect(result.replyText).toContain("Please reply within 5 minutes. If we don't receive a response, we'll return you to the main menu.");
+      expect(result.replyText).not.toContain("Please reply within 5 minutes");
       expect(result.productCard).toBeUndefined();
       expect(result.productImage).toBeUndefined();
       expect(mocks.chat).not.toHaveBeenCalled();
@@ -242,7 +242,7 @@ describe('conversation checkout regressions', () => {
       expect(['India', 'भारत', 'ભારત']).toContain(result.state.checkoutFields.country);
       expect(result.state.checkoutFields.gst).toBeUndefined();
       expect(result.replyText).toMatch(/Do you have a GST number for a business tax invoice\?|क्या आपके पास बिजनेस टैक्स इनवॉइस|શું તમારી પાસે બિઝનેસ ટેક્સ ઇનવોઇસ/i);
-      expect(result.replyText).toMatch(/Please reply within 5 minutes|कृपया 5 मिनट के भीतर उत्तर दें|કૃપા કરીને 5 મિનિટની અંદર જવાબ આપો/i);
+      expect(result.replyText).not.toMatch(/Please reply within 5 minutes|कृपया 5 मिनट के भीतर उत्तर दें|કૃપા કરીને 5 મિનિટની અંદર જવાબ આપો/i);
       expect(result.productCard).toBeUndefined();
       expect(result.productImage).toBeUndefined();
       expect(mocks.chat).not.toHaveBeenCalled();
