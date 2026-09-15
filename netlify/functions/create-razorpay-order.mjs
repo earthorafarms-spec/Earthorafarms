@@ -1,6 +1,7 @@
 // netlify/functions/create-razorpay-order.mjs
-// Server-side function — fetches product prices from Supabase, validates the
-// coupon, computes the authoritative total, then creates a Razorpay order.
+// Server-side function — fetches product prices from Supabase, computes the
+// authoritative total, then creates a Razorpay order with `line_items_total`
+// so Magic Checkout (1-click) can render address + payment in one modal.
 // The client-supplied amount is NEVER trusted.
 
 const KEY_ID               = process.env.RAZORPAY_KEY_ID           ?? '';
@@ -49,9 +50,9 @@ export async function handler(event) {
     return { statusCode: 500, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Database not configured.' }) };
   }
 
-  let cartItems, couponCode, currency, receipt;
+  let cartItems, currency, receipt;
   try {
-    ({ cartItems, couponCode, currency = 'INR', receipt } = JSON.parse(event.body ?? '{}'));
+    ({ cartItems, currency = 'INR', receipt } = JSON.parse(event.body ?? '{}'));
   } catch {
     return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Invalid JSON body.' }) };
   }
@@ -69,20 +70,20 @@ export async function handler(event) {
 
     const idList = productIds.map(id => `"${id.replace(/"/g, '')}"`).join(',');
     const products = await sbGet(
-      `products?or=(id.in.(${idList}),slug.in.(${idList}))&status=neq.archived&select=id,slug,price`
+      `products?or=(id.in.(${idList}),slug.in.(${idList}))&status=neq.archived&select=id,slug,name,price`
     );
 
     if (!products || products.length === 0) {
       return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'No active products found in cart.' }) };
     }
 
-    // 2. Fetch active festive deals
+    // 2. Fetch active festive deals (still honored — non-coupon, catalog-wide)
     const now = new Date().toISOString();
     const deals = await sbGet(
       `festival_details?festival_status=eq.active&festival_start_date=lte.${now}&festival_end_date=gte.${now}&select=discount_type,discount_value,festival_deal_products(product_id)`
     ).catch(() => []);
 
-    // 3. Compute server-side subtotal
+    // 3. Compute server-side subtotal + build line_items for Magic Checkout
     const productMap = new Map();
     for (const p of products) {
       productMap.set(p.id,   p);
@@ -90,6 +91,7 @@ export async function handler(event) {
     }
 
     let subtotalPaise = 0;
+    const lineItems = [];
     for (const item of cartItems) {
       const pid = String(item.productId || '');
       const prod = productMap.get(pid);
@@ -97,7 +99,6 @@ export async function handler(event) {
 
       let unitPrice = Number(prod.price);
 
-      // Apply festive deal if this product is included
       for (const deal of (deals || [])) {
         const inDeal = (deal.festival_deal_products || []).some(
           dp => dp.product_id === prod.id || dp.product_id === prod.slug
@@ -112,44 +113,33 @@ export async function handler(event) {
       }
 
       const qty = Math.max(1, Math.round(Number(item.quantity) || 1));
-      subtotalPaise += Math.round(unitPrice * 100) * qty;
+      const unitPaise = Math.round(unitPrice * 100);
+      subtotalPaise += unitPaise * qty;
+
+      lineItems.push({
+        sku: prod.slug || prod.id,
+        variant_id: prod.id,
+        price: unitPaise,
+        offer_price: unitPaise,
+        tax_amount: 0,
+        quantity: qty,
+        name: prod.name || prod.slug || 'Earthora product',
+        description: prod.name || '',
+        weight: 0,
+        dimensions: {},
+        image_url: '',
+        product_url: '',
+        notes: {},
+      });
     }
 
     if (subtotalPaise < 100) {
       return { statusCode: 400, headers: CORS_HEADERS, body: JSON.stringify({ error: 'Order total is below the minimum amount.' }) };
     }
 
-    // 4. Validate and apply coupon server-side
-    let discountPaise = 0;
-    if (couponCode && typeof couponCode === 'string') {
-      const cleanCode = encodeURIComponent(couponCode.trim().toUpperCase());
-      const coupons = await sbGet(
-        `coupon_details?coupon_code=eq.${cleanCode}&coupon_status=eq.active&select=coupon_discount_type,coupon_discount_value,coupon_expiry_date,coupon_max_uses,coupon_used_count,coupon_min_order`
-      ).catch(() => []);
+    const totalPaise = subtotalPaise;
 
-      const coupon = coupons?.[0];
-      if (coupon) {
-        const subtotalRupees = subtotalPaise / 100;
-        const expired = coupon.coupon_expiry_date
-          ? (() => { const d = new Date(coupon.coupon_expiry_date); d.setHours(23, 59, 59, 999); return d < new Date(); })()
-          : false;
-        const maxed = coupon.coupon_max_uses !== null &&
-          (coupon.coupon_used_count || 0) >= coupon.coupon_max_uses;
-        const tooSmall = Number(coupon.coupon_min_order || 0) > subtotalRupees;
-
-        if (!expired && !maxed && !tooSmall) {
-          if (coupon.coupon_discount_type === 'percentage') {
-            discountPaise = Math.round((subtotalPaise * Number(coupon.coupon_discount_value)) / 100);
-          } else {
-            discountPaise = Math.min(subtotalPaise, Math.round(Number(coupon.coupon_discount_value) * 100));
-          }
-        }
-      }
-    }
-
-    const totalPaise = Math.max(100, subtotalPaise - discountPaise);
-
-    // 5. Create Razorpay order for the server-computed total
+    // 4. Create Razorpay order — include line_items_total so 1CC accepts it
     const authHeader = 'Basic ' + Buffer.from(`${KEY_ID}:${KEY_SECRET}`).toString('base64');
     const razorRes = await fetch('https://api.razorpay.com/v1/orders', {
       method: 'POST',
@@ -158,6 +148,8 @@ export async function handler(event) {
         amount:  totalPaise,
         currency,
         receipt: receipt || `rcpt_${Date.now()}`,
+        line_items_total: totalPaise,
+        line_items: lineItems,
       }),
     });
 

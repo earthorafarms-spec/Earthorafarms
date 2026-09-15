@@ -2,13 +2,12 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion, useScroll, useMotionValueEvent, AnimatePresence } from "framer-motion";
 import { Link, useLocation } from "wouter";
-import { ShoppingBag, Menu, X, Heart, Settings } from "lucide-react";
+import { ShoppingBag, Menu, X, Heart } from "lucide-react";
 import { useCart } from "@/contexts/cart-context";
-import { useAuth } from "@/contexts/auth-context";
-import { supabase } from "@/lib/supabase";
-import { UserDashboardModal } from "@/components/user/UserDashboardModal";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 import earthoraTextSvg from "@assets/generated_images/Earthora Text.svg";
+
+const WISHLIST_KEY = "earthora-wishlist";
 
 const navLinks = [
   { label: "Home", href: "/" },
@@ -19,14 +18,23 @@ const navLinks = [
   { label: "Contact", href: "/contact" },
 ];
 
+function readWishlistCount(): number {
+  try {
+    const raw = localStorage.getItem(WISHLIST_KEY);
+    if (!raw) return 0;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [favoritesCount, setFavoritesCount] = useState(0);
   const { cartCount } = useCart();
-  const { user, signOut } = useAuth();
   const { scrollY } = useScroll();
   const [location] = useLocation();
 
@@ -36,10 +44,10 @@ export function Navbar() {
 
   useEffect(() => {
     setMounted(true);
+    setFavoritesCount(readWishlistCount());
     return () => setMounted(false);
   }, []);
 
-  // Lock background body scroll when mobile menu is open
   useEffect(() => {
     if (isMobileOpen) {
       document.body.style.overflow = "hidden";
@@ -51,41 +59,6 @@ export function Navbar() {
     };
   }, [isMobileOpen]);
 
-  // Fetch initial favorites count
-  useEffect(() => {
-    const email = user?.email;
-    if (!email) {
-      setFavoritesCount(0);
-      return;
-    }
-    (async () => {
-      const { data: favorites, error: favoritesError } = await (supabase.from("favorite_details") as any)
-        .select("product_id")
-        .eq("user_email", email);
-      if (favoritesError) {
-        setFavoritesCount(0);
-        return;
-      }
-
-      const favoriteIds = (favorites || [])
-        .map((favorite: { product_id: string }) => favorite.product_id)
-        .filter(Boolean);
-      if (!favoriteIds.length) {
-        setFavoritesCount(0);
-        return;
-      }
-
-      // Only fetch the IDs needed for the badge instead of the entire catalog,
-      // including reviews, inventory, images, and active deals.
-      const { data: visibleFavorites, error: productsError } = await (supabase.from("products") as any)
-        .select("id")
-        .in("id", favoriteIds)
-        .neq("status", "archived");
-      setFavoritesCount(productsError ? 0 : (visibleFavorites || []).length);
-    })().catch(() => setFavoritesCount(0));
-  }, [user]);
-
-  // Listen for optimistic wishlist changes from product cards
   useEffect(() => {
     const handler = (e: Event) => {
       setFavoritesCount((prev) => Math.max(0, prev + (e as CustomEvent<number>).detail));
@@ -102,7 +75,6 @@ export function Navbar() {
     setIsMobileOpen(false);
   };
 
-  // Color logic based on page and scroll state
   const headerBg = isScrolled
     ? "bg-[#FEFDF9]/90 backdrop-blur-md border-black/8 shadow-sm"
     : isHomePage
@@ -143,25 +115,14 @@ export function Navbar() {
           </nav>
 
           <div className="flex items-center gap-4 font-inter">
-            {user && (
-              <>
-                <Link href="/favorites" className={`relative p-2 transition-opacity ${mutedTextColor}`}>
-                  <Heart className="w-5 h-5" />
-                  {favoritesCount > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 flex items-center justify-center bg-rose-500 text-[10px] font-bold text-white rounded-full">
-                      {favoritesCount}
-                    </span>
-                  )}
-                </Link>
-                <button
-                  onClick={() => setIsDashboardOpen(true)}
-                  className={`p-2 transition-opacity ${mutedTextColor}`}
-                  title="My Account Settings"
-                >
-                  <Settings className="w-5 h-5" />
-                </button>
-              </>
-            )}
+            <Link href="/favorites" className={`relative p-2 transition-opacity ${mutedTextColor}`}>
+              <Heart className="w-5 h-5" />
+              {favoritesCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 w-4.5 h-4.5 flex items-center justify-center bg-rose-500 text-[10px] font-bold text-white rounded-full">
+                  {favoritesCount}
+                </span>
+              )}
+            </Link>
 
             <Link href="/cart" className={`relative p-2 transition-opacity ${mutedTextColor}`}>
               <ShoppingBag className="w-5 h-5" />
@@ -172,20 +133,11 @@ export function Navbar() {
               )}
             </Link>
 
-            {user ? (
-              <button
-                className={`hidden md:inline-flex px-5 py-2.5 rounded-xl font-inter font-medium text-xs tracking-[-0.01em] transition-all shadow-sm ${buttonBg}`}
-                onClick={() => signOut()}
-              >
-                Log Out
+            <Link href="/our-product">
+              <button className={`hidden md:inline-flex px-5 py-2.5 rounded-xl font-inter font-medium text-xs tracking-[-0.01em] transition-all shadow-sm ${buttonBg}`}>
+                Shop Now
               </button>
-            ) : (
-              <Link href="/auth">
-                <button className={`hidden md:inline-flex px-5 py-2.5 rounded-xl font-inter font-medium text-xs tracking-[-0.01em] transition-all shadow-sm ${buttonBg}`}>
-                  Log In
-                </button>
-              </Link>
-            )}
+            </Link>
 
             <button
               onClick={() => setIsMobileOpen(!isMobileOpen)}
@@ -234,20 +186,11 @@ export function Navbar() {
                 </div>
 
                 <div className="px-4 pb-8">
-                  {user ? (
-                    <button
-                      onClick={() => { signOut(); setIsMobileOpen(false); }}
-                      className="w-full py-3.5 text-sm font-inter font-medium bg-black text-white rounded-xl shadow-md"
-                    >
-                      Log Out
+                  <Link href="/our-product" onClick={() => setIsMobileOpen(false)}>
+                    <button className="w-full py-3.5 text-sm font-inter font-medium bg-black text-white rounded-xl shadow-md">
+                      Shop Now
                     </button>
-                  ) : (
-                    <Link href="/auth" onClick={() => setIsMobileOpen(false)}>
-                      <button className="w-full py-3.5 text-sm font-inter font-medium bg-black text-white rounded-xl shadow-md">
-                        Log In
-                      </button>
-                    </Link>
-                  )}
+                  </Link>
                 </div>
               </motion.nav>
             </>
@@ -255,8 +198,6 @@ export function Navbar() {
         </AnimatePresence>,
         document.body
       )}
-
-      <UserDashboardModal isOpen={isDashboardOpen} onClose={() => setIsDashboardOpen(false)} />
     </>
   );
 }

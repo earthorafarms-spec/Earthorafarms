@@ -5,26 +5,34 @@ import { Link } from 'wouter';
 import { Heart, ShoppingBag, Trash2, ArrowUpRight } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
-import { useAuth } from '@/contexts/auth-context';
 import { useCart } from '@/contexts/cart-context';
-import { supabase } from '@/lib/supabase';
 import { fetchPublicProducts } from '@/lib/api';
 import type { Product } from '@/types';
 
+const WISHLIST_KEY = 'earthora-wishlist';
+
+function readWishlist(): string[] {
+  try {
+    const raw = localStorage.getItem(WISHLIST_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeWishlist(ids: string[]) {
+  try { localStorage.setItem(WISHLIST_KEY, JSON.stringify(ids)); } catch { /* private mode */ }
+}
+
 export default function Favorites() {
-  const { user } = useAuth();
   const { addToCart } = useCart();
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!user) return;
-    (supabase.from('favorite_details') as any)
-      .select('product_id')
-      .eq('user_email', user.email)
-      .then(({ data, error }: { data: Array<Record<string, unknown>> | null; error: unknown }) => {
-        if (!error && data) setFavoriteIds(new Set(data.map((d: Record<string, unknown>) => d.product_id as string)));
-      });
-  }, [user]);
+    setFavoriteIds(new Set(readWishlist()));
+  }, []);
 
   const { data: allProducts = [], isLoading } = useQuery<Product[]>({
     queryKey: ['public-products'],
@@ -34,44 +42,15 @@ export default function Favorites() {
 
   const favorites = useMemo(() => allProducts.filter((p) => favoriteIds.has(p.id)), [allProducts, favoriteIds]);
 
-  const handleRemove = async (productId: string) => {
+  const handleRemove = (productId: string) => {
     window.dispatchEvent(new CustomEvent('wishlist-changed', { detail: -1 }));
-    setFavoriteIds((prev) => { const next = new Set(prev); next.delete(productId); return next; });
-    await (supabase.from('favorite_details') as any).delete().eq('user_email', user?.email).eq('product_id', productId);
+    setFavoriteIds((prev) => {
+      const next = new Set(prev);
+      next.delete(productId);
+      writeWishlist(Array.from(next));
+      return next;
+    });
   };
-
-  if (!user) {
-    return (
-      <div className="min-h-[100dvh] flex flex-col bg-[#FAF9F5] text-black selection:bg-black/10">
-        <Navbar />
-        <section className="relative pt-36 pb-20 lg:pt-44 lg:pb-24 overflow-hidden bg-[#0E0E0E] text-white">
-          <div className="container mx-auto px-6 sm:px-10 max-w-[1400px] relative z-10 text-center">
-            <div className="w-16 h-16 rounded-full bg-white/10 text-rose-400 flex items-center justify-center mx-auto mb-6">
-              <Heart className="w-8 h-8 fill-current" />
-            </div>
-            <motion.h1
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="font-dm font-normal tracking-[-0.05em] text-[40px] leading-[44px] sm:text-[60px] sm:leading-[56px] text-white mb-4"
-            >
-              Sign in to view your wishlist.
-            </motion.h1>
-            <p className="font-inter text-base text-white/60 mb-8 max-w-md mx-auto">
-              Save your favorite botanical supplements and access them anytime across all your devices.
-            </p>
-            <Link
-              href="/auth"
-              className="inline-flex items-center gap-2 bg-white text-black px-8 py-4 rounded-xl font-inter font-medium text-base hover:bg-white/90 transition-colors shadow-xl"
-            >
-              <span>Sign In Now</span>
-              <ArrowUpRight className="w-5 h-5" />
-            </Link>
-          </div>
-        </section>
-        <Footer />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-[#FAF9F5] text-black selection:bg-black/10">
@@ -101,7 +80,7 @@ export default function Favorites() {
               transition={{ duration: 0.8, delay: 0.2 }}
               className="font-inter font-normal text-base text-white/55 max-w-[340px]"
             >
-              {favorites.length} {favorites.length === 1 ? 'item' : 'items'} saved in your personal collection.
+              {favorites.length} {favorites.length === 1 ? 'item' : 'items'} saved on this device.
             </motion.p>
           </div>
         </div>

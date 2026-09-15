@@ -44,11 +44,9 @@ const Recipes        = lazyWithRetry(() => import('./pages/recipes'));
 const Contact        = lazyWithRetry(() => import('./pages/contact'));
 const HealthBenefits = lazyWithRetry(() => import('./pages/health-benefits'));
 const Gallery        = lazyWithRetry(() => import('./pages/gallery'));
-const Auth           = lazyWithRetry(() => import('./pages/auth'));
 const Products       = lazyWithRetry(() => import('./pages/products'));
 const Cart           = lazyWithRetry(() => import('./pages/cart'));
 const Favorites      = lazyWithRetry(() => import('./pages/favorites'));
-const Checkout       = lazyWithRetry(() => import('./pages/checkout'));
 const VoiceCheckout  = lazyWithRetry(() => import('./pages/voice-checkout'));
 const ReviewOrder    = lazyWithRetry(() => import('./pages/review-order'));
 const ShippingPolicy = lazyWithRetry(() => import('./pages/shipping-policy'));
@@ -121,7 +119,9 @@ export default function App() {
                   <Route path="/our-product" component={Products} />
                   <Route path="/cart" component={Cart} />
                   <Route path="/favorites" component={Favorites} />
-                  <Route path="/checkout" component={Checkout} />
+                  <Route path="/checkout">
+                    <Redirect to="/cart" />
+                  </Route>
                   <Route path="/voice-checkout/:token" component={VoiceCheckout} />
                   <Route path="/review-order" component={ReviewOrder} />
                   <Route path="/shipping-policy" component={ShippingPolicy} />
@@ -129,7 +129,9 @@ export default function App() {
                   <Route path="/privacy-policy" component={PrivacyPolicy} />
                   <Route path="/terms-of-use" component={TermsOfUse} />
                   <Route path="/cookie-settings" component={CookieSettings} />
-                  <Route path="/auth" component={Auth} />
+                  <Route path="/auth">
+                    <Redirect to="/" />
+                  </Route>
 
                   <Route path="/sun-earthora">
                     <Redirect to="/sun-earthora/dashboard" />

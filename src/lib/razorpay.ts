@@ -1,5 +1,5 @@
 // src/lib/razorpay.ts
-// Frontend helper — opens the Razorpay Standard Checkout modal.
+// Frontend helper — opens the Razorpay Magic Checkout (1-click) modal.
 // KEY_SECRET is NEVER used here. Only the public KEY_ID is referenced.
 
 let _rzpScriptPromise: Promise<void> | null = null;
@@ -21,30 +21,8 @@ export function loadRazorpayScript(): Promise<void> {
 
 declare global {
   interface Window {
-    Razorpay: new (options: RazorpayOptions) => RazorpayInstance;
+    Razorpay: new (options: Record<string, unknown>) => RazorpayInstance;
   }
-}
-
-interface RazorpayOptions {
-  key: string;
-  amount: number;
-  currency: string;
-  order_id: string;
-  name: string;
-  description: string;
-  image?: string;
-  prefill?: {
-    name?: string;
-    email?: string;
-    contact?: string;
-  };
-  theme?: {
-    color?: string;
-  };
-  handler: (response: RazorpaySuccessResponse) => void;
-  modal?: {
-    ondismiss?: () => void;
-  };
 }
 
 interface RazorpayInstance {
@@ -52,10 +30,25 @@ interface RazorpayInstance {
   on: (event: string, handler: (response: RazorpayFailureResponse) => void) => void;
 }
 
+export interface RazorpayShippingAddress {
+  line1?: string;
+  line2?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  zipcode?: string;
+  type?: string;
+}
+
 export interface RazorpaySuccessResponse {
   razorpay_payment_id: string;
   razorpay_order_id: string;
   razorpay_signature: string;
+  // Magic Checkout may echo these fields directly in the handler payload
+  contact?: string;
+  email?: string;
+  shipping_address?: RazorpayShippingAddress;
+  billing_address?: RazorpayShippingAddress;
 }
 
 export interface RazorpayFailureResponse {
@@ -75,14 +68,16 @@ export interface OpenRazorpayModalOptions {
   currency: string;
   keyId: string;
   prefill?: { name?: string; email?: string; contact?: string };
+  /** Enable Razorpay Magic Checkout (1-click) — address is collected in the modal. */
+  oneClickCheckout?: boolean;
   onSuccess: (response: RazorpaySuccessResponse) => void;
   onFailure: (reason: string) => void;
   onDismiss?: () => void;
 }
 
 /**
- * Opens the Razorpay Standard Checkout modal.
- * Must be called after window.Razorpay is available (checkout.js loaded in index.html).
+ * Opens the Razorpay checkout modal. When `oneClickCheckout` is true, the modal
+ * runs in Magic Checkout mode and collects the shipping address itself.
  */
 export function openRazorpayModal({
   orderId,
@@ -90,6 +85,7 @@ export function openRazorpayModal({
   currency,
   keyId,
   prefill,
+  oneClickCheckout,
   onSuccess,
   onFailure,
   onDismiss,
@@ -101,7 +97,7 @@ export function openRazorpayModal({
 
   const activeKeyId = keyId || (import.meta.env.VITE_RAZORPAY_KEY_ID as string) || 'rzp_test_1DP5mmOlF5G5ag';
 
-  const options: any = {
+  const options: Record<string, unknown> = {
     key: activeKeyId,
     amount,
     currency: currency || 'INR',
@@ -125,6 +121,11 @@ export function openRazorpayModal({
 
   if (orderId && !orderId.startsWith('order_demo_')) {
     options.order_id = orderId;
+  }
+
+  if (oneClickCheckout) {
+    options.one_click_checkout = true;
+    options.show_coupons = false;
   }
 
   const rzp = new window.Razorpay(options);

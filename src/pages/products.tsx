@@ -10,7 +10,6 @@ import { ProductCardSkeleton } from '@/components/products/ProductCardSkeleton';
 import { ProductModal } from '@/components/products/ProductModal';
 import { ReviewSection } from '@/components/products/ReviewSection';
 import { useCart } from '@/contexts/cart-context';
-import { useAuth } from '@/contexts/auth-context';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
 import { fetchPublicProducts, fetchReviews } from '@/lib/api';
@@ -36,24 +35,16 @@ export default function Products() {
   const [reviewComment, setReviewComment] = useState('');
 
   const { addToCart } = useCart();
-  const { user } = useAuth();
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!user) {
+    try {
       const saved = localStorage.getItem('earthora-wishlist');
       setWishlist(new Set(saved ? JSON.parse(saved) : []));
-      return;
+    } catch {
+      setWishlist(new Set());
     }
-    (supabase.from('favorite_details') as any)
-      .select('product_id')
-      .eq('user_email', user.email)
-      .then(({ data, error }: { data: Array<Record<string, unknown>> | null; error: unknown }) => {
-        if (!error && data) {
-          setWishlist(new Set(data.map((d: Record<string, unknown>) => d.product_id as string)));
-        }
-      });
-  }, [user]);
+  }, []);
 
   const { data: dbReviews = [], refetch: refetchReviews } = useQuery<any[]>({
     queryKey: ['product-reviews'],
@@ -119,7 +110,7 @@ export default function Products() {
 
   const handleBuyNow = useCallback((p: Product) => {
     addToCart({ id: p.id, name: p.name, price: p.price, image: p.imageMain });
-    setLocation('/checkout');
+    setLocation('/cart');
   }, [addToCart, setLocation]);
 
   const handleSubmitReview = useCallback(async (productId: string) => {
@@ -142,37 +133,16 @@ export default function Products() {
     }
   }, [reviewName, reviewRating, reviewComment, toast, refetchReviews]);
 
-  const toggleWishlist = useCallback(async (id: string) => {
-    if (!user) {
-      setWishlist((prev) => {
-        const next = new Set(prev);
-        next.has(id) ? next.delete(id) : next.add(id);
-        localStorage.setItem('earthora-wishlist', JSON.stringify(Array.from(next)));
-        return next;
-      });
-      return;
-    }
-    const isFav = wishlist.has(id);
-    const delta = isFav ? -1 : 1;
-    window.dispatchEvent(new CustomEvent('wishlist-changed', { detail: delta }));
+  const toggleWishlist = useCallback((id: string) => {
     setWishlist((prev) => {
       const next = new Set(prev);
-      isFav ? next.delete(id) : next.add(id);
+      const wasFav = next.has(id);
+      if (wasFav) next.delete(id); else next.add(id);
+      window.dispatchEvent(new CustomEvent('wishlist-changed', { detail: wasFav ? -1 : 1 }));
+      try { localStorage.setItem('earthora-wishlist', JSON.stringify(Array.from(next))); } catch { /* private mode */ }
       return next;
     });
-    const { error } = isFav
-      ? await (supabase.from('favorite_details') as any).delete().eq('user_email', user.email).eq('product_id', id)
-      : await (supabase.from('favorite_details') as any).insert({ user_email: user.email, product_id: id });
-    if (error) {
-      toast({ title: 'Failed to update', description: error.message, variant: 'destructive' });
-      window.dispatchEvent(new CustomEvent('wishlist-changed', { detail: -delta }));
-      setWishlist((prev) => {
-        const next = new Set(prev);
-        isFav ? next.add(id) : next.delete(id);
-        return next;
-      });
-    }
-  }, [user, wishlist, toast]);
+  }, []);
 
   const openProduct = useCallback((p: Product) => {
     setSelectedProduct(p);
