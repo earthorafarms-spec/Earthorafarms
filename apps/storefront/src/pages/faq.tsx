@@ -276,7 +276,7 @@ export default function FAQ() {
             <Link href="/contact" className="px-6 py-3 rounded-xl bg-black text-white font-inter text-sm font-medium hover:bg-black/85 transition-colors">
               Contact Support
             </Link>
-            <Link href="/our-product" className="px-6 py-3 rounded-xl border border-black/15 font-inter text-sm font-medium text-black hover:bg-black/5 transition-colors">
+            <Link href="/#products" className="px-6 py-3 rounded-xl border border-black/15 font-inter text-sm font-medium text-black hover:bg-black/5 transition-colors">
               Explore Our Products
             </Link>
           </div>

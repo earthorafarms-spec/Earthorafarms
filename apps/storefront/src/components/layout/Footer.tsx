@@ -119,7 +119,7 @@ export function Footer() {
                 {products.map((product) => (
                   <li key={product.id}>
                     <a
-                      href={`/our-product?open=${product.id}`}
+                      href={`/?open=${product.id}#products`}
                       className="font-inter text-sm text-white/50 hover:text-white transition-colors tracking-[-0.01em]"
                     >
                       {shortenName(product.name)}
@@ -129,7 +129,7 @@ export function Footer() {
                 {products.length === 0 && (
                   <li>
                     <Link
-                      href="/our-product"
+                      href="/#products"
                       className="font-inter text-sm text-white/50 hover:text-white transition-colors tracking-[-0.01em]"
                     >
                       View All Products

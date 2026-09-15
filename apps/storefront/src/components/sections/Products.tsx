@@ -84,7 +84,7 @@ export function Products() {
                   ease: [0.16, 1, 0.3, 1],
                 }}
                 className="group bg-[#FEFDF9] rounded-2xl border border-black/5 p-6 lg:p-7 flex flex-col justify-between shadow-sm hover:shadow-2xl transition-all duration-500 hover:-translate-y-1.5 cursor-pointer"
-                onClick={() => { window.location.href = "/our-product"; }}
+                onClick={() => { window.location.href = "/#products"; }}
               >
                 <div>
                   {/* Product Image Container */}

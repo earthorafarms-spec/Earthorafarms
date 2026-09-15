@@ -42,7 +42,7 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
 const OurStory       = lazyWithRetry(() => import('./pages/our-story'));
 const Contact        = lazyWithRetry(() => import('./pages/contact'));
 const HealthBenefits = lazyWithRetry(() => import('./pages/health-benefits'));
-const Products       = lazyWithRetry(() => import('./pages/products'));
+const ProductDetail  = lazyWithRetry(() => import('./pages/product-detail'));
 const Cart           = lazyWithRetry(() => import('./pages/cart'));
 const Favorites      = lazyWithRetry(() => import('./pages/favorites'));
 const VoiceCheckout  = lazyWithRetry(() => import('./pages/voice-checkout'));
@@ -112,7 +112,10 @@ export default function App() {
                   <Route path="/our-story" component={OurStory} />
                   <Route path="/contact" component={Contact} />
                   <Route path="/health-benefits" component={HealthBenefits} />
-                  <Route path="/our-product" component={Products} />
+                  <Route path="/our-product">
+                    <Redirect to="/#products" />
+                  </Route>
+                  <Route path="/product/:id" component={ProductDetail} />
                   <Route path="/cart" component={Cart} />
                   <Route path="/favorites" component={Favorites} />
                   <Route path="/checkout">

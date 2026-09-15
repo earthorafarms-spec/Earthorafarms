@@ -1,8 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useLocation } from "wouter";
-import { ArrowUpRight, ShoppingBag, Loader2, Zap, CheckCircle2, Star } from "lucide-react";
+import { useLocation } from "wouter";
+import { ShoppingBag, Loader2, Zap, CheckCircle2, Star, ArrowUpRight } from "lucide-react";
 import { useCart } from "@/contexts/cart-context";
 import { useCheckout } from "@/hooks/useCheckout";
 import { useToast } from "@/hooks/use-toast";
@@ -16,10 +16,23 @@ export function HomeProducts() {
     staleTime: 1000 * 60 * 5,
   });
 
-  const featured = useMemo(() => products.slice(0, 4), [products]);
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    // If ?open=<productId> is present, navigate directly to that product's dedicated page
+    const params = new URLSearchParams(window.location.search);
+    const openId = params.get("open");
+    if (openId) {
+      setLocation(`/product/${openId}`);
+    }
+  }, [setLocation]);
+
+  const handleCardClick = (productId: string) => {
+    setLocation(`/product/${productId}`);
+  };
 
   return (
-    <section className="bg-[#FEFDF9] py-24 lg:py-32 relative overflow-hidden">
+    <section id="products" className="bg-[#FEFDF9] py-24 lg:py-32 relative overflow-hidden scroll-mt-20">
       <div className="container mx-auto max-w-[1400px] px-6 sm:px-10">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6 mb-14 lg:mb-16">
@@ -37,14 +50,6 @@ export function HomeProducts() {
               Choose your <em className="not-italic text-black/45">daily green.</em>
             </motion.h2>
           </div>
-
-          <Link
-            href="/our-product"
-            className="hidden md:inline-flex items-center gap-2 text-sm font-inter font-semibold text-black border-b border-black pb-1 hover:gap-3 transition-all self-end"
-          >
-            <span>View all products</span>
-            <ArrowUpRight className="w-4 h-4" />
-          </Link>
         </div>
 
         {/* Grid */}
@@ -54,33 +59,36 @@ export function HomeProducts() {
               <div key={i} className="rounded-3xl aspect-[3/4] bg-[#F3F1EA] animate-pulse" />
             ))}
           </div>
-        ) : featured.length === 0 ? (
+        ) : products.length === 0 ? (
           <div className="text-center py-16 text-black/50 font-inter text-sm">
             No products live right now. Check back soon.
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 lg:gap-6">
-            {featured.map((p, i) => (
-              <ProductCard key={p.id} product={p} delay={i * 0.08} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 lg:gap-6">
+            {products.map((p, i) => (
+              <ProductCard
+                key={p.id}
+                product={p}
+                delay={i * 0.08}
+                onCardClick={handleCardClick}
+              />
             ))}
           </div>
         )}
-
-        <div className="mt-10 md:hidden flex justify-center">
-          <Link
-            href="/our-product"
-            className="inline-flex items-center gap-2 text-sm font-inter font-semibold text-black border-b border-black pb-1"
-          >
-            <span>View all products</span>
-            <ArrowUpRight className="w-4 h-4" />
-          </Link>
-        </div>
       </div>
     </section>
   );
 }
 
-function ProductCard({ product, delay }: { product: Product; delay: number }) {
+function ProductCard({
+  product,
+  delay,
+  onCardClick,
+}: {
+  product: Product;
+  delay: number;
+  onCardClick: (id: string) => void;
+}) {
   const { addToCart } = useCart();
   const { runCheckout, isPaying } = useCheckout();
   const { toast } = useToast();
@@ -95,14 +103,16 @@ function ProductCard({ product, delay }: { product: Product; delay: number }) {
     image: product.imageMain,
   };
 
-  const handleAdd = () => {
+  const handleAdd = (e: React.MouseEvent) => {
+    e.stopPropagation();
     addToCart(cartItem);
     setJustAdded(true);
     toast({ title: "Added to cart", description: `${product.name} added to your cart.` });
     setTimeout(() => setJustAdded(false), 1600);
   };
 
-  const handleBuyNow = async () => {
+  const handleBuyNow = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (isPaying || buyingThis) return;
     setBuyingThis(true);
     const result = await runCheckout([{ ...cartItem, quantity: 1 }]);
@@ -110,8 +120,6 @@ function ProductCard({ product, delay }: { product: Product; delay: number }) {
     if (result) setLocation("/cart");
   };
 
-  // Show absolute rupee savings when the percentage would be absurd
-  // (e.g. test data where price is ₹1 vs mrp ₹999 → don't render "-100%").
   const savings = product.mrp > product.price ? product.mrp - product.price : 0;
   const savingsPct = product.mrp > 0 ? Math.round((savings / product.mrp) * 100) : 0;
   const showPct = savings > 0 && savingsPct > 0 && savingsPct <= 70;
@@ -119,13 +127,15 @@ function ProductCard({ product, delay }: { product: Product; delay: number }) {
 
   return (
     <motion.article
+      id={`product-${product.id}`}
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-60px" }}
       transition={{ duration: 0.6, delay, ease: [0.16, 1, 0.3, 1] }}
-      className="group relative bg-[#FEFDF9] rounded-3xl border border-black/8 flex flex-col overflow-hidden transition-shadow hover:shadow-[0_20px_60px_-20px_rgba(14,31,19,0.18)]"
+      onClick={() => onCardClick(product.id)}
+      className="group relative bg-[#FEFDF9] rounded-3xl border border-black/8 flex flex-col overflow-hidden transition-all duration-300 hover:shadow-[0_20px_60px_-20px_rgba(14,31,19,0.18)] cursor-pointer scroll-mt-24"
     >
-      {/* Image well — soft cream/sage tint behind the product */}
+      {/* Image well */}
       <div className="relative aspect-square w-full overflow-hidden bg-[#F3F1EA]">
         {/* Top-left badge stack */}
         <div className="absolute top-3.5 left-3.5 z-10 flex flex-col gap-1.5 items-start">
@@ -146,8 +156,8 @@ function ProductCard({ product, delay }: { product: Product; delay: number }) {
           )}
         </div>
 
-        {/* Wishlist / quick view slot (top right) */}
-        <div className="absolute top-3.5 right-3.5 z-10">
+        {/* Rating badge (top right) */}
+        <div className="absolute top-3.5 right-3.5 z-10 flex items-center gap-1.5">
           <span className="inline-flex items-center gap-1 text-[10px] font-inter font-medium text-black/70 bg-white/85 backdrop-blur-sm px-2 py-1 rounded-full">
             <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
             {product.rating ? Number(product.rating).toFixed(1) : "4.9"}
@@ -160,19 +170,25 @@ function ProductCard({ product, delay }: { product: Product; delay: number }) {
           className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
           loading="lazy"
         />
+
+        {/* View Details hover indicator */}
+        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+          <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/95 text-[#0E1F13] text-xs font-inter font-semibold shadow-md transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">
+            <span>View Details</span>
+            <ArrowUpRight className="w-3.5 h-3.5" />
+          </span>
+        </div>
       </div>
 
       {/* Info + actions */}
       <div className="p-5 lg:p-6 flex flex-col flex-1">
-        {/* Tag overline */}
         {product.tag && (
           <p className="font-inter text-[10px] tracking-[0.2em] uppercase text-black/45 mb-2">
             {product.tag}
           </p>
         )}
 
-        {/* Name — clamp to 2 lines so long titles stay tidy */}
-        <h3 className="font-dm font-normal text-lg lg:text-xl leading-[1.15] tracking-[-0.02em] text-black line-clamp-2 min-h-[2.3em]">
+        <h3 className="font-dm font-normal text-lg lg:text-xl leading-[1.15] tracking-[-0.02em] text-black line-clamp-2 min-h-[2.3em] group-hover:text-emerald-800 transition-colors">
           {product.name}
         </h3>
 
@@ -188,7 +204,7 @@ function ProductCard({ product, delay }: { product: Product; delay: number }) {
           )}
         </div>
 
-        {/* Actions — icon-only "Add to cart" square + primary "Buy now" pill, side by side */}
+        {/* Actions */}
         <div className="mt-auto flex items-stretch gap-2">
           <button
             type="button"
