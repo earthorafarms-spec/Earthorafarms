@@ -1,6 +1,6 @@
 import { supabase } from '../voice-service/src/lib/supabaseClient.js';
 import type { ConversationState } from '../voice-service/src/conversation/state.js';
-import { getWhatsAppActiveSubFlow } from '../voice-service/src/conversation/controller.js';
+import { getWhatsAppActiveSubFlow } from './conversation/controller.js';
 import type { WhatsAppInboundMessage } from './inbound.js';
 import { serializeProductCard, serializeProductCards, type WhatsAppProductCard } from './product-card.js';
 

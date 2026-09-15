@@ -10,7 +10,7 @@ import {
   saveWhatsAppTurn,
   type WhatsAppInboxEvent,
 } from './events.repository.js';
-import { processTurn } from '../voice-service/src/conversation/controller.js';
+import { processWhatsAppTurn } from './conversation/controller.js';
 import { sendWhatsAppImage, sendWhatsAppMessage, sendWhatsAppProductCard, WhatsAppDeliveryError } from './provider.js';
 import { recordWhatsAppDiagnostic } from './diagnostics.js';
 import { parsePersistedProductCard, parsePersistedProductCards } from './product-card.js';
@@ -58,7 +58,7 @@ export async function processInboxEvent(event: WhatsAppInboxEvent): Promise<void
 
   const input = event.messageText ??
     'The customer sent an unsupported WhatsApp attachment. Ask them to type their question or order.';
-  const outcome = await processTurn(voiceSessionId, state, input, 'text');
+  const outcome = await processWhatsAppTurn(voiceSessionId, state, input);
 
   // Persist conversation/cart state and the exact outbound reply atomically.
   // If delivery fails, the next attempt resends replyText without reprocessing.

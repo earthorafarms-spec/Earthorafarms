@@ -25,8 +25,8 @@ vi.mock('../../../whatsapp-chatbot/events.repository.js', () => ({
   claimNextWhatsAppMessage: vi.fn(),
 }));
 
-vi.mock('../../src/conversation/controller.js', () => ({
-  processTurn: (...args: unknown[]) => mockProcessTurn(...args),
+vi.mock('../../../whatsapp-chatbot/conversation/controller.js', () => ({
+  processWhatsAppTurn: (...args: unknown[]) => mockProcessTurn(...args),
 }));
 
 vi.mock('../../../whatsapp-chatbot/provider.js', () => ({
@@ -108,6 +108,53 @@ describe('WhatsApp worker inbox event processing & delivery retries', () => {
 
     // Marks event processed
     expect(mockMarkWhatsAppMessageProcessed).toHaveBeenCalledWith('event-1');
+  });
+
+  it('delivers Benefits/Dosage native buttons card successfully and suppresses redundant text message', async () => {
+    const knowledgeCard: WhatsAppProductCard = {
+      productId: 'alpha-id',
+      name: 'Alpha',
+      body: '*Benefits of Alpha:*\nBoosts immunity naturally.',
+      buttons: [
+        { id: 'earthora_product:add_to_cart:alpha-id', title: 'Add to Cart' },
+        { id: 'earthora_cart:main_menu', title: 'Menu' },
+      ],
+    };
+    const event: WhatsAppInboxEvent = {
+      id: 'event-benefits-1',
+      providerMessageId: 'wamid.benefits.1',
+      phone: '+919876543210',
+      messageText: '__earthora_whatsapp_product_action__:benefits:alpha-id',
+      replyText: null,
+      mediaUrl: null,
+      mediaCaption: null,
+      mediaSentAt: null,
+      attemptCount: 1,
+    };
+
+    mockProcessTurn.mockResolvedValueOnce({
+      state: createInitialState(),
+      replyText: knowledgeCard.body,
+      policyViolations: [],
+      productCard: knowledgeCard,
+    });
+
+    await processInboxEvent(event);
+
+    expect(mockSaveWhatsAppTurn).toHaveBeenCalledWith(
+      'event-benefits-1',
+      'session-uuid-1',
+      expect.anything(),
+      knowledgeCard.body,
+      undefined,
+      knowledgeCard,
+    );
+
+    expect(mockSendWhatsAppProductCard).toHaveBeenCalledWith('+919876543210', knowledgeCard);
+    expect(mockMarkWhatsAppMediaSent).toHaveBeenCalledWith('event-benefits-1');
+    expect(mockSendWhatsAppImage).not.toHaveBeenCalled();
+    expect(mockSendWhatsAppMessage).not.toHaveBeenCalled();
+    expect(mockMarkWhatsAppMessageProcessed).toHaveBeenCalledWith('event-benefits-1');
   });
 
   it('allows failed card delivery to be retried without re-running conversational turn', async () => {
