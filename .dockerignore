@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+**/.env
+.git
+apps/storefront
+apps/console
+voice-service
+whatsapp-chatbot
+supabase
