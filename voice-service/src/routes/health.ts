@@ -16,5 +16,8 @@ export async function registerHealthRoutes(app: FastifyInstance): Promise<void> 
   app.get('/ready', async () => ({
     ok: true,
     googleSttTtsConfigured: config.googleSttTtsConfigured,
+    // Non-secret rollout evidence for production verification.
+    realtimeSttEnabled: config.VOICE_REALTIME_STT_ENABLED,
+    streamingTtsEnabled: true,
   }));
 }
