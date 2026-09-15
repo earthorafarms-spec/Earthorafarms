@@ -1,0 +1,13 @@
+@import "tailwindcss";
+:root { --forest:#15271d; --leaf:#26593b; --leaf2:#2f6d48; --sage:#dce7c5; --amber:#DC9950; --cream:#faf8f3; }
+* { -webkit-font-smoothing: antialiased; }
+body { margin:0; font-family:'Outfit',system-ui,sans-serif; background:#0e1512; color:#e8eee9; }
+.font-serif { font-family:'Playfair Display',serif; }
+::-webkit-scrollbar { width:10px; height:10px; } ::-webkit-scrollbar-thumb { background:#25342c; border-radius:8px; } ::-webkit-scrollbar-track { background:transparent; }
+.card { background:#131c18; border:1px solid #1f2c25; border-radius:16px; }
+.btn { display:inline-flex; align-items:center; gap:8px; height:38px; padding:0 16px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; border:1px solid transparent; transition:.15s; }
+.btn-primary { background:#2f6d48; color:#fff; } .btn-primary:hover { background:#357c52; }
+.btn-ghost { background:#1a2620; color:#cdd8d0; border-color:#26342c; } .btn-ghost:hover { background:#22322a; }
+.input { width:100%; height:40px; padding:0 12px; background:#0f1713; border:1px solid #24322b; border-radius:10px; color:#e8eee9; font-size:13px; outline:none; }
+.input:focus { border-color:#2f6d48; } textarea.input { height:auto; padding:10px 12px; min-height:80px; resize:vertical; }
+.tag { display:inline-flex; align-items:center; gap:5px; padding:2px 9px; border-radius:999px; font-size:11px; font-weight:600; }

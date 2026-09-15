@@ -9,6 +9,16 @@ function oai(): OpenAI {
   return client;
 }
 
+function toOpenAiMessages(messages: ChatMessage[]): any[] {
+  return messages.map((m) => {
+    if (m.role === 'assistant' && m.tool_calls?.length) {
+      return { role: 'assistant', content: m.content || null, tool_calls: m.tool_calls.map((tc) => ({ id: tc.id, type: 'function', function: { name: tc.name, arguments: JSON.stringify(tc.arguments ?? {}) } })) };
+    }
+    if (m.role === 'tool') return { role: 'tool', tool_call_id: m.tool_call_id, content: m.content };
+    return { role: m.role, content: m.content };
+  });
+}
+
 function toOpenAiTools(tools?: ToolDef[]) {
   return tools?.map((t) => ({ type: 'function' as const, function: { name: t.name, description: t.description, parameters: t.parameters as any } }));
 }
@@ -20,7 +30,7 @@ export const openaiLlm: LlmAdapter = {
       model: opts.model || config.OPENAI_MODEL || 'gpt-4o-mini',
       temperature: opts.temperature ?? 0.3,
       max_tokens: opts.maxTokens ?? 700,
-      messages: messages as any,
+      messages: toOpenAiMessages(messages),
       tools: toOpenAiTools(opts.tools),
       tool_choice: opts.tools?.length ? 'auto' : undefined,
       response_format: opts.json ? { type: 'json_object' } : undefined,
@@ -32,7 +42,7 @@ export const openaiLlm: LlmAdapter = {
   async stream(messages, opts) {
     const stream = await oai().chat.completions.create({
       model: opts.model || config.OPENAI_MODEL || 'gpt-4o-mini',
-      temperature: opts.temperature ?? 0.3, stream: true, messages: messages as any,
+      temperature: opts.temperature ?? 0.3, stream: true, messages: toOpenAiMessages(messages),
       tools: toOpenAiTools(opts.tools), tool_choice: opts.tools?.length ? 'auto' : undefined,
     });
     let text = ''; const toolAcc: Record<number, { id: string; name: string; args: string }> = {}; let model = '';

@@ -19,6 +19,15 @@ export interface BuiltinFunction { name: string; description: string; parameters
 
 const str = (v: unknown) => (v === undefined || v === null ? '' : String(v));
 
+function resolveProduct<T extends { id: string; slug: string; name: string; status: string }>(products: T[], ref: string): T | undefined {
+  const r = str(ref).toLowerCase().trim();
+  return products.find((x) => x.id === ref || x.slug === ref)
+    || products.find((x) => x.name.toLowerCase() === r || x.slug === r)
+    || products.find((x) => x.status === 'active' && (x.name.toLowerCase().includes(r) || r.includes(x.slug) || r.split(/\s+/).some((w) => w.length > 3 && x.name.toLowerCase().includes(w))))
+    || (products.filter((x) => x.status === 'active').length === 1 ? products.find((x) => x.status === 'active') : undefined);
+}
+
+
 export const BUILTINS: BuiltinFunction[] = [
   {
     name: 'list_products',
@@ -38,7 +47,7 @@ export const BUILTINS: BuiltinFunction[] = [
     parameters: { type: 'object', properties: { productId: { type: 'string' } }, required: ['productId'] },
     run: async (args) => {
       const products = await listProducts();
-      const p = products.find((x) => x.id === args.productId || x.slug === args.productId);
+      const p = resolveProduct(products, str(args.productId));
       if (!p) return { ok: false, message: 'Product not found' };
       return { ok: true, data: { id: p.id, name: p.name, description: p.description, highlights: p.highlights, price: p.price, mrp: p.mrp, currency: 'INR', stock: p.stockQty, image: p.images.find((i) => i.is_primary)?.url ?? p.images[0]?.url ?? null } };
     },
@@ -58,7 +67,7 @@ export const BUILTINS: BuiltinFunction[] = [
     parameters: { type: 'object', properties: { productId: { type: 'string' }, quantity: { type: 'integer', minimum: 1 } }, required: ['productId', 'quantity'] },
     run: async (args, ctx) => {
       const products = await listProducts();
-      const p = products.find((x) => x.id === args.productId || x.slug === args.productId);
+      const p = resolveProduct(products, str(args.productId));
       if (!p || p.status !== 'active') return { ok: false, message: 'That product is not available' };
       const qty = Math.max(1, Math.min(50, Math.round(Number(args.quantity) || 1)));
       if (p.stockQty < qty) return { ok: false, message: `Only ${p.stockQty} in stock` };

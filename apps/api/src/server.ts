@@ -51,6 +51,20 @@ export async function buildServer(): Promise<FastifyInstance> {
   app.get('/healthz', async () => ({ ok: true, role: config.ROLE, time: new Date().toISOString() }));
   app.get('/readyz', async () => { await sql`SELECT 1`; return { ok: true }; });
 
+  // Embeddable widget + hosted assistant page (public).
+  const { readFile } = await import('node:fs/promises');
+  const widgetPath = resolve(new URL('.', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'), '..', 'public', 'widget.js');
+  app.get('/widget.js', async (_req, reply) => {
+    const js = await readFile(widgetPath, 'utf8').catch(() => readFile(resolve('public/widget.js'), 'utf8'));
+    reply.header('Content-Type', 'application/javascript').header('Cache-Control', 'public, max-age=300');
+    return reply.send(js);
+  });
+  app.get('/assistant/:channelKey', async (req, reply) => {
+    const key = (req.params as { channelKey: string }).channelKey;
+    reply.header('Content-Type', 'text/html');
+    return reply.send(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Earthora Assistant</title><style>body{margin:0;height:100vh;background:linear-gradient(135deg,#1b3327,#0f1a13);font-family:system-ui}.h{position:absolute;top:0;left:0;right:0;text-align:center;color:#cfe0d4;padding:40px 20px}.h h1{font-family:Georgia,serif;font-weight:600}</style></head><body><div class="h"><h1>Earthora Farms Assistant</h1><p>Ask about our moringa products, your order, or anything else.</p></div><script src="/widget.js" data-channel="${key.replace(/[^a-zA-Z0-9_-]/g,'')}" data-api="" defer></script><script>window.addEventListener('load',function(){setTimeout(function(){document.querySelector('.ea-fab')&&document.querySelector('.ea-fab').click()},600)})</script></body></html>`);
+  });
+
   await app.register(async (api) => {
     await api.register(authRoutes);
     await api.register(storeRoutes);
