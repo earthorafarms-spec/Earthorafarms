@@ -19,7 +19,9 @@ import { AudioAccumulator, pcm16ToWav } from '../telephony/audio-accumulator.js'
 import { mulaw8kToPcm16k, wavToMulaw8k } from '../telephony/mulaw.js';
 import { config } from '../config.js';
 import type { VoiceTurnMetric } from '../conversation/state.js';
-import { getVoiceInputExpectation } from '../conversation/checkout-context.js';
+import { getVoiceInputExpectation, type VoiceInputExpectation } from '../conversation/checkout-context.js';
+import { OpenAiRealtimeSttSession } from '../adapters/openai-realtime-stt.js';
+import type { TranscriptionResult } from '../adapters/types.js';
 
 interface PlatformEvent {
   event?: 'connected' | 'start' | 'media' | 'stop' | 'dtmf' | 'mark';
@@ -42,6 +44,8 @@ interface PlatformEvent {
 interface QueuedUtterance {
   pcm: Buffer;
   inputEpoch: number;
+  realtimeTranscript?: Promise<TranscriptionResult | null>;
+  transcriptionStartedAt?: number;
 }
 
 interface SpeechSendResult {
@@ -101,6 +105,16 @@ async function yieldForSocket(socket: WebSocket): Promise<void> {
 }
 
 export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promise<void> {
+  // Process-local cache for deterministic prompts only. Dynamic replies can
+  // contain customer/order data and are never retained here. On a warm
+  // instance, greetings and silence/repeat prompts avoid a vendor round trip.
+  const fixedPromptTexts = new Set<string>([
+    'Hello! Welcome to Earthora Farms. How can I help?',
+    ...(['en', 'hi', 'gu'] as const).flatMap((language) => [
+      repeatPrompt(language), silenceCheckPrompt(language),
+    ]),
+  ]);
+  const fixedSpeechCache = new Map<string, Buffer>();
   // Some Smartflo resolver checks send an empty form-encoded POST even though
   // the response itself is JSON. Accept that harmless content type so the
   // request reaches the resolver instead of Fastify rejecting it with 415.
@@ -143,6 +157,8 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
     let turnSequence = 0;
     let droppedTranscripts = 0;
     let currentLanguage: SupportedLanguage = 'en';
+    let currentExpectedInput: VoiceInputExpectation;
+    let realtimeStt: OpenAiRealtimeSttSession | null = null;
     const queuedUtterances: QueuedUtterance[] = [];
     const startEventTimer = setTimeout(() => {
       if (startPromise || closing) return;
@@ -223,6 +239,8 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
       clearTimeout(startEventTimer);
       clearCallerSilenceTimer();
       closing = true;
+      realtimeStt?.close();
+      realtimeStt = null;
       queuedUtterances.length = 0;
       playbackEpoch++;
       playbackActive = false;
@@ -273,13 +291,25 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
       const speechEpoch = ++playbackEpoch;
       const tts = buildTtsForLanguage(language);
       let firstAudioAt: number | null = null;
+      let frameCarry = Buffer.alloc(0);
+      const cacheKey = `${language}\u0000${text}`;
+      const cachedAudio = fixedSpeechCache.get(cacheKey);
 
-      const sendMulaw = async (mulaw: Buffer): Promise<boolean> => {
-        for (let offset = 0; offset < mulaw.length; offset += OUTBOUND_CHUNK_BYTES) {
+      const sendMulaw = async (mulaw: Buffer, flush = false): Promise<boolean> => {
+        const combined = frameCarry.length ? Buffer.concat([frameCarry, mulaw]) : mulaw;
+        const completeBytes = flush
+          ? combined.length
+          : combined.length - (combined.length % 160);
+        let sendable = combined.subarray(0, completeBytes);
+        frameCarry = Buffer.from(combined.subarray(completeBytes));
+        if (flush && sendable.length % 160 !== 0) {
+          sendable = Buffer.concat([sendable, Buffer.alloc(160 - (sendable.length % 160), 0xff)]);
+        }
+
+        for (let offset = 0; offset < sendable.length; offset += OUTBOUND_CHUNK_BYTES) {
           if (closing || speechEpoch !== playbackEpoch || socket.readyState !== socket.OPEN) return false;
-          let frame = mulaw.subarray(offset, Math.min(offset + OUTBOUND_CHUNK_BYTES, mulaw.length));
-          const remainder = frame.length % 160;
-          if (remainder !== 0) frame = Buffer.concat([frame, Buffer.alloc(160 - remainder, 0xff)]);
+          const frame = sendable.subarray(offset, Math.min(offset + OUTBOUND_CHUNK_BYTES, sendable.length));
+          playbackActive = true;
           if (!sendJson(socket, {
             event: 'media',
             streamSid,
@@ -291,30 +321,60 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
         return true;
       };
 
-      // Keep the entire short phone reply in one synthesis request. Sentence
-      // stitching caused independently generated chunks to sound like a
-      // voice/accent change in the middle of one answer.
-      const synthesis = tts.synthesizeMulaw8k
-        ? tts.synthesizeMulaw8k(text, language)
-        : tts.synthesize(text, language).then(wavToMulaw8k);
-      const audio = await withTimeout(synthesis, config.VOICE_TTS_TIMEOUT_MS, 'TTS reply');
-      if (closing || speechEpoch !== playbackEpoch || socket.readyState !== socket.OPEN) {
-        return { sent: false, partial: false, firstAudioAt, sentenceCount: 1 };
-      }
-      playbackActive = true;
-      if (!(await sendMulaw(audio))) {
-        return { sent: false, partial: false, firstAudioAt, sentenceCount: 1 };
+      let partial = false;
+      if (cachedAudio) {
+        if (!(await sendMulaw(cachedAudio, true))) return unsent(1);
+      } else if (tts.synthesizeMulaw8kStream) {
+        const cacheChunks: Buffer[] = [];
+        const shouldCache = fixedPromptTexts.has(text);
+        const consumeStream = async (): Promise<boolean> => {
+          for await (const chunk of tts.synthesizeMulaw8kStream!(text, language)) {
+            if (shouldCache) cacheChunks.push(Buffer.from(chunk));
+            if (!(await sendMulaw(chunk))) return false;
+          }
+          const sent = await sendMulaw(Buffer.alloc(0), true);
+          if (sent && shouldCache) fixedSpeechCache.set(cacheKey, Buffer.concat(cacheChunks));
+          return sent;
+        };
+        try {
+          if (!(await withTimeout(consumeStream(), config.VOICE_TTS_TIMEOUT_MS, 'streaming TTS reply'))) {
+            return { sent: false, partial: firstAudioAt !== null, firstAudioAt, sentenceCount: 1 };
+          }
+        } catch (err) {
+          if (firstAudioAt === null) throw err;
+          // Do not switch voices after audio has already reached the caller.
+          // Invalidate the producer so a late network chunk cannot leak into
+          // the next reply, then let Smartflo finish the audio already queued.
+          playbackEpoch++;
+          partial = true;
+          req.log.warn({
+            err,
+            ...logContext(),
+            event: 'smartflo_tts_stream_partial',
+            markName,
+          }, 'Streaming TTS ended after partial audio');
+        }
+      } else {
+        // Compatibility fallback for adapters without a streaming transport.
+        const synthesis = tts.synthesizeMulaw8k
+          ? tts.synthesizeMulaw8k(text, language)
+          : tts.synthesize(text, language).then(wavToMulaw8k);
+        const audio = await withTimeout(synthesis, config.VOICE_TTS_TIMEOUT_MS, 'TTS reply');
+        if (!(await sendMulaw(audio, true))) {
+          return { sent: false, partial: false, firstAudioAt, sentenceCount: 1 };
+        }
+        if (fixedPromptTexts.has(text)) fixedSpeechCache.set(cacheKey, Buffer.from(audio));
       }
 
-      if (closing || speechEpoch !== playbackEpoch || firstAudioAt === null) {
-        return { sent: false, partial: false, firstAudioAt, sentenceCount: 1 };
+      if (closing || (!partial && speechEpoch !== playbackEpoch) || firstAudioAt === null) {
+        return { sent: false, partial, firstAudioAt, sentenceCount: 1 };
       }
       activeMarkName = markName;
       activeMarkSentAt = Date.now();
       sendJson(socket, { event: 'mark', streamSid, mark: { name: markName } });
       return {
         sent: true,
-        partial: false,
+        partial,
         firstAudioAt,
         sentenceCount: 1,
       };
@@ -388,19 +448,26 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
         if (!session) throw new Error('Smartflo call session disappeared');
         currentLanguage = session.conversationState.currentLanguage;
 
-        const sttStartedAt = Date.now();
+        const sttStartedAt = utterance.transcriptionStartedAt ?? Date.now();
         const expectedInput = getVoiceInputExpectation(session.conversationState);
-        const transcription = await withTimeout(
-          buildStt().transcribe(pcm16ToWav(utterance.pcm), {
-            format: 'wav',
-            languageHint: session.conversationState.languageEstablished || expectedInput
-              ? session.conversationState.currentLanguage
-              : undefined,
-            expectedInput,
-          }),
-          config.VOICE_STT_TIMEOUT_MS,
-          'STT'
-        );
+        currentExpectedInput = expectedInput;
+        let transcription = utterance.realtimeTranscript
+          ? await withTimeout(utterance.realtimeTranscript, config.VOICE_STT_TIMEOUT_MS, 'realtime STT')
+          : null;
+        const usedRealtimeStt = transcription !== null;
+        if (!transcription) {
+          transcription = await withTimeout(
+            buildStt().transcribe(pcm16ToWav(utterance.pcm), {
+              format: 'wav',
+              languageHint: session.conversationState.languageEstablished || expectedInput
+                ? session.conversationState.currentLanguage
+                : undefined,
+              expectedInput,
+            }),
+            config.VOICE_STT_TIMEOUT_MS,
+            'STT'
+          );
+        }
         sttMs = Date.now() - sttStartedAt;
         const decision = normalizeVoiceTranscript(transcription);
 
@@ -413,6 +480,7 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
           detectedLanguageCode: transcription.detectedLanguageCode ?? null,
           languageProbability: transcription.languageProbability ?? null,
           sttRetried: transcription.wasRetried ?? false,
+          streamingStt: usedRealtimeStt,
           transcriptAccepted: decision.accepted,
           transcript: decision.accepted ? redactTranscript(decision.text) : undefined,
           dropReason: decision.accepted ? undefined : decision.reason,
@@ -449,6 +517,12 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
         );
         llmMs = Date.now() - llmStartedAt;
         currentLanguage = result.language;
+        currentExpectedInput = result.expectedInput;
+        realtimeStt?.updateContext(
+          result.language,
+          result.languageEstablished ?? true,
+          result.expectedInput,
+        );
 
         if (closing || utterance.inputEpoch !== inputEpoch) {
           const totalMs = Date.now() - totalStartedAt;
@@ -550,7 +624,13 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
 
     function enqueueUtterance(pcm: Buffer): void {
       if (endAfterPlaybackMarkName) return;
-      const utterance = { pcm, inputEpoch };
+      const transcriptionStartedAt = Date.now();
+      const realtimeTranscript = realtimeStt?.commit();
+      const utterance: QueuedUtterance = {
+        pcm,
+        inputEpoch,
+        ...(realtimeTranscript ? { realtimeTranscript, transcriptionStartedAt } : {}),
+      };
       if (!busy) {
         void runUtterance(utterance);
         return;
@@ -564,6 +644,9 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
 
     const accumulator = new AudioAccumulator(enqueueUtterance, {
       speechRmsThreshold: config.VOICE_SPEECH_RMS_THRESHOLD,
+      silenceMsToFlush: () => currentExpectedInput === 'phone' || currentExpectedInput === 'postalCode'
+        ? config.VOICE_NUMERIC_END_OF_SPEECH_MS
+        : config.VOICE_END_OF_SPEECH_MS,
       // A caller may say a brief "hello" while the greeting TTS request is
       // still pending. Nothing is audible yet, so accept and queue that short
       // utterance; keep the longer speech requirement only while audio is
@@ -652,6 +735,15 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
 
           busy = true;
           initializing = true;
+          if (config.VOICE_REALTIME_STT_ENABLED && !realtimeStt) {
+            realtimeStt = new OpenAiRealtimeSttSession((state, detail) => {
+              if (state === 'ready') {
+                req.log.info({ ...logContext(), event: 'smartflo_realtime_stt_ready' }, 'Realtime STT connected');
+              } else if (state === 'failed') {
+                req.log.warn({ ...logContext(), event: 'smartflo_realtime_stt_fallback', detail }, 'Realtime STT unavailable; using batch fallback');
+              }
+            });
+          }
           startPromise = (async () => {
             const existing = callSid ? await getCallSessionByProviderCallId(callSid) : null;
             const session = existing ?? await createCallSession(
@@ -661,6 +753,12 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
             );
             sessionId = session.id;
             currentLanguage = session.conversationState.currentLanguage;
+            currentExpectedInput = getVoiceInputExpectation(session.conversationState);
+            realtimeStt?.updateContext(
+              currentLanguage,
+              session.conversationState.languageEstablished === true,
+              currentExpectedInput,
+            );
             if (existing) await updateCallSessionStatus(session.id, 'started');
 
             req.log.info({
@@ -709,6 +807,7 @@ export async function registerSmartfloStreamRoutes(app: FastifyInstance): Promis
             if (mulaw.length > MAX_INBOUND_MEDIA_BYTES) socket.close(1009, 'media payload too large');
             return;
           }
+          realtimeStt?.appendMulaw8k(mulaw);
           accumulator.push(mulaw8kToPcm16k(mulaw));
           return;
         }

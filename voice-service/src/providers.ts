@@ -174,5 +174,22 @@ export function buildTtsForLanguage(language: SupportedLanguage): TtsAdapter {
         return getOpenAiTts().synthesizeMulaw8k(text, replyLanguage);
       }
     },
+    async *synthesizeMulaw8kStream(text, replyLanguage) {
+      let emittedAudio = false;
+      try {
+        for await (const chunk of getSarvamTts().synthesizeMulaw8kStream(text, replyLanguage)) {
+          emittedAudio = true;
+          yield chunk;
+        }
+      } catch (err) {
+        // Falling back before any bytes are played is seamless. Once audio
+        // has started, changing vendors would audibly change the speaker in
+        // the same sentence, so surface the partial-stream failure instead.
+        if (emittedAudio) throw err;
+        // eslint-disable-next-line no-console
+        console.warn(`[providers] Sarvam streaming TTS failed; using OpenAI TTS: ${(err as Error).message}`);
+        yield* getOpenAiTts().synthesizeMulaw8kStream(text, replyLanguage);
+      }
+    },
   };
 }

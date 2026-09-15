@@ -10,6 +10,7 @@ import { wavToMulaw8k } from '../telephony/mulaw.js';
 // Keep the request type derived from the installed SDK so model and codec
 // fields stay aligned with the version used in production.
 type TtsConvertParams = Parameters<SarvamAIClient['textToSpeech']['convert']>[0];
+type TtsStreamParams = Parameters<SarvamAIClient['textToSpeech']['convertStream']>[0];
 
 const SUPPORTED_TO_BCP47: Record<SupportedLanguage, 'en-IN' | 'hi-IN' | 'gu-IN'> = {
   en: 'en-IN',
@@ -71,5 +72,39 @@ export class SarvamTtsAdapter implements TtsAdapter {
     // Phone replies are short. One vendor request keeps speaker, accent, and
     // prosody consistent for the complete reply.
     return wavToMulaw8k(await this.synthesizeOne(clipped, language));
+  }
+
+  async *synthesizeMulaw8kStream(text: string, language: SupportedLanguage): AsyncGenerator<Buffer> {
+    const clipped = text.length > 3500 ? text.slice(0, 3500) : text;
+    const rawRequest = {
+      text: clipped,
+      language_code: SUPPORTED_TO_BCP47[language],
+      model: 'bulbul:v3',
+      speaker: speakerForLanguage(language),
+      pace: PACE_BY_LANGUAGE[language],
+      temperature: config.SARVAM_TTS_TEMPERATURE,
+      enable_preprocessing: true,
+      // Sarvam can stream Smartflo's native codec and sample rate directly:
+      // no full WAV download and no server-side transcode are required.
+      speech_sample_rate: 8000,
+      output_audio_codec: 'mulaw',
+    };
+    const response = await withSarvamClient((client, requestOptions) => client.textToSpeech.convertStream(
+      rawRequest as unknown as TtsStreamParams,
+      requestOptions,
+    ), config.VOICE_TTS_TIMEOUT_MS);
+    const stream = response.stream();
+    if (!stream) throw new Error('Sarvam streaming TTS response had no body.');
+    const reader = stream.getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = Buffer.from(value);
+        if (chunk.length) yield chunk;
+      }
+    } finally {
+      reader.releaseLock();
+    }
   }
 }

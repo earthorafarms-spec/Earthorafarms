@@ -70,3 +70,57 @@ export function wavToMulaw8k(wav: Buffer): Buffer {
   }
   return output;
 }
+
+/**
+ * Incrementally converts raw mono PCM16LE into 8 kHz G.711 mu-law.
+ *
+ * Streaming TTS responses may split a 16-bit sample across network chunks,
+ * so the converter retains both an odd byte and an incomplete resampling
+ * group between push calls. TTS sources currently use 24 kHz, an exact 3:1
+ * ratio; averaging each group provides a small anti-aliasing improvement
+ * over simply dropping two samples.
+ */
+export class Pcm16StreamToMulaw8k {
+  private readonly samplesPerOutput: number;
+  private byteCarry = Buffer.alloc(0);
+  private sampleSum = 0;
+  private sampleCount = 0;
+
+  constructor(sourceSampleRate: number) {
+    if (!Number.isInteger(sourceSampleRate) || sourceSampleRate < 8_000 || sourceSampleRate % 8_000 !== 0) {
+      throw new Error(`PCM stream sample rate must be an integer multiple of 8000 Hz, got ${sourceSampleRate}.`);
+    }
+    this.samplesPerOutput = sourceSampleRate / 8_000;
+  }
+
+  push(chunk: Buffer): Buffer {
+    if (chunk.length === 0) return Buffer.alloc(0);
+    const input = this.byteCarry.length ? Buffer.concat([this.byteCarry, chunk]) : chunk;
+    const completeBytes = input.length - (input.length % 2);
+    this.byteCarry = completeBytes < input.length ? Buffer.from(input.subarray(completeBytes)) : Buffer.alloc(0);
+    const output: number[] = [];
+
+    for (let offset = 0; offset < completeBytes; offset += 2) {
+      this.sampleSum += input.readInt16LE(offset);
+      this.sampleCount++;
+      if (this.sampleCount === this.samplesPerOutput) {
+        output.push(pcm16ToMulawByte(this.sampleSum / this.sampleCount));
+        this.sampleSum = 0;
+        this.sampleCount = 0;
+      }
+    }
+    return Buffer.from(output);
+  }
+
+  flush(): Buffer {
+    // A dangling byte cannot form a PCM16 sample and is intentionally
+    // discarded. Preserve a final partial sample group instead of clipping
+    // the last few milliseconds of speech.
+    this.byteCarry = Buffer.alloc(0);
+    if (this.sampleCount === 0) return Buffer.alloc(0);
+    const value = pcm16ToMulawByte(this.sampleSum / this.sampleCount);
+    this.sampleSum = 0;
+    this.sampleCount = 0;
+    return Buffer.from([value]);
+  }
+}

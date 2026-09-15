@@ -70,6 +70,20 @@ describe('AudioAccumulator', () => {
     expect(flushedBuffer.length).toBeGreaterThan(0);
   });
 
+  it('uses a dynamic longer endpoint while collecting grouped digits', () => {
+    const onReady = vi.fn();
+    let numeric = true;
+    const acc = new AudioAccumulator(onReady, {
+      silenceMsToFlush: () => numeric ? 1_100 : 700,
+    });
+    for (let i = 0; i < 5; i++) acc.push(chunk(100, true));
+    for (let i = 0; i < 7; i++) acc.push(chunk(100, false));
+    expect(onReady).not.toHaveBeenCalled();
+    numeric = false;
+    acc.push(chunk(1, false));
+    expect(onReady).toHaveBeenCalledTimes(1);
+  });
+
   it('accepts quiet telephone speech above the production gate', () => {
     const onReady = vi.fn();
     const acc = new AudioAccumulator(onReady);

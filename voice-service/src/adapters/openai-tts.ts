@@ -3,7 +3,7 @@ import { config } from '../config.js';
 import type { TtsAdapter } from './types.js';
 import type { SupportedLanguage } from '../conversation/language.js';
 import { splitSentences, stitchWavs } from './wav-utils.js';
-import { wavToMulaw8k } from '../telephony/mulaw.js';
+import { Pcm16StreamToMulaw8k, wavToMulaw8k } from '../telephony/mulaw.js';
 
 // OpenAI TTS is the primary English voice and the availability fallback for
 // Hindi/Gujarati when Sarvam cannot synthesize. See buildTtsForLanguage().
@@ -58,5 +58,34 @@ export class OpenAiTtsAdapter implements TtsAdapter {
   async synthesizeMulaw8k(text: string, language: SupportedLanguage): Promise<Buffer> {
     const clipped = text.length > 4096 ? text.slice(0, 4096) : text;
     return wavToMulaw8k(await synthesizeOne(clipped, language));
+  }
+
+  async *synthesizeMulaw8kStream(text: string, language: SupportedLanguage): AsyncGenerator<Buffer> {
+    const clipped = text.length > 4096 ? text.slice(0, 4096) : text;
+    const response = await getClient().audio.speech.create({
+      model: TTS_MODEL,
+      voice: TTS_VOICE,
+      input: clipped,
+      instructions: DELIVERY_INSTRUCTIONS[language],
+      response_format: 'pcm',
+    });
+    if (!response.body) throw new Error('OpenAI TTS streaming response had no body.');
+
+    // OpenAI raw PCM speech output is mono PCM16LE at 24 kHz. Convert each
+    // arriving network chunk immediately rather than waiting for a WAV file.
+    const converter = new Pcm16StreamToMulaw8k(24_000);
+    const reader = response.body.getReader();
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const mulaw = converter.push(Buffer.from(value));
+        if (mulaw.length) yield mulaw;
+      }
+      const tail = converter.flush();
+      if (tail.length) yield tail;
+    } finally {
+      reader.releaseLock();
+    }
   }
 }

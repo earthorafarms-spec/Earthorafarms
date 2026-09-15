@@ -1,6 +1,7 @@
 import { processTurn } from '../conversation/controller.js';
 import { getCallSession, updateCallSessionState } from '../repositories/callSessions.repository.js';
 import type { SupportedLanguage } from '../conversation/language.js';
+import { getVoiceInputExpectation, type VoiceInputExpectation } from '../conversation/checkout-context.js';
 
 export interface BrowserMessageResult {
   replyText: string;
@@ -10,6 +11,9 @@ export interface BrowserMessageResult {
   callShouldEnd: boolean;
   /** Deterministic guard interventions applied to this reply. */
   policyViolations: string[];
+  /** Expected input after this turn, used by telephony endpoint detection. */
+  expectedInput: VoiceInputExpectation;
+  languageEstablished: boolean;
 }
 
 // The real, working transport: plain text in, plain text out, over HTTP
@@ -33,5 +37,7 @@ export async function processBrowserMessage(callSessionId: string, text: string)
     language: outcome.state.currentLanguage,
     callShouldEnd: outcome.callShouldEnd === true,
     policyViolations: outcome.policyViolations,
+    expectedInput: getVoiceInputExpectation(outcome.state),
+    languageEstablished: outcome.state.languageEstablished === true,
   };
 }

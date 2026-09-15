@@ -8,6 +8,8 @@ import { pcm16ToMulawByte } from '../../src/telephony/mulaw.js';
 const mocks = vi.hoisted(() => ({
   stt: vi.fn(),
   ttsMulaw: vi.fn(),
+  ttsStream: vi.fn(),
+  streamingTts: false,
   processMessage: vi.fn(),
   createSession: vi.fn(),
   getSession: vi.fn(),
@@ -21,6 +23,7 @@ vi.mock('../../src/providers.js', () => ({
   buildTtsForLanguage: () => ({
     synthesize: vi.fn(),
     synthesizeMulaw8k: mocks.ttsMulaw,
+    ...(mocks.streamingTts ? { synthesizeMulaw8kStream: mocks.ttsStream } : {}),
   }),
 }));
 
@@ -100,6 +103,7 @@ describe('Smartflo WebSocket local integration', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    mocks.streamingTts = false;
     session = createInitialState();
     mocks.ttsMulaw.mockResolvedValue(Buffer.alloc(320, 0xff));
     mocks.createSession.mockResolvedValue({
@@ -411,6 +415,31 @@ describe('Smartflo WebSocket local integration', () => {
       'en',
     );
     expect(mocks.ttsMulaw).toHaveBeenCalledTimes(2); // greeting + complete reply
+  });
+
+  it('starts playback from the first streaming TTS chunk before synthesis completes', async () => {
+    mocks.stt.mockResolvedValue({ text: 'Tell me about Alpha', detectedLanguageCode: 'en-IN', languageProbability: 0.99 });
+    const { ws, collector } = await connect();
+    sendStart(ws);
+    await collector.waitFor((messages) => messages.some((m) => m.event === 'mark'));
+    acknowledgeLatestMark(ws, collector);
+    const mediaBeforeReply = collector.messages.filter((m) => m.event === 'media').length;
+
+    let releaseTail!: () => void;
+    const tailReleased = new Promise<void>((resolve) => { releaseTail = resolve; });
+    mocks.streamingTts = true;
+    mocks.ttsStream.mockImplementation(async function* () {
+      yield Buffer.alloc(160, 0x7f);
+      await tailReleased;
+      yield Buffer.alloc(160, 0xff);
+    });
+    sendUtterance(ws);
+
+    await collector.waitFor((messages) => messages.filter((m) => m.event === 'media').length > mediaBeforeReply);
+    expect(collector.messages.some((m) => m.event === 'mark' && m.mark?.name?.startsWith('reply-1-'))).toBe(false);
+    releaseTail();
+    await collector.waitFor((messages) => messages.some((m) => m.event === 'mark' && m.mark?.name?.startsWith('reply-1-')));
+    expect(mocks.ttsStream).toHaveBeenCalledTimes(1);
   });
 
   it('supersedes a pending answer when the caller continues speaking', async () => {

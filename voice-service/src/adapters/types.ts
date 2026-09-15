@@ -60,6 +60,13 @@ export interface TtsAdapter {
   synthesize(text: string, language: SupportedLanguage): Promise<Buffer>;
   /** Optional zero-transcode telephony output: raw G.711 mu-law, mono, 8 kHz. */
   synthesizeMulaw8k?(text: string, language: SupportedLanguage): Promise<Buffer>;
+  /**
+   * Optional low-latency telephony output. Every yielded chunk is raw G.711
+   * mu-law, mono, 8 kHz. Implementations keep one vendor synthesis request
+   * open for the complete reply, so playback can start early without the
+   * voice/timbre changes caused by synthesizing each sentence separately.
+   */
+  synthesizeMulaw8kStream?(text: string, language: SupportedLanguage): AsyncIterable<Buffer>;
 }
 
 export class AdapterNotConfiguredError extends Error {

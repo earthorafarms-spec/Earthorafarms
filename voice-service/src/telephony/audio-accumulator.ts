@@ -27,10 +27,9 @@ const DEFAULT_SPEECH_RMS_THRESHOLD = 700;
 // background sounds do not cut the agent off.
 const MIN_SPEECH_MS_BEFORE_FLUSH = 450;
 const SHORT_ANSWER_MIN_SPEECH_MS = 80;
-// Give callers enough room for natural pauses and grouped phone/PIN digits.
-// The previous 700ms boundary split longer answers and let the agent begin a
-// reply while the caller was still continuing the same sentence.
-const SILENCE_MS_TO_FLUSH = 1_100;
+// Ordinary turns can complete sooner, while numeric checkout fields retain a
+// longer boundary because callers commonly group digits with pauses.
+const DEFAULT_SILENCE_MS_TO_FLUSH = 850;
 const MAX_UTTERANCE_MS = 20_000; // safety cap — force-flush a runaway utterance rather than buffer forever
 const PRE_ROLL_MS = 200;
 
@@ -58,6 +57,8 @@ export interface AudioAccumulatorOptions {
   onSpeechStart?: () => void;
   /** Called for every above-threshold chunk, including short noise bursts. */
   onSpeechActivity?: () => void;
+  /** Dynamic end-of-speech boundary, sampled as audio arrives. */
+  silenceMsToFlush?: number | (() => number);
 }
 
 /**
@@ -124,7 +125,10 @@ export class AudioAccumulator {
 
     if (this.hasSpeechStarted) this.utteranceMs += chunkMs;
     const enoughSpeech = this.speechMs >= this.minimumSpeechMs;
-    const longEnoughSilence = this.silenceMs >= SILENCE_MS_TO_FLUSH;
+    const configuredSilence = typeof this.options.silenceMsToFlush === 'function'
+      ? this.options.silenceMsToFlush()
+      : this.options.silenceMsToFlush;
+    const longEnoughSilence = this.silenceMs >= (configuredSilence ?? DEFAULT_SILENCE_MS_TO_FLUSH);
     const tooLong = this.utteranceMs >= MAX_UTTERANCE_MS;
 
     // Discard a short cough/click after a full silence window instead of

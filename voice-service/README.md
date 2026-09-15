@@ -132,12 +132,14 @@ already-open WhatsApp conversation.
 The service also exposes a telephony-compatible bidirectional socket at
 `wss://<voice-service-host>/ws/voice/smartflo`. This is the URL to configure as a **Static**
 VOICE Bot endpoint. It implements the documented `connected`, `start`, `media`, `stop`, `mark`,
-and `clear`-compatible flow, converts inbound G.711 mu-law/8 kHz audio to PCM16/16 kHz for Sarvam
-STT, and converts Sarvam TTS WAV output back to 160-byte G.711 mu-law frames.
+and `clear`-compatible flow. With `VOICE_REALTIME_STT_ENABLED=true`, inbound G.711 mu-law/8 kHz
+audio is transcribed over one live OpenAI socket while the caller speaks; any live-session failure
+falls back to the existing utterance WAV transcription. OpenAI and Sarvam TTS both stream G.711
+audio to Smartflo as it is generated, so playback no longer waits for the complete reply audio.
 
 For a **Dynamic** endpoint, configure `GET` or `POST`
 `https://<voice-service-host>/voice/stream/endpoint`. It returns the platform's exact required
-payload (`sucess` is intentionally misspelled in that external contract). Set
+payload. Set
 `VOICE_STREAM_PUBLIC_WSS_URL=wss://<voice-service-host>/ws/voice/smartflo` in production so the
 resolver always advertises the canonical public hostname.
 
@@ -145,6 +147,19 @@ Do not use a LiveKit server's `wss://` signaling URL as the VOICE Bot endpoint: 
 own room/signaling protocol, while the telephony platform sends JSON media events and base64
 G.711 audio. If LiveKit is also self-hosted, keep its URL for LiveKit clients and use this bridge
 URL for the VOICE Bot connection.
+
+### Voice latency controls
+
+Production enables `gpt-live-transcribe` with `VOICE_REALTIME_STT_ENABLED=true`. The local speech
+detector commits ordinary turns after `VOICE_END_OF_SPEECH_MS` (850 ms by default), while phone
+numbers and PIN codes use `VOICE_NUMERIC_END_OF_SPEECH_MS` (1100 ms) so pauses between digit groups
+do not split the answer. Fixed greetings and repeat/silence prompts are cached in process memory
+after their first successful synthesis. Dynamic replies and customer details are never cached.
+
+Every turn still passes the complete model answer through the price/payment/language output policy
+before speech begins. This intentionally prevents an early, unvalidated model fragment from being
+read to a customer. Use the existing `smartflo_turn_complete` fields (`sttMs`, `llmMs`, `ttsMs`,
+`firstAudioMs`, and `totalMs`) to compare production latency before and after rollout.
 
 ## Known, accepted tradeoff: pricing logic duplication
 

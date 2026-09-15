@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ transcribe: vi.fn(), convert: vi.fn(), chat: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  transcribe: vi.fn(), convert: vi.fn(), convertStream: vi.fn(), chat: vi.fn(),
+}));
 
 function silentPcm16Wav(): Buffer {
   const wav = Buffer.alloc(46);
@@ -15,7 +17,10 @@ vi.mock('sarvamai', () => ({
   SarvamAIClient: class {
     constructor(private options: { apiSubscriptionKey: string }) {}
     speechToText = { transcribe: (r: unknown, o: unknown) => mocks.transcribe(this.options.apiSubscriptionKey, r, o) };
-    textToSpeech = { convert: (r: unknown, o: unknown) => mocks.convert(this.options.apiSubscriptionKey, r, o) };
+    textToSpeech = {
+      convert: (r: unknown, o: unknown) => mocks.convert(this.options.apiSubscriptionKey, r, o),
+      convertStream: (r: unknown, o: unknown) => mocks.convertStream(this.options.apiSubscriptionKey, r, o),
+    };
     chat = { completions: (r: unknown, o: unknown) => mocks.chat(this.options.apiSubscriptionKey, r, o) };
   },
 }));
@@ -116,6 +121,32 @@ describe('Sarvam adapter failover', () => {
 
     expect(mocks.convert).toHaveBeenCalledTimes(1);
     expect(mocks.convert.mock.calls[0][1].text).toContain('આ બીજું વાક્ય');
+  });
+
+  it('streams native telephony audio from one synthesis request', async () => {
+    const chunks = [Buffer.alloc(160, 0xff), Buffer.alloc(80, 0x7f)];
+    mocks.convertStream.mockResolvedValue({
+      stream: () => new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const chunk of chunks) controller.enqueue(chunk);
+          controller.close();
+        },
+      }),
+    });
+    const { SarvamTtsAdapter } = await import('../../src/adapters/sarvam-tts.js');
+
+    const received: Buffer[] = [];
+    for await (const chunk of new SarvamTtsAdapter().synthesizeMulaw8kStream('સ્પષ્ટ જવાબ.', 'gu')) {
+      received.push(chunk);
+    }
+
+    expect(Buffer.concat(received)).toEqual(Buffer.concat(chunks));
+    expect(mocks.convertStream).toHaveBeenCalledTimes(1);
+    expect(mocks.convertStream.mock.calls[0][1]).toMatchObject({
+      language_code: 'gu-IN', speaker: 'priya', pace: 1,
+      temperature: 0.45, enable_preprocessing: true,
+      speech_sample_rate: 8000, output_audio_codec: 'mulaw',
+    });
   });
 
   it('preserves chat tool calls after failover', async () => {
