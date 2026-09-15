@@ -14,6 +14,7 @@ export default defineConfig({
       SUPABASE_URL: 'https://example.supabase.co',
       SUPABASE_SERVICE_ROLE_KEY: 'test-service-role-key',
       OPENAI_API_KEY: 'test-openai-key',
+      VOICE_REALTIME_STT_ENABLED: 'false',
       RAZORPAY_KEY_ID: 'rzp_test_dummy',
       RAZORPAY_KEY_SECRET: 'test-razorpay-secret',
       RAZORPAY_WEBHOOK_SECRET: 'test-webhook-secret',

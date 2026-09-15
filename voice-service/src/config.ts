@@ -85,9 +85,9 @@ const optionalSchema = z.object({
   // separate, more tolerant numeric boundary to avoid splitting digit groups.
   VOICE_END_OF_SPEECH_MS: z.coerce.number().int().min(400).max(2_000).default(850),
   VOICE_NUMERIC_END_OF_SPEECH_MS: z.coerce.number().int().min(600).max(3_000).default(1_100),
-  // Opt-in rollout switch: production enables one live transcription socket
-  // per call, while tests/local setups remain on the batch fallback by default.
-  VOICE_REALTIME_STT_ENABLED: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
+  // Enabled by default with a per-turn batch fallback. Set false only for a
+  // controlled rollback if the upstream realtime service is unavailable.
+  VOICE_REALTIME_STT_ENABLED: z.enum(['true', 'false']).default('true').transform((value) => value === 'true'),
   OPENAI_REALTIME_STT_MODEL: z.string().default('gpt-live-transcribe'),
   // Public bot socket advertised to the voice platform's dynamic resolver.
   // Example: wss://voice.example.com/ws/voice/smartflo
