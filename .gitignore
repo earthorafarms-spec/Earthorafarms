@@ -39,3 +39,7 @@ voice-service/dist-whatsapp
 voice-service/node_modules
 
 scrub_secrets.ps1
+
+# workspace env files
+apps/*/.env
+.env.infra

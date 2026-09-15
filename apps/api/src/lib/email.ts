@@ -1,0 +1,58 @@
+import { config } from '../config.js';
+import { sql } from '../db/client.js';
+
+export interface EmailAttachment { filename: string; content: Buffer; contentType?: string }
+export interface SendEmailInput {
+  to: string | string[];
+  subject: string;
+  html: string;
+  text?: string;
+  kind: string;
+  replyTo?: string;
+  attachments?: EmailAttachment[];
+}
+
+export function escapeHtml(s: unknown): string {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+}
+
+/** Sends through Resend; every attempt is recorded in email_log. Returns provider id or null when email is unconfigured. */
+export async function sendEmail(input: SendEmailInput): Promise<string | null> {
+  const to = Array.isArray(input.to) ? input.to : [input.to];
+  if (!config.RESEND_API_KEY) {
+    await sql`INSERT INTO email_log (to_email, subject, kind, status, error) VALUES (${to.join(',')}, ${input.subject}, ${input.kind}, 'skipped', 'RESEND_API_KEY not configured')`;
+    return null;
+  }
+  const body: Record<string, unknown> = {
+    from: config.RESEND_FROM_EMAIL,
+    to,
+    subject: input.subject,
+    html: input.html,
+    text: input.text,
+    reply_to: input.replyTo,
+    attachments: input.attachments?.map((a) => ({ filename: a.filename, content: a.content.toString('base64'), content_type: a.contentType })),
+  };
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${config.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(20_000),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    await sql`INSERT INTO email_log (to_email, subject, kind, status, error) VALUES (${to.join(',')}, ${input.subject}, ${input.kind}, 'failed', ${`${res.status}: ${text.slice(0, 500)}`})`;
+    throw new Error(`Resend ${res.status}: ${text.slice(0, 200)}`);
+  }
+  const id = (() => { try { return (JSON.parse(text) as { id?: string }).id ?? null; } catch { return null; } })();
+  await sql`INSERT INTO email_log (to_email, subject, kind, provider_id, status) VALUES (${to.join(',')}, ${input.subject}, ${input.kind}, ${id}, 'sent')`;
+  return id;
+}
+
+export function brandedEmail(title: string, bodyHtml: string): string {
+  return `<!doctype html><html><body style="margin:0;background:#f6f5f0;font-family:Inter,Segoe UI,Arial,sans-serif;color:#15271d">
+  <div style="max-width:560px;margin:24px auto;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #e3e8e4">
+    <div style="background:#26593b;color:#faf8f3;padding:18px 24px;font-size:18px;font-weight:600">Earthora Farms</div>
+    <div style="padding:24px"><h2 style="margin:0 0 12px;font-size:20px">${escapeHtml(title)}</h2>${bodyHtml}</div>
+    <div style="padding:14px 24px;color:#6b7a70;font-size:12px;border-top:1px solid #eef1ee">Pure. Potent. Alive. — earthorafarms.com</div>
+  </div></body></html>`;
+}
