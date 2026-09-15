@@ -49,6 +49,7 @@ const schema = z.object({
   LOW_STOCK_ALERT_EMAILS: z.string().default(''),
 
   OPENAI_API_KEY: z.string().default(''),
+  OPENAI_MODEL: z.string().default('gpt-4o-mini'),
   GEMINI_API_KEY: z.string().default(''),
   GOOGLE_APPLICATION_CREDENTIALS_JSON: z.string().default(''),
   GOOGLE_CLOUD_PROJECT_ID: z.string().default(''),

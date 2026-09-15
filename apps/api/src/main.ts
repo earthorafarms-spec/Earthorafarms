@@ -5,6 +5,7 @@ import { seedStaffFromLegacy } from './modules/auth/service.js';
 import { startWorker } from './modules/jobs/worker.js';
 import { registerNotificationJobs } from './modules/notifications/handlers.js';
 import { registerPlatformJobs } from './platform/jobs.js';
+import { seedPlatform } from './platform/seed.js';
 import { buildServer } from './server.js';
 
 async function main(): Promise<void> {
@@ -12,6 +13,7 @@ async function main(): Promise<void> {
   const log = app.log;
   await runMigrations((m) => log.info(m));
   await seedStaffFromLegacy((m) => log.info(m));
+  await seedPlatform((m) => log.info(m)).catch((e) => log.error({ err: e }, 'platform seed failed'));
 
   let worker: { stop: () => Promise<void> } | null = null;
   if (config.ROLE === 'worker' || config.ROLE === 'all') {

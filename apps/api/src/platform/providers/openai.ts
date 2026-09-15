@@ -1,0 +1,88 @@
+import OpenAI from 'openai';
+import { config } from '../../config.js';
+import type { ChatMessage, ChatResult, EmbeddingAdapter, LlmAdapter, SttAdapter, ToolCall, ToolDef, TtsAdapter } from './types.js';
+
+let client: OpenAI | null = null;
+function oai(): OpenAI {
+  if (!config.OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
+  client ??= new OpenAI({ apiKey: config.OPENAI_API_KEY, maxRetries: 1, timeout: 45_000 });
+  return client;
+}
+
+function toOpenAiTools(tools?: ToolDef[]) {
+  return tools?.map((t) => ({ type: 'function' as const, function: { name: t.name, description: t.description, parameters: t.parameters as any } }));
+}
+
+export const openaiLlm: LlmAdapter = {
+  name: 'openai',
+  async chat(messages, opts = {}) {
+    const res = await oai().chat.completions.create({
+      model: opts.model || config.OPENAI_MODEL || 'gpt-4o-mini',
+      temperature: opts.temperature ?? 0.3,
+      max_tokens: opts.maxTokens ?? 700,
+      messages: messages as any,
+      tools: toOpenAiTools(opts.tools),
+      tool_choice: opts.tools?.length ? 'auto' : undefined,
+      response_format: opts.json ? { type: 'json_object' } : undefined,
+    });
+    const choice = res.choices[0];
+    const toolCalls: ToolCall[] = (choice.message.tool_calls || []).map((tc: any) => ({ id: tc.id, name: tc.function.name, arguments: safeJson(tc.function.arguments) }));
+    return { text: choice.message.content ?? '', toolCalls, model: res.model, usage: res.usage ? { promptTokens: res.usage.prompt_tokens, completionTokens: res.usage.completion_tokens } : undefined };
+  },
+  async stream(messages, opts) {
+    const stream = await oai().chat.completions.create({
+      model: opts.model || config.OPENAI_MODEL || 'gpt-4o-mini',
+      temperature: opts.temperature ?? 0.3, stream: true, messages: messages as any,
+      tools: toOpenAiTools(opts.tools), tool_choice: opts.tools?.length ? 'auto' : undefined,
+    });
+    let text = ''; const toolAcc: Record<number, { id: string; name: string; args: string }> = {}; let model = '';
+    for await (const chunk of stream) {
+      model = chunk.model;
+      const delta = chunk.choices[0]?.delta;
+      if (delta?.content) { text += delta.content; opts.onDelta(delta.content); }
+      for (const tc of delta?.tool_calls ?? []) {
+        const i = tc.index; toolAcc[i] ??= { id: '', name: '', args: '' };
+        if (tc.id) toolAcc[i].id = tc.id;
+        if (tc.function?.name) toolAcc[i].name += tc.function.name;
+        if (tc.function?.arguments) toolAcc[i].args += tc.function.arguments;
+      }
+    }
+    const toolCalls: ToolCall[] = Object.values(toolAcc).map((t) => ({ id: t.id, name: t.name, arguments: safeJson(t.args) }));
+    return { text, toolCalls, model };
+  },
+};
+
+export const openaiEmbedding: EmbeddingAdapter = {
+  name: 'openai', model: 'text-embedding-3-small', dims: 1536,
+  async embed(texts) {
+    if (!texts.length) return [];
+    const out: number[][] = [];
+    for (let i = 0; i < texts.length; i += 96) {
+      const batch = texts.slice(i, i + 96).map((t) => (t.trim() ? t.slice(0, 8000) : ' '));
+      const res = await oai().embeddings.create({ model: this.model, input: batch });
+      for (const d of res.data.sort((a, b) => a.index - b.index)) out.push(d.embedding as number[]);
+    }
+    return out;
+  },
+};
+
+export const openaiStt: SttAdapter = {
+  name: 'openai',
+  async transcribe(audio, opts) {
+    const file = new File([new Uint8Array(audio)], `audio.${extFor(opts.mime)}`, { type: opts.mime });
+    const res = await oai().audio.transcriptions.create({ file: file as any, model: 'whisper-1', language: opts.languageHint });
+    return { text: res.text };
+  },
+};
+
+export const openaiTts: TtsAdapter = {
+  name: 'openai',
+  async synthesize(text, opts) {
+    const res = await oai().audio.speech.create({ model: 'gpt-4o-mini-tts', voice: (opts.voice as any) || 'shimmer', input: text.slice(0, 4000), response_format: (opts.format === 'wav' ? 'wav' : 'mp3') as any });
+    const buf = Buffer.from(await res.arrayBuffer());
+    return { audio: buf, mime: opts.format === 'wav' ? 'audio/wav' : 'audio/mpeg' };
+  },
+};
+
+function safeJson(s: string): Record<string, unknown> { try { return JSON.parse(s || '{}'); } catch { return {}; } }
+function extFor(mime: string): string { if (mime.includes('webm')) return 'webm'; if (mime.includes('wav')) return 'wav'; if (mime.includes('mp3') || mime.includes('mpeg')) return 'mp3'; if (mime.includes('ogg')) return 'ogg'; return 'webm'; }
