@@ -98,12 +98,12 @@ describe('Sarvam adapter failover', () => {
 
     expect(mocks.convert.mock.calls[0][1]).toMatchObject({
       language_code: 'hi-IN', speaker: 'priya', pace: 1,
-      temperature: 0.1, enable_preprocessing: true,
+      temperature: 0.45, enable_preprocessing: true,
       speech_sample_rate: 24000, output_audio_codec: 'wav',
     });
     expect(mocks.convert.mock.calls[1][1]).toMatchObject({
       language_code: 'gu-IN', speaker: 'priya', pace: 1,
-      temperature: 0.1, enable_preprocessing: true,
+      temperature: 0.45, enable_preprocessing: true,
       speech_sample_rate: 24000, output_audio_codec: 'wav',
     });
   });

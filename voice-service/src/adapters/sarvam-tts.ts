@@ -25,10 +25,6 @@ const PACE_BY_LANGUAGE: Record<SupportedLanguage, number> = {
   gu: 1.0,
 };
 
-// Lower temperature = more stable/consistent output, fewer word-mixing
-// artifacts. Default is 0.6; 0.1 keeps pronunciation and timbre stable.
-const TTS_TEMPERATURE = 0.1;
-
 function speakerForLanguage(language: SupportedLanguage): string {
   if (language === 'hi') return config.SARVAM_TTS_HINDI_SPEAKER;
   if (language === 'gu') return config.SARVAM_TTS_GUJARATI_SPEAKER;
@@ -47,7 +43,7 @@ export class SarvamTtsAdapter implements TtsAdapter {
       model: 'bulbul:v3',
       speaker: speakerForLanguage(language),
       pace: PACE_BY_LANGUAGE[language],
-      temperature: TTS_TEMPERATURE,
+      temperature: config.SARVAM_TTS_TEMPERATURE,
       enable_preprocessing: true,
       speech_sample_rate: 24000,
       output_audio_codec: 'wav',

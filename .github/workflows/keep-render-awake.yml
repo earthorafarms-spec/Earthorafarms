@@ -10,6 +10,7 @@ on:
     paths:
       - ".github/workflows/keep-render-awake.yml"
       - "voice-service/**"
+      - "netlify/functions/keep-render-awake*.mjs"
   workflow_dispatch:
 
 permissions:

@@ -55,6 +55,8 @@ services:
         value: priya
       - key: SARVAM_TTS_GUJARATI_SPEAKER
         value: priya
+      - key: SARVAM_TTS_TEMPERATURE
+        value: "0.45"
       - key: VOICE_STT_TIMEOUT_MS
         value: "15000"
       - key: VOICE_LLM_TIMEOUT_MS

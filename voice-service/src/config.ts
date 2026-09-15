@@ -72,6 +72,11 @@ const optionalSchema = z.object({
   // legacy English/default choice onto Hindi and Gujarati calls.
   SARVAM_TTS_HINDI_SPEAKER: z.string().default('priya'),
   SARVAM_TTS_GUJARATI_SPEAKER: z.string().default('priya'),
+  // Sarvam's default (0.6) is expressive but can introduce pronunciation
+  // artifacts. The old 0.1 setting was very stable but noticeably robotic
+  // on Hindi and Gujarati phone calls. Keep a natural middle ground and make
+  // it adjustable without a code change.
+  SARVAM_TTS_TEMPERATURE: z.coerce.number().min(0.01).max(2).default(0.45),
   VOICE_STT_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(15_000),
   VOICE_LLM_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(30_000),
   VOICE_TTS_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(60_000).default(15_000),
