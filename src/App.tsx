@@ -40,10 +40,8 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
 
 // Public routes — lazy-loaded to keep the initial bundle small
 const OurStory       = lazyWithRetry(() => import('./pages/our-story'));
-const Recipes        = lazyWithRetry(() => import('./pages/recipes'));
 const Contact        = lazyWithRetry(() => import('./pages/contact'));
 const HealthBenefits = lazyWithRetry(() => import('./pages/health-benefits'));
-const Gallery        = lazyWithRetry(() => import('./pages/gallery'));
 const Products       = lazyWithRetry(() => import('./pages/products'));
 const Cart           = lazyWithRetry(() => import('./pages/cart'));
 const Favorites      = lazyWithRetry(() => import('./pages/favorites'));
@@ -112,10 +110,8 @@ export default function App() {
                 <Switch>
                   <Route path="/" component={Home} />
                   <Route path="/our-story" component={OurStory} />
-                  <Route path="/recipes" component={Recipes} />
                   <Route path="/contact" component={Contact} />
                   <Route path="/health-benefits" component={HealthBenefits} />
-                  <Route path="/gallery" component={Gallery} />
                   <Route path="/our-product" component={Products} />
                   <Route path="/cart" component={Cart} />
                   <Route path="/favorites" component={Favorites} />

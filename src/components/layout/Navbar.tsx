@@ -13,8 +13,6 @@ const navLinks = [
   { label: "Home", href: "/" },
   { label: "Our Product", href: "/our-product" },
   { label: "Health Benefits", href: "/health-benefits" },
-  { label: "Gallery", href: "/gallery" },
-  { label: "Recipes", href: "/recipes" },
   { label: "Contact", href: "/contact" },
 ];
 
