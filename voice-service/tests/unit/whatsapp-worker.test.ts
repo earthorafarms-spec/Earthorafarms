@@ -499,4 +499,94 @@ describe('WhatsApp worker inbox event processing & delivery retries', () => {
     expect(mockSendWhatsAppMessage).not.toHaveBeenCalled();
     expect(mockMarkWhatsAppMessageProcessed).toHaveBeenCalledWith('event-multi-sent');
   });
+
+  it('sends educational replyText BEFORE product cards when replyText is distinct from card bodies', async () => {
+    const card2: WhatsAppProductCard = {
+      productId: 'beta-id',
+      imageUrl: 'https://cdn.example.com/beta.png',
+      name: 'Beta Product',
+      body: '*Beta Product*\n₹110 • Low Stock\nNutritious booster.',
+    };
+    const educationalText = '*Benefits of Moringa:*\nMoringa oleifera is a nutrient-dense superfood.';
+    const event: WhatsAppInboxEvent = {
+      id: 'event-benefits-flow',
+      providerMessageId: 'wamid.benefitsflow',
+      phone: '+919876543210',
+      messageText: '2',
+      replyText: null,
+      mediaUrl: null,
+      mediaCaption: null,
+      mediaSentAt: null,
+      attemptCount: 1,
+    };
+
+    const callOrder: string[] = [];
+    mockSendWhatsAppMessage.mockImplementation(async () => {
+      callOrder.push('sendWhatsAppMessage');
+    });
+    mockSendWhatsAppProductCard.mockImplementation(async () => {
+      callOrder.push('sendWhatsAppProductCard');
+    });
+
+    mockProcessTurn.mockResolvedValueOnce({
+      state: createInitialState(),
+      replyText: educationalText,
+      policyViolations: [],
+      productCard: sampleCard,
+      productCards: [sampleCard, card2],
+    });
+
+    await processInboxEvent(event);
+
+    expect(callOrder).toEqual([
+      'sendWhatsAppMessage',
+      'sendWhatsAppProductCard',
+      'sendWhatsAppProductCard',
+    ]);
+    expect(mockSendWhatsAppMessage).toHaveBeenCalledWith('+919876543210', educationalText);
+    expect(mockSendWhatsAppProductCard).toHaveBeenCalledTimes(2);
+    expect(mockMarkWhatsAppMediaSent).toHaveBeenCalledWith('event-benefits-flow');
+    expect(mockMarkWhatsAppMessageProcessed).toHaveBeenCalledWith('event-benefits-flow');
+  });
+
+  it('sends educational replyText BEFORE product cards on retry when replyText is distinct from card bodies and mediaSentAt is null', async () => {
+    const card2: WhatsAppProductCard = {
+      productId: 'beta-id',
+      imageUrl: 'https://cdn.example.com/beta.png',
+      name: 'Beta Product',
+      body: '*Beta Product*\n₹110 • Low Stock\nNutritious booster.',
+    };
+    const educationalText = '*Benefits of Moringa:*\nMoringa oleifera is a nutrient-dense superfood.';
+    const retryEvent: WhatsAppInboxEvent = {
+      id: 'event-benefits-retry',
+      providerMessageId: 'wamid.benefitsretry',
+      phone: '+919876543210',
+      messageText: '2',
+      replyText: educationalText,
+      mediaUrl: sampleCard.imageUrl ?? null,
+      mediaCaption: serializeProductCards([sampleCard, card2]),
+      mediaSentAt: null,
+      attemptCount: 2,
+    };
+
+    const callOrder: string[] = [];
+    mockSendWhatsAppMessage.mockImplementation(async () => {
+      callOrder.push('sendWhatsAppMessage');
+    });
+    mockSendWhatsAppProductCard.mockImplementation(async () => {
+      callOrder.push('sendWhatsAppProductCard');
+    });
+
+    await processInboxEvent(retryEvent);
+
+    expect(callOrder).toEqual([
+      'sendWhatsAppMessage',
+      'sendWhatsAppProductCard',
+      'sendWhatsAppProductCard',
+    ]);
+    expect(mockSendWhatsAppMessage).toHaveBeenCalledWith('+919876543210', educationalText);
+    expect(mockSendWhatsAppProductCard).toHaveBeenCalledTimes(2);
+    expect(mockMarkWhatsAppMediaSent).toHaveBeenCalledWith('event-benefits-retry');
+    expect(mockMarkWhatsAppMessageProcessed).toHaveBeenCalledWith('event-benefits-retry');
+  });
 });

@@ -342,6 +342,56 @@ export function isProductMenuSelection(
   return PRODUCT_MENU_SELECTION_PATTERN.test(trimmed);
 }
 
+export const BENEFITS_MENU_SELECTION_PATTERN =
+  /^(?:2|benefits?|benefit|ફાયદા|फायदे|लाभ|faayde?|fayde?|2[\s.\-–—→>.:)]+(?:benefits?|benefit|ફાયદા|फायदे|लाभ|faayde?|fayde?))$/iu;
+
+export function isBenefitsMenuSelection(
+  userText: string,
+  messages: ConversationMessage[],
+  state?: ConversationState,
+): boolean {
+  if (state?.whatsAppProductContext?.awaitingQuantity || state?.awaitingCartRemoval) {
+    return false;
+  }
+  const previousReply = lastAssistantReply(messages);
+  if (!previousReply || !previousReply.includes(WHATSAPP_MENU) || previousReply.includes(WHATSAPP_POLICIES_MENU)) {
+    return false;
+  }
+  if (state && state.cart.length > 0) {
+    const nextCheckoutPrompt = nextCheckoutQuestion(state);
+    if (nextCheckoutPrompt && previousReply.includes(nextCheckoutPrompt)) {
+      return false;
+    }
+  }
+
+  const trimmed = userText.trim();
+  return BENEFITS_MENU_SELECTION_PATTERN.test(trimmed);
+}
+
+export function buildGeneralMoringaBenefitsReply(
+  language: ConversationState['currentLanguage'],
+): string {
+  if (language === 'hi') {
+    return (
+      '*सहजन / मोरिंगा के फायदे:*\n\n' +
+      'मोरिंगा एक प्राकृतिक सुपरफूड है जो विटामिन A, C, E, आयरन, कैल्शियम और प्लांट प्रोटीन से भरपूर है। ' +
+      'यह प्राकृतिक एंटीऑक्सीडेंट्स से समृद्ध है और दैनिक ऊर्जा, रोग प्रतिरोधक क्षमता (इम्युनिटी), पाचन और हड्डियों के स्वास्थ्य को सहारा देने में पारंपरिक रूप से सहायक माना जाता है।'
+    );
+  }
+  if (language === 'gu') {
+    return (
+      '*સરગવો / મોરિંગા ના ફાયદા:*\n\n' +
+      'મોરિંગા (સરગવો) વિટામિન A, C, E, આયર્ન, કેલ્શિયમ અને વનસ્પતિ પ્રોટીનથી ભરપૂર એક કુદરતી સુપરફૂડ છે. ' +
+      'તે કુદરતી એન્ટીઑકિસડન્ટથી સમૃદ્ધ છે અને કુદરતી રોગપ્રતિકારક શક્તિ, દૈનિક ઉર્જા, પાચન અને હાડકાંના સ્વાસ્થ્યને ટેકો આપવા માટે આયુર્વેદમાં પરંપરાગત રીતે મૂલ્યવાન માનવામાં આવે છે.'
+    );
+  }
+  return (
+    '*Benefits of Moringa:*\n\n' +
+    'Moringa oleifera is a nutrient-dense superfood naturally packed with vitamins A, C, and E, iron, calcium, and plant protein. ' +
+    'Rich in natural antioxidants, it has been traditionally valued in Ayurvedic wellness to help support daily energy, natural immunity, healthy digestion, and bone health.'
+  );
+}
+
 function isPoliciesMenuSelection(userText: string, messages: ConversationMessage[], state: ConversationState): boolean {
   if (state.whatsAppProductContext?.awaitingQuantity || state.awaitingCartRemoval) return false;
   const previousReply = lastAssistantReply(messages);
@@ -678,6 +728,55 @@ export function buildProductKnowledgeCard(
   };
 }
 
+export async function buildCatalogProductCards(
+  productCatalog: unknown,
+  toolContext: ToolContext,
+  state: ConversationState,
+): Promise<{ uniqueProducts: LiveCatalogProduct[]; cards: WhatsAppProductCard[] }> {
+  const currentProducts = liveCatalogProducts(productCatalog);
+  const seenIds = new Set<string>();
+  const uniqueProducts: LiveCatalogProduct[] = [];
+  for (const p of currentProducts) {
+    const key = (p.id || p.name || '').trim();
+    if (key && !seenIds.has(key)) {
+      seenIds.add(key);
+      uniqueProducts.push(p);
+    }
+  }
+
+  const detailsTool = toolsByName.get_product_details;
+  const cards: WhatsAppProductCard[] = [];
+  if (detailsTool) {
+    const detailedProducts = await Promise.all(
+      uniqueProducts.map(async (prod) => {
+        try {
+          const details = await detailsTool.handler({ productId: prod.id }, toolContext);
+          return { prod, details: details as LiveProductDetails };
+        } catch {
+          return { prod, details: null };
+        }
+      })
+    );
+
+    for (const item of detailedProducts) {
+      if (item.details) {
+        state.currentTurnFacts.push({
+          toolName: 'get_product_details',
+          resultJson: JSON.stringify(item.details),
+        });
+        if (item.details.found) {
+          const card = buildWhatsAppProductCard(item.details, item.prod.name);
+          if (card) {
+            cards.push(card);
+          }
+        }
+      }
+    }
+  }
+
+  return { uniqueProducts, cards };
+}
+
 function productActionFailure(language: ConversationState['currentLanguage']): string {
   if (language === 'hi') return 'माफ़ कीजिए, यह प्रोडक्ट अभी उपलब्ध नहीं है। कृपया प्रोडक्ट मेन्यू फिर से खोलें।';
   if (language === 'gu') return 'માફ કરશો, આ પ્રોડક્ટ હાલમાં ઉપલબ્ધ નથી. કૃપા કરીને પ્રોડક્ટ મેનુ ફરી ખોલો.';
@@ -1012,6 +1111,7 @@ export async function processWhatsAppTurn(
 
   const productAction = parseProductActionInput(userText) ?? parseProductActionFromText(userText, state.whatsAppProductContext?.productId);
   const productMenuSelected = isProductMenuSelection(userText, state.messages, state);
+  const benefitsMenuSelected = isBenefitsMenuSelection(userText, state.messages, state);
   const selectedProductNumber = numberedProductSelectionNumber(userText, state.messages);
 
   state.turnCount += 1;
@@ -1443,8 +1543,8 @@ export async function processWhatsAppTurn(
     state.currentTurnFacts.push({ toolName: 'list_products', resultJson });
     preloadedToolResults.set('list_products:{"query":null}', productCatalog);
 
-    // Multi-product cards on main menu '1' selection
-    if (productMenuSelected) {
+    // Multi-product cards on main menu '1' (Products) or '2' (Benefits) selection
+    if (productMenuSelected || benefitsMenuSelected) {
       const currentProducts = liveCatalogProducts(productCatalog);
       if (
         !productCatalog ||
@@ -1457,45 +1557,7 @@ export async function processWhatsAppTurn(
         return { state, replyText: fallbackText, policyViolations: [], outboundActions };
       }
 
-      const seenIds = new Set<string>();
-      const uniqueProducts: LiveCatalogProduct[] = [];
-      for (const p of currentProducts) {
-        const key = (p.id || p.name || '').trim();
-        if (key && !seenIds.has(key)) {
-          seenIds.add(key);
-          uniqueProducts.push(p);
-        }
-      }
-
-      const detailsTool = toolsByName.get_product_details;
-      const cards: WhatsAppProductCard[] = [];
-      if (detailsTool) {
-        const detailedProducts = await Promise.all(
-          uniqueProducts.map(async (prod) => {
-            try {
-              const details = await detailsTool.handler({ productId: prod.id }, toolContext);
-              return { prod, details: details as LiveProductDetails };
-            } catch {
-              return { prod, details: null };
-            }
-          })
-        );
-
-        for (const item of detailedProducts) {
-          if (item.details) {
-            state.currentTurnFacts.push({
-              toolName: 'get_product_details',
-              resultJson: JSON.stringify(item.details),
-            });
-            if (item.details.found) {
-              const card = buildWhatsAppProductCard(item.details, item.prod.name);
-              if (card) {
-                cards.push(card);
-              }
-            }
-          }
-        }
-      }
+      const { uniqueProducts, cards } = await buildCatalogProductCards(productCatalog, toolContext, state);
 
       if (cards.length === 0) {
         const fallbackText = buildNumberedCatalogReply(productCatalog, state.currentLanguage);
@@ -1513,7 +1575,10 @@ export async function processWhatsAppTurn(
         delete state.whatsAppProductContext;
       }
 
-      const replyText = cards.map((c) => c.body).join('\n\n');
+      const replyText = benefitsMenuSelected
+        ? buildGeneralMoringaBenefitsReply(state.currentLanguage)
+        : cards.map((c) => c.body).join('\n\n');
+
       state.messages.push({ role: 'assistant', content: replyText });
       return {
         state,

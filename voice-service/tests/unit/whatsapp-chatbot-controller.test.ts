@@ -14,6 +14,9 @@ import {
   nextWhatsAppCheckoutQuestion,
   isProductMenuSelection,
   PRODUCT_MENU_SELECTION_PATTERN,
+  isBenefitsMenuSelection,
+  BENEFITS_MENU_SELECTION_PATTERN,
+  buildGeneralMoringaBenefitsReply,
 } from '../../../whatsapp-chatbot/conversation/controller.js';
 import { createInitialState } from '../../src/conversation/state.js';
 import { WHATSAPP_MENU, WHATSAPP_POLICIES_MENU } from '../../../whatsapp-chatbot/prompt.js';
@@ -281,6 +284,194 @@ describe('WhatsApp-owned Conversation Controller (whatsapp-chatbot/conversation/
       // Fails on non-matching inputs
       expect(isProductMenuSelection('2', menuMessages)).toBe(false);
       expect(isProductMenuSelection('Tell me about your products', menuMessages)).toBe(false);
+    });
+  });
+
+  describe('Top-Level Benefits Menu UX (Option 2)', () => {
+    it('returns educational Moringa text and all product cards when 2 is selected from main menu', async () => {
+      const state = createInitialState();
+      state.messages.push({ role: 'assistant', content: buildWhatsAppMenuReply('en') });
+      const outcome = await processWhatsAppTurn('session-1', state, '2');
+
+      expect(outcome.productCards).toBeDefined();
+      expect(outcome.productCards!.length).toBe(2);
+      expect(outcome.productCards![0].name).toBe('Alpha Herb');
+      expect(outcome.productCards![1].name).toBe('Beta Tonic');
+      expect(outcome.replyText).toContain('*Benefits of Moringa:*');
+      expect(outcome.replyText).toContain('nutrient-dense superfood');
+      expect(outcome.replyText).toContain('vitamins A, C, and E');
+      expect(outcome.replyText).toContain('immunity');
+      expect(outcome.replyText).not.toContain('Would you like to hear about it or order it?');
+    });
+
+    it.each([
+      ['Benefits'],
+      ['benefits'],
+      ['2 -> Benefits'],
+      ['2. Benefits'],
+      ['2 → Benefits'],
+      ['2 - Benefits'],
+      ['2.Benefits'],
+      ['2 Benefits'],
+      ['फायदे'],
+      ['लाभ'],
+      ['ફાયદા'],
+    ])('returns educational text and all product cards for alias %s', async (alias) => {
+      const state = createInitialState();
+      state.messages.push({ role: 'assistant', content: buildWhatsAppMenuReply('en') });
+      const outcome = await processWhatsAppTurn('session-1', state, alias);
+
+      expect(outcome.productCards).toBeDefined();
+      expect(outcome.productCards!.length).toBe(2);
+      expect(outcome.productCards![0].name).toBe('Alpha Herb');
+      expect(outcome.productCards![1].name).toBe('Beta Tonic');
+      expect(outcome.replyText).not.toContain('Would you like to hear about it or order it?');
+    });
+
+    it('returns localized educational Moringa text in Hindi and Gujarati', async () => {
+      const hiState = createInitialState();
+      hiState.currentLanguage = 'hi';
+      hiState.messages.push({ role: 'assistant', content: buildWhatsAppMenuReply('hi') });
+      const hiOutcome = await processWhatsAppTurn('session-1', hiState, '2');
+      expect(hiOutcome.productCards).toBeDefined();
+      expect(hiOutcome.replyText).toContain('*सहजन / मोरिंगा के फायदे:*');
+      expect(hiOutcome.replyText).toContain('विटामिन A, C, E');
+
+      const guState = createInitialState();
+      guState.currentLanguage = 'gu';
+      guState.messages.push({ role: 'assistant', content: buildWhatsAppMenuReply('gu') });
+      const guOutcome = await processWhatsAppTurn('session-1', guState, '2');
+      expect(guOutcome.productCards).toBeDefined();
+      expect(guOutcome.replyText).toContain('*સરગવો / મોરિંગા ના ફાયદા:*');
+      expect(guOutcome.replyText).toContain('વિટામિન A, C, E');
+    });
+
+    it('does NOT trigger top-level Benefits flow outside main menu context', () => {
+      const state = createInitialState();
+      // No menu in message history
+      expect(isBenefitsMenuSelection('2', state.messages, state)).toBe(false);
+      expect(isBenefitsMenuSelection('Benefits', state.messages, state)).toBe(false);
+      expect(isBenefitsMenuSelection('2 -> Benefits', state.messages, state)).toBe(false);
+    });
+
+    it('does NOT hijack quantity input when awaiting quantity (e.g. user orders 2 units)', async () => {
+      const state = createInitialState();
+      state.whatsAppProductContext = {
+        productId: 'alpha-id',
+        productName: 'Alpha Herb',
+        awaitingQuantity: true,
+      };
+
+      const outcome = await processWhatsAppTurn('session-1', state, '2');
+      expect(outcome.productCards).toBeUndefined();
+      expect(outcome.state.cart.length).toBe(1);
+      expect(outcome.state.cart[0].productId).toBe('alpha-id');
+      expect(outcome.state.cart[0].quantity).toBe(2);
+      expect(outcome.replyText).toContain('Alpha Herb has been added to your cart.');
+    });
+
+    it('does NOT hijack cart removal when awaiting cart removal (e.g. user removes item 2)', async () => {
+      const state = createInitialState();
+      state.cart = [
+        { productId: 'alpha-id', productName: 'Alpha Herb', unitPrice: 250, quantity: 1 },
+        { productId: 'beta-id', productName: 'Beta Tonic', unitPrice: 400, quantity: 1 },
+      ];
+      state.awaitingCartRemoval = true;
+
+      const outcome = await processWhatsAppTurn('session-1', state, '2');
+      expect(outcome.productCards).toBeUndefined();
+      expect(outcome.state.cart.length).toBe(1);
+      expect(outcome.state.cart[0].productId).toBe('alpha-id');
+    });
+
+    it('does NOT treat "2" as Benefits in policies menu (displays Return Policy)', async () => {
+      const state = createInitialState();
+      state.messages.push({ role: 'assistant', content: WHATSAPP_POLICIES_MENU });
+      const outcome = await processWhatsAppTurn('session-1', state, '2');
+      expect(outcome.productCards).toBeUndefined();
+      expect(outcome.replyText).toContain('Returns & Order Cancellation');
+    });
+
+    it('does NOT hijack checkout answers containing "2" (e.g. address with Flat 2B)', async () => {
+      const state = createInitialState();
+      state.cart = [{ productId: 'alpha-id', productName: 'Alpha Herb', unitPrice: 250, quantity: 1 }];
+      state.checkoutFields = { name: 'Adarsh Patel', email: 'adarsh@example.com', phone: '9876543210' };
+      state.messages.push({ role: 'assistant', content: 'What is your street address?' });
+
+      const outcome = await processWhatsAppTurn('session-1', state, 'Flat 2, Block B');
+      expect(outcome.productCards).toBeUndefined();
+      expect(outcome.state.checkoutFields.address).toBe('Flat 2, Block B');
+      expect(outcome.replyText).toContain('Please tell me your city and state.');
+    });
+
+    it('preserves typed "Benefits" behavior when product context is active', async () => {
+      const state = createInitialState();
+      state.whatsAppProductContext = {
+        productId: 'alpha-id',
+        productName: 'Alpha Herb',
+        awaitingQuantity: false,
+      };
+
+      const outcome = await processWhatsAppTurn('session-1', state, 'Benefits');
+      expect(outcome.productCards).toBeUndefined();
+      expect(outcome.productCard).toBeDefined();
+      expect(outcome.productCard?.productId).toBe('alpha-id');
+      expect(outcome.replyText).toContain('*Benefits of Alpha Herb:*');
+      expect(outcome.replyText).toContain('Boosts natural immunity and stamina.');
+      expect(outcome.productCard?.buttons).toEqual([
+        { id: productButtonId('add_to_cart', 'alpha-id'), title: 'Add to Cart' },
+        { id: cartButtonId('main_menu'), title: 'Menu' },
+      ]);
+    });
+
+    it('preserves Products flow ("1") unchanged without educational Moringa header', async () => {
+      const state = createInitialState();
+      state.messages.push({ role: 'assistant', content: buildWhatsAppMenuReply('en') });
+      const outcome = await processWhatsAppTurn('session-1', state, '1');
+
+      expect(outcome.productCards).toBeDefined();
+      expect(outcome.productCards!.length).toBe(2);
+      expect(outcome.replyText).not.toContain('*Benefits of Moringa:*');
+      // For Products flow, replyText is joined card bodies
+      expect(outcome.replyText).toContain('Alpha Herb');
+      expect(outcome.replyText).toContain('Beta Tonic');
+    });
+
+    it('validates isBenefitsMenuSelection helper directly across various formats and safety guards', () => {
+      const menuMessages = [{ role: 'assistant' as const, content: buildWhatsAppMenuReply('en') }];
+      const noMenuMessages = [{ role: 'assistant' as const, content: 'Hello! How can I help you?' }];
+      const policiesMessages = [{ role: 'assistant' as const, content: WHATSAPP_POLICIES_MENU }];
+
+      expect(isBenefitsMenuSelection('2', menuMessages)).toBe(true);
+      expect(isBenefitsMenuSelection('Benefits', menuMessages)).toBe(true);
+      expect(isBenefitsMenuSelection('benefits', menuMessages)).toBe(true);
+      expect(isBenefitsMenuSelection('2 -> Benefits', menuMessages)).toBe(true);
+      expect(isBenefitsMenuSelection('2. Benefits', menuMessages)).toBe(true);
+      expect(isBenefitsMenuSelection('2 → Benefits', menuMessages)).toBe(true);
+      expect(isBenefitsMenuSelection('ફાયદા', menuMessages)).toBe(true);
+      expect(isBenefitsMenuSelection('फायदे', menuMessages)).toBe(true);
+      expect(isBenefitsMenuSelection('लाभ', menuMessages)).toBe(true);
+
+      // Fails outside menu
+      expect(isBenefitsMenuSelection('2', noMenuMessages)).toBe(false);
+      expect(isBenefitsMenuSelection('Benefits', noMenuMessages)).toBe(false);
+
+      // Fails in policies menu
+      expect(isBenefitsMenuSelection('2', policiesMessages)).toBe(false);
+
+      // Fails when awaiting quantity
+      const stateQty = createInitialState();
+      stateQty.whatsAppProductContext = { productId: 'p1', productName: 'P1', awaitingQuantity: true };
+      expect(isBenefitsMenuSelection('2', menuMessages, stateQty)).toBe(false);
+
+      // Fails when awaiting cart removal
+      const stateRemoval = createInitialState();
+      stateRemoval.awaitingCartRemoval = true;
+      expect(isBenefitsMenuSelection('2', menuMessages, stateRemoval)).toBe(false);
+
+      // Fails on non-matching inputs
+      expect(isBenefitsMenuSelection('1', menuMessages)).toBe(false);
+      expect(isBenefitsMenuSelection('3', menuMessages)).toBe(false);
     });
   });
 

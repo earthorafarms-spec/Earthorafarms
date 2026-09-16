@@ -31,15 +31,15 @@ export async function processInboxEvent(event: WhatsAppInboxEvent): Promise<void
   if (event.replyText) {
     const productCards = parsePersistedProductCards(event.mediaCaption);
     if (productCards && productCards.length > 0) {
+      const allBodies = productCards.map((c) => c.body).join('\n\n');
+      if (event.replyText !== allBodies && !productCards.some((c) => c.body === event.replyText)) {
+        await sendWhatsAppMessage(event.phone, event.replyText);
+      }
       if (!event.mediaSentAt) {
         for (const card of productCards) {
           await sendWhatsAppProductCard(event.phone, card);
         }
         await markWhatsAppMediaSent(event.id);
-      }
-      const allBodies = productCards.map((c) => c.body).join('\n\n');
-      if (event.replyText !== allBodies && !productCards.some((c) => c.body === event.replyText)) {
-        await sendWhatsAppMessage(event.phone, event.replyText);
       }
     } else {
       if (event.mediaUrl && !event.mediaSentAt) {
@@ -87,6 +87,18 @@ export async function processInboxEvent(event: WhatsAppInboxEvent): Promise<void
     ? outcome.productCards
     : (outcome.productCard ? [outcome.productCard] : null);
 
+  const allBodies = cards ? cards.map((c) => c.body).join('\n\n') : null;
+  const isCardBody = Boolean(
+    cards && (
+      outcome.replyText === allBodies ||
+      cards.some((c) => c.body === outcome.replyText)
+    )
+  );
+
+  if (!isCardBody) {
+    await sendWhatsAppMessage(event.phone, outcome.replyText);
+  }
+
   if (cards && cards.length > 0) {
     for (const card of cards) {
       await sendWhatsAppProductCard(event.phone, card);
@@ -97,15 +109,6 @@ export async function processInboxEvent(event: WhatsAppInboxEvent): Promise<void
     await markWhatsAppMediaSent(event.id);
   }
 
-  const allBodies = cards ? cards.map((c) => c.body).join('\n\n') : null;
-  const isCardBody = cards && (
-    outcome.replyText === allBodies ||
-    cards.some((c) => c.body === outcome.replyText)
-  );
-
-  if (!isCardBody) {
-    await sendWhatsAppMessage(event.phone, outcome.replyText);
-  }
   await markWhatsAppMessageProcessed(event.id);
 }
 
