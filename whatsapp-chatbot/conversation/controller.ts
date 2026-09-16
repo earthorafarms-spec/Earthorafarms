@@ -24,7 +24,7 @@ import {
   isIndiaAffirmative,
   isNonIndiaOrNegative,
   normalizeWhatsAppPhone,
-} from '../../voice-service/src/tools/checkout.js';
+} from '../checkout-validation.js';
 import { spokenProductNameMatches } from '../../voice-service/src/tools/products.js';
 import { getAllApprovedProductKnowledge } from '../../voice-service/src/tools/knowledge.js';
 import type { OutboundAction, ToolContext } from '../../voice-service/src/tools/types.js';
