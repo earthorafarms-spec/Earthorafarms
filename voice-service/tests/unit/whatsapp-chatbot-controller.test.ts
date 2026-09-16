@@ -12,6 +12,8 @@ import {
   buildWhatsAppMenuReply,
   shouldShowWhatsAppMenu,
   nextWhatsAppCheckoutQuestion,
+  isProductMenuSelection,
+  PRODUCT_MENU_SELECTION_PATTERN,
 } from '../../../whatsapp-chatbot/conversation/controller.js';
 import { createInitialState } from '../../src/conversation/state.js';
 import { WHATSAPP_MENU, WHATSAPP_POLICIES_MENU } from '../../../whatsapp-chatbot/prompt.js';
@@ -162,6 +164,123 @@ describe('WhatsApp-owned Conversation Controller (whatsapp-chatbot/conversation/
       expect(outcome.productCards![0].name).toBe('Alpha Herb');
       expect(outcome.productCards![0].imageUrl).toBe('https://example.com/alpha.png');
       expect(outcome.productCards![1].name).toBe('Beta Tonic');
+    });
+
+    it.each([
+      ['Products'],
+      ['products'],
+      ['Product'],
+      ['1 -> Products'],
+      ['1. Products'],
+      ['1 → Products'],
+      ['1 - Products'],
+      ['1.Products'],
+      ['પ્રોડક્ટ્સ'],
+      ['પ્રોડક્ટ'],
+      ['प्रोडक्ट्स'],
+      ['प्रोडक्ट'],
+      ['उत्पाद'],
+      ['1 -> પ્રોડક્ટ'],
+      ['1. उत्पाद'],
+    ])('returns product cards for menu alias %s when main menu was shown', async (alias) => {
+      const state = createInitialState();
+      state.messages.push({ role: 'assistant', content: buildWhatsAppMenuReply('en') });
+      const outcome = await processWhatsAppTurn('session-1', state, alias);
+      expect(outcome.productCards).toBeDefined();
+      expect(outcome.productCards!.length).toBe(2);
+      expect(outcome.productCards![0].name).toBe('Alpha Herb');
+      expect(outcome.productCards![0].imageUrl).toBe('https://example.com/alpha.png');
+      expect(outcome.productCards![1].name).toBe('Beta Tonic');
+      expect(outcome.replyText).not.toContain('Would you like to hear about it or order it?');
+    });
+
+    it('does NOT return product cards for "Products" outside main menu context', async () => {
+      const state = createInitialState();
+      // No preceding menu in history
+      const outcome = await processWhatsAppTurn('session-1', state, 'Products');
+      expect(outcome.productCards).toBeUndefined();
+    });
+
+    it('does NOT hijack quantity input when awaiting quantity', async () => {
+      const state = createInitialState();
+      state.whatsAppProductContext = {
+        productId: 'alpha-id',
+        productName: 'Alpha Herb',
+        awaitingQuantity: true,
+      };
+
+      // User sends "1" for quantity (1 unit)
+      const outcomeOne = await processWhatsAppTurn('session-1', state, '1');
+      expect(outcomeOne.productCards).toBeUndefined();
+      expect(outcomeOne.state.cart.length).toBe(1);
+      expect(outcomeOne.state.cart[0].productId).toBe('alpha-id');
+      expect(outcomeOne.state.cart[0].quantity).toBe(1);
+
+      // Reset awaitingQuantity state
+      const state2 = createInitialState();
+      state2.whatsAppProductContext = {
+        productId: 'alpha-id',
+        productName: 'Alpha Herb',
+        awaitingQuantity: true,
+      };
+      const outcomeProducts = await processWhatsAppTurn('session-1', state2, 'Products');
+      expect(outcomeProducts.productCards).toBeUndefined();
+    });
+
+    it('does NOT hijack cart removal when awaiting cart removal', async () => {
+      const state = createInitialState();
+      state.cart = [
+        { productId: 'alpha-id', productName: 'Alpha Herb', unitPrice: 250, quantity: 1 },
+        { productId: 'beta-id', productName: 'Beta Tonic', unitPrice: 400, quantity: 1 },
+      ];
+      state.awaitingCartRemoval = true;
+
+      // User sends "1" to remove item 1
+      const outcome = await processWhatsAppTurn('session-1', state, '1');
+      expect(outcome.productCards).toBeUndefined();
+      expect(outcome.state.cart.length).toBe(1);
+      expect(outcome.state.cart[0].productId).toBe('beta-id');
+    });
+
+    it('does NOT treat "1" as product selection in policies menu', async () => {
+      const state = createInitialState();
+      state.messages.push({ role: 'assistant', content: WHATSAPP_POLICIES_MENU });
+      const outcome = await processWhatsAppTurn('session-1', state, '1');
+      expect(outcome.productCards).toBeUndefined();
+      expect(outcome.replyText).toContain('Shipping & Delivery');
+    });
+
+    it('validates isProductMenuSelection helper directly across various formats and states', () => {
+      const menuMessages = [{ role: 'assistant' as const, content: buildWhatsAppMenuReply('en') }];
+      const noMenuMessages = [{ role: 'assistant' as const, content: 'Hello! How can I help you?' }];
+
+      expect(isProductMenuSelection('1', menuMessages)).toBe(true);
+      expect(isProductMenuSelection('Products', menuMessages)).toBe(true);
+      expect(isProductMenuSelection('products', menuMessages)).toBe(true);
+      expect(isProductMenuSelection('Product', menuMessages)).toBe(true);
+      expect(isProductMenuSelection('1 -> Products', menuMessages)).toBe(true);
+      expect(isProductMenuSelection('1. Products', menuMessages)).toBe(true);
+      expect(isProductMenuSelection('1 → Products', menuMessages)).toBe(true);
+
+      // Fails when menu was not shown
+      expect(isProductMenuSelection('1', noMenuMessages)).toBe(false);
+      expect(isProductMenuSelection('Products', noMenuMessages)).toBe(false);
+
+      // Fails when awaiting quantity
+      const stateQuantity = createInitialState();
+      stateQuantity.whatsAppProductContext = { productId: 'p1', productName: 'P1', awaitingQuantity: true };
+      expect(isProductMenuSelection('1', menuMessages, stateQuantity)).toBe(false);
+      expect(isProductMenuSelection('Products', menuMessages, stateQuantity)).toBe(false);
+
+      // Fails when awaiting cart removal
+      const stateRemoval = createInitialState();
+      stateRemoval.awaitingCartRemoval = true;
+      expect(isProductMenuSelection('1', menuMessages, stateRemoval)).toBe(false);
+      expect(isProductMenuSelection('Products', menuMessages, stateRemoval)).toBe(false);
+
+      // Fails on non-matching inputs
+      expect(isProductMenuSelection('2', menuMessages)).toBe(false);
+      expect(isProductMenuSelection('Tell me about your products', menuMessages)).toBe(false);
     });
   });
 

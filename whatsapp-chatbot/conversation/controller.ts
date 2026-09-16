@@ -316,8 +316,30 @@ export function buildWhatsAppMenuReply(language: ConversationState['currentLangu
   return `${WHATSAPP_MENU_GREETINGS[language]}\n\n${WHATSAPP_MENU}`;
 }
 
-function isProductMenuSelection(userText: string, messages: ConversationMessage[]): boolean {
-  return userText.trim() === '1' && (lastAssistantReply(messages)?.includes(WHATSAPP_MENU) ?? false);
+export const PRODUCT_MENU_SELECTION_PATTERN =
+  /^(?:1|products?|પ્રોડક્ટ્સ?|પ્રોડક્ટ|प्रोडक्ट्स?|प्रोडक्ट|उत्पाद|1[\s.\-–—→>.:)]+(?:products?|પ્રોડક્ટ્સ?|પ્રોડક્ટ|प्रोडक्ट्स?|प्रोडक्ट|उत्पाद))$/iu;
+
+export function isProductMenuSelection(
+  userText: string,
+  messages: ConversationMessage[],
+  state?: ConversationState,
+): boolean {
+  if (state?.whatsAppProductContext?.awaitingQuantity || state?.awaitingCartRemoval) {
+    return false;
+  }
+  const previousReply = lastAssistantReply(messages);
+  if (!previousReply || !previousReply.includes(WHATSAPP_MENU) || previousReply.includes(WHATSAPP_POLICIES_MENU)) {
+    return false;
+  }
+  if (state && state.cart.length > 0) {
+    const nextCheckoutPrompt = nextCheckoutQuestion(state);
+    if (nextCheckoutPrompt && previousReply.includes(nextCheckoutPrompt)) {
+      return false;
+    }
+  }
+
+  const trimmed = userText.trim();
+  return PRODUCT_MENU_SELECTION_PATTERN.test(trimmed);
 }
 
 function isPoliciesMenuSelection(userText: string, messages: ConversationMessage[], state: ConversationState): boolean {
@@ -989,7 +1011,7 @@ export async function processWhatsAppTurn(
   let productCard: TurnOutcome['productCard'];
 
   const productAction = parseProductActionInput(userText) ?? parseProductActionFromText(userText, state.whatsAppProductContext?.productId);
-  const productMenuSelected = isProductMenuSelection(userText, state.messages);
+  const productMenuSelected = isProductMenuSelection(userText, state.messages, state);
   const selectedProductNumber = numberedProductSelectionNumber(userText, state.messages);
 
   state.turnCount += 1;
