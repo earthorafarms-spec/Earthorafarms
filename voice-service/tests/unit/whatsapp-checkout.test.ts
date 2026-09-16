@@ -171,6 +171,37 @@ describe('WhatsApp checkout template payload', () => {
     expect(parsePersistedProductCard(serializeProductCard(viewCartCard))).toEqual(viewCartCard);
   });
 
+  it('builds native interactive card for Benefits/Dosage with Add to Cart and Menu buttons and preserves across serialization', () => {
+    const knowledgeCard = {
+      productId: 'alpha-id',
+      name: 'Alpha',
+      body: '*Benefits of Alpha:*\nAdmin-approved immunity support information.',
+      buttons: [
+        { id: 'earthora_product:add_to_cart:alpha-id', title: 'Add to Cart' },
+        { id: 'earthora_cart:main_menu', title: 'Menu' },
+      ],
+    };
+    const interactive = {
+      type: 'button',
+      body: { text: knowledgeCard.body },
+      action: {
+        buttons: [
+          { type: 'reply', reply: { id: 'earthora_product:add_to_cart:alpha-id', title: 'Add to Cart' } },
+          { type: 'reply', reply: { id: 'earthora_cart:main_menu', title: 'Menu' } },
+        ],
+      },
+    };
+
+    expect(buildTataOmniProductCardPayload('919876543210', knowledgeCard)).toEqual({
+      to: '+919876543210', type: 'interactive', source: 'external', interactive,
+    });
+    expect(buildMetaProductCardPayload('+919876543210', knowledgeCard)).toEqual({
+      messaging_product: 'whatsapp', recipient_type: 'individual', to: '919876543210',
+      type: 'interactive', interactive,
+    });
+    expect(parsePersistedProductCard(serializeProductCard(knowledgeCard))).toEqual(knowledgeCard);
+  });
+
   it('serializes and parses multiple product cards and falls back correctly', () => {
     const cards = [
       {

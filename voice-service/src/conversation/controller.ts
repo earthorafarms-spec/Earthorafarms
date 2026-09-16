@@ -28,6 +28,8 @@ import {
   parseProductActionInput,
   parseProductActionFromText,
   parseCartActionInput,
+  productButtonId,
+  cartButtonId,
   type WhatsAppProductCard,
   type WhatsAppButton,
   type WhatsAppCartAction,
@@ -375,29 +377,41 @@ export function buildProductKnowledgeReply(
 
   if (!entry || typeof entry.content !== 'string' || !entry.content.trim()) {
     if (language === 'hi') {
-      return `${product.name} के लिए ${action === 'benefits' ? 'फायदे' : 'खुराक'} की स्वीकृत जानकारी अभी उपलब्ध नहीं है।\n\nमेन्यू पर वापस जाने के लिए Menu लिखें।`;
+      return `${product.name} के लिए ${action === 'benefits' ? 'फायदे' : 'खुराक'} की स्वीकृत जानकारी अभी उपलब्ध नहीं है।`;
     }
     if (language === 'gu') {
-      return `${product.name} માટે ${action === 'benefits' ? 'ફાયદા' : 'માત્રા'} વિશેની માન્ય માહિતી હાલમાં ઉપલબ્ધ નથી.\n\nમેનુ પર પાછા જવા માટે Menu લખો.`;
+      return `${product.name} માટે ${action === 'benefits' ? 'ફાયદા' : 'માત્રા'} વિશેની માન્ય માહિતી હાલમાં ઉપલબ્ધ નથી.`;
     }
-    return `Approved ${action === 'benefits' ? 'benefits' : 'dosage'} information is not available for ${product.name}.\n\nTo return to the main menu, type Menu.`;
+    return `Approved ${action === 'benefits' ? 'benefits' : 'dosage'} information is not available for ${product.name}.`;
   }
 
   const content = entry.content.trim();
 
   if (language === 'hi') {
     const heading = action === 'benefits' ? `*${product.name} के फायदे:*` : `*${product.name} की खुराक और उपयोग:*`;
-    const actionsHint = 'कार्ट में जोड़ने के लिए "Add to Cart" लिखें।\nमेन्यू पर वापस जाने के लिए Menu लिखें।';
-    return `${heading}\n${content}\n\n${actionsHint}`;
+    return `${heading}\n${content}`;
   }
   if (language === 'gu') {
     const heading = action === 'benefits' ? `*${product.name} ના ફાયદા:*` : `*${product.name} ની માત્રા અને ઉપયોગ:*`;
-    const actionsHint = 'કાર્ટમાં ઉમેરવા માટે "Add to Cart" લખો.\nમેનુ પર પાછા જવા માટે Menu લખો.';
-    return `${heading}\n${content}\n\n${actionsHint}`;
+    return `${heading}\n${content}`;
   }
   const heading = action === 'benefits' ? `*Benefits of ${product.name}:*` : `*Dosage & Directions for ${product.name}:*`;
-  const actionsHint = 'To add to cart, type "Add to Cart".\nTo return to the main menu, type Menu.';
-  return `${heading}\n${content}\n\n${actionsHint}`;
+  return `${heading}\n${content}`;
+}
+
+export function buildProductKnowledgeCard(
+  product: LiveCatalogProduct,
+  replyText: string,
+): WhatsAppProductCard {
+  return {
+    productId: product.id,
+    name: product.name,
+    body: replyText,
+    buttons: [
+      { id: productButtonId('add_to_cart', product.id), title: 'Add to Cart' },
+      { id: cartButtonId('main_menu'), title: 'Menu' },
+    ],
+  };
 }
 
 interface LiveProductDetails {
@@ -1857,10 +1871,12 @@ export async function processTurn(
                 productAction.action,
                 state.currentLanguage,
               );
+              const card = buildProductKnowledgeCard(actionProduct, replyText);
               state.messages.push({ role: 'assistant', content: replyText });
               return {
                 state,
                 replyText,
+                productCard: card,
                 policyViolations: [],
                 outboundActions,
               };

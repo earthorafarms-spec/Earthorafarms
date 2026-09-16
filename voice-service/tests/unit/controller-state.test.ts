@@ -467,6 +467,17 @@ describe('processTurn persisted state', () => {
 
     expect(outcome.replyText).toContain('Admin-approved immunity support information.');
     expect(outcome.replyText).toContain('*Benefits of Alpha:*');
+    expect(outcome.replyText).not.toContain('type "Add to Cart"');
+    expect(outcome.replyText).not.toContain('type Menu');
+    expect(outcome.productCard).toEqual({
+      productId: 'alpha-id',
+      name: 'Alpha',
+      body: outcome.replyText,
+      buttons: [
+        { id: productButtonId('add_to_cart', 'alpha-id'), title: 'Add to Cart' },
+        { id: cartButtonId('main_menu'), title: 'Menu' },
+      ],
+    });
     expect(knowledgeRepositoryMocks.getAllApprovedKnowledge).toHaveBeenCalledWith('alpha-id');
     expect(outcome.state.currentTurnFacts.map((fact) => fact.toolName)).toEqual([
       'list_products', 'get_product_details', 'get_product_knowledge',
@@ -489,6 +500,17 @@ describe('processTurn persisted state', () => {
 
     expect(outcome.replyText).toContain('Take one capsule daily after food.');
     expect(outcome.replyText).toContain('*Dosage & Directions for Alpha:*');
+    expect(outcome.replyText).not.toContain('type "Add to Cart"');
+    expect(outcome.replyText).not.toContain('type Menu');
+    expect(outcome.productCard).toEqual({
+      productId: 'alpha-id',
+      name: 'Alpha',
+      body: outcome.replyText,
+      buttons: [
+        { id: productButtonId('add_to_cart', 'alpha-id'), title: 'Add to Cart' },
+        { id: cartButtonId('main_menu'), title: 'Menu' },
+      ],
+    });
     expect(knowledgeRepositoryMocks.getAllApprovedKnowledge).toHaveBeenCalledWith('alpha-id');
     expect(chatMock).not.toHaveBeenCalled();
     expect(outcome.state.messages.some((m) => m.role === 'user')).toBe(false);
@@ -1519,6 +1541,227 @@ describe('processTurn persisted state', () => {
 
         expect(chatMock).toHaveBeenCalledTimes(1);
         expect(outcome.replyText).toBe('In voice, Alpha provides natural wellness.');
+      });
+
+      it('presents Benefits response with two native buttons (Add to Cart, Menu) and no instructional text', async () => {
+        const state = createInitialState();
+        const input = productActionInputFromButtonId(productButtonId('benefits', 'alpha-id'))!;
+        const outcome = await processTurn('controller-test', state, input, 'text');
+
+        expect(outcome.replyText).toContain('*Benefits of Alpha:*');
+        expect(outcome.replyText).not.toContain('type "Add to Cart"');
+        expect(outcome.replyText).not.toContain('type Menu');
+        expect(outcome.replyText).not.toContain('To add to cart');
+        expect(outcome.replyText).not.toContain('To return to the main menu');
+        expect(outcome.productCard).toEqual({
+          productId: 'alpha-id',
+          name: 'Alpha',
+          body: outcome.replyText,
+          buttons: [
+            { id: productButtonId('add_to_cart', 'alpha-id'), title: 'Add to Cart' },
+            { id: cartButtonId('main_menu'), title: 'Menu' },
+          ],
+        });
+      });
+
+      it('presents Dosage response with two native buttons (Add to Cart, Menu) and no instructional text', async () => {
+        knowledgeRepositoryMocks.getAllApprovedKnowledge.mockResolvedValueOnce([
+          {
+            id: 'knowledge-dosage-1',
+            productId: 'alpha-id',
+            category: 'dosage',
+            question: null,
+            content: 'Take 1-2 tablets daily with warm water.',
+            version: 1,
+            locale: 'en-IN',
+          },
+        ]);
+        const state = createInitialState();
+        const input = productActionInputFromButtonId(productButtonId('dosage', 'alpha-id'))!;
+        const outcome = await processTurn('controller-test', state, input, 'text');
+
+        expect(outcome.replyText).toContain('*Dosage & Directions for Alpha:*');
+        expect(outcome.replyText).not.toContain('type "Add to Cart"');
+        expect(outcome.replyText).not.toContain('type Menu');
+        expect(outcome.replyText).not.toContain('To add to cart');
+        expect(outcome.replyText).not.toContain('To return to the main menu');
+        expect(outcome.productCard).toEqual({
+          productId: 'alpha-id',
+          name: 'Alpha',
+          body: outcome.replyText,
+          buttons: [
+            { id: productButtonId('add_to_cart', 'alpha-id'), title: 'Add to Cart' },
+            { id: cartButtonId('main_menu'), title: 'Menu' },
+          ],
+        });
+      });
+
+      it('omits instructional text in Hindi and Gujarati Benefits and Dosage responses and includes buttons', async () => {
+        // Hindi benefits
+        const hiState = createInitialState();
+        hiState.currentLanguage = 'hi';
+        const hiTurn = await processTurn(
+          'controller-test',
+          hiState,
+          productActionInputFromButtonId(productButtonId('benefits', 'alpha-id'))!,
+          'text'
+        );
+        expect(hiTurn.replyText).toContain('*Alpha के फायदे:*');
+        expect(hiTurn.replyText).not.toContain('लिखें');
+        expect(hiTurn.replyText).not.toContain('Add to Cart');
+        expect(hiTurn.replyText).not.toContain('Menu');
+        expect(hiTurn.productCard?.buttons).toEqual([
+          { id: productButtonId('add_to_cart', 'alpha-id'), title: 'Add to Cart' },
+          { id: cartButtonId('main_menu'), title: 'Menu' },
+        ]);
+
+        // Gujarati dosage
+        knowledgeRepositoryMocks.getAllApprovedKnowledge.mockResolvedValueOnce([
+          {
+            id: 'knowledge-dosage-gu',
+            productId: 'alpha-id',
+            category: 'dosage',
+            question: null,
+            content: 'દરરોજ ૧ ગોળી લો.',
+            version: 1,
+            locale: 'gu-IN',
+          },
+        ]);
+        const guState = createInitialState();
+        guState.currentLanguage = 'gu';
+        const guTurn = await processTurn(
+          'controller-test',
+          guState,
+          productActionInputFromButtonId(productButtonId('dosage', 'alpha-id'))!,
+          'text'
+        );
+        expect(guTurn.replyText).toContain('*Alpha ની માત્રા અને ઉપયોગ:*');
+        expect(guTurn.replyText).not.toContain('લખો');
+        expect(guTurn.replyText).not.toContain('Add to Cart');
+        expect(guTurn.replyText).not.toContain('Menu');
+        expect(guTurn.productCard?.buttons).toEqual([
+          { id: productButtonId('add_to_cart', 'alpha-id'), title: 'Add to Cart' },
+          { id: cartButtonId('main_menu'), title: 'Menu' },
+        ]);
+      });
+
+      it('allows clicking native Add to Cart button or typing "Add to Cart" after Benefits and Dosage', async () => {
+        // Clicking native button after Benefits
+        const state1 = createInitialState();
+        const benefitsTurn = await processTurn(
+          'controller-test',
+          state1,
+          productActionInputFromButtonId(productButtonId('benefits', 'alpha-id'))!,
+          'text'
+        );
+        const addBtn = benefitsTurn.productCard?.buttons?.find((b) => b.title === 'Add to Cart');
+        expect(addBtn).toBeDefined();
+
+        const addTurnFromBtn = await processTurn(
+          'controller-test',
+          benefitsTurn.state,
+          productActionInputFromButtonId(addBtn!.id)!,
+          'text'
+        );
+        expect(chatMock).not.toHaveBeenCalled();
+        expect(addTurnFromBtn.replyText).toContain('How many units of Alpha would you like to add to your cart?');
+        expect(addTurnFromBtn.state.whatsAppProductContext?.awaitingQuantity).toBe(true);
+
+        // Typing lowercase "add to cart" after Dosage
+        knowledgeRepositoryMocks.getAllApprovedKnowledge.mockResolvedValueOnce([
+          {
+            id: 'knowledge-dosage-1',
+            productId: 'alpha-id',
+            category: 'dosage',
+            question: null,
+            content: 'Take 1 tablet daily.',
+            version: 1,
+            locale: 'en-IN',
+          },
+        ]);
+        const state2 = createInitialState();
+        const dosageTurn = await processTurn(
+          'controller-test',
+          state2,
+          productActionInputFromButtonId(productButtonId('dosage', 'alpha-id'))!,
+          'text'
+        );
+        const addTurnFromText = await processTurn(
+          'controller-test',
+          dosageTurn.state,
+          'add to cart',
+          'text'
+        );
+        expect(chatMock).not.toHaveBeenCalled();
+        expect(addTurnFromText.replyText).toContain('How many units of Alpha would you like to add to your cart?');
+        expect(addTurnFromText.state.whatsAppProductContext?.awaitingQuantity).toBe(true);
+      });
+
+      it('allows typing "Menu" or clicking native "Menu" button after Benefits and Dosage', async () => {
+        // Typing "Menu" after Benefits
+        const state1 = createInitialState();
+        const turn1 = await processTurn(
+          'controller-test',
+          state1,
+          productActionInputFromButtonId(productButtonId('benefits', 'alpha-id'))!,
+          'text'
+        );
+        const menuTurn1 = await processTurn('controller-test', turn1.state, 'Menu', 'text');
+        expect(menuTurn1.replyText).toContain(WHATSAPP_MENU);
+        expect(menuTurn1.state.whatsAppProductContext).toBeUndefined();
+
+        // Clicking native "Menu" button after Dosage
+        knowledgeRepositoryMocks.getAllApprovedKnowledge.mockResolvedValueOnce([
+          {
+            id: 'knowledge-dosage-1',
+            productId: 'alpha-id',
+            category: 'dosage',
+            question: null,
+            content: 'Take 1 tablet.',
+            version: 1,
+            locale: 'en-IN',
+          },
+        ]);
+        const state2 = createInitialState();
+        const turn2 = await processTurn(
+          'controller-test',
+          state2,
+          productActionInputFromButtonId(productButtonId('dosage', 'alpha-id'))!,
+          'text'
+        );
+        const menuBtn = turn2.productCard?.buttons?.find((b) => b.title === 'Menu');
+        expect(menuBtn).toBeDefined();
+
+        const menuTurn2 = await processTurn(
+          'controller-test',
+          turn2.state,
+          productActionInputFromButtonId(menuBtn!.id)!,
+          'text'
+        );
+        expect(menuTurn2.replyText).toContain(WHATSAPP_MENU);
+        expect(menuTurn2.state.whatsAppProductContext).toBeUndefined();
+      });
+
+      it('omits instructional text when approved knowledge is unavailable and attaches native buttons', async () => {
+        knowledgeRepositoryMocks.getAllApprovedKnowledge.mockResolvedValueOnce([]);
+
+        const state = createInitialState();
+        const input = productActionInputFromButtonId(productButtonId('benefits', 'alpha-id'))!;
+
+        const outcome = await processTurn('controller-test', state, input, 'text');
+
+        expect(chatMock).not.toHaveBeenCalled();
+        expect(outcome.replyText).toBe('Approved benefits information is not available for Alpha.');
+        expect(outcome.replyText).not.toContain('type Menu');
+        expect(outcome.productCard).toEqual({
+          productId: 'alpha-id',
+          name: 'Alpha',
+          body: outcome.replyText,
+          buttons: [
+            { id: productButtonId('add_to_cart', 'alpha-id'), title: 'Add to Cart' },
+            { id: cartButtonId('main_menu'), title: 'Menu' },
+          ],
+        });
       });
     });
   });
