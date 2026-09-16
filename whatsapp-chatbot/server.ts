@@ -1,8 +1,8 @@
-import { buildApp } from '../voice-service/src/server.js';
+import { buildWhatsAppApp } from './app.js';
 import { config } from '../voice-service/src/config.js';
 
 async function main(): Promise<void> {
-  const app = await buildApp({ mode: 'whatsapp' });
+  const app = await buildWhatsAppApp();
   await app.listen({ port: config.PORT, host: '0.0.0.0' });
 }
 

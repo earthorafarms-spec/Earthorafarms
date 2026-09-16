@@ -1,4 +1,8 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Dummy-but-schema-valid env vars so importing modules (which eagerly
 // construct a Supabase client / validate config at import time — see
@@ -6,6 +10,13 @@ import { defineConfig } from 'vitest/config';
 // network call. Integration/e2e tests override these with real values via
 // RUN_INTEGRATION_TESTS=1 + a real .env (see tests/integration/*, tests/e2e/*).
 export default defineConfig({
+  resolve: {
+    alias: {
+      fastify: path.resolve(__dirname, 'node_modules/fastify'),
+      '@fastify/cors': path.resolve(__dirname, 'node_modules/@fastify/cors'),
+      '@fastify/rate-limit': path.resolve(__dirname, 'node_modules/@fastify/rate-limit'),
+    },
+  },
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
