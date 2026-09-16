@@ -9,23 +9,11 @@ declare const Deno: {
 
 // @ts-ignore
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const ALLOWED_ORIGINS = [
-  "https://earthorafarms.com",
-  "https://www.earthorafarms.com",
-  "http://localhost:5173",
-  "http://localhost:3000",
-];
+// @ts-ignore
+import { buildCorsHeaders as sharedBuildCorsHeaders } from "../_shared/cors.ts";
 
 function buildCorsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("origin") || "";
-  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
-  return {
-    "Access-Control-Allow-Origin": allowed,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-admin-password",
-    "Vary": "Origin",
-  };
+  return sharedBuildCorsHeaders(req, "x-admin-password");
 }
 
 function getClientIp(req: Request): string {

@@ -1,28 +1,11 @@
 // @ts-nocheck
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildCorsHeaders } from "../_shared/cors.ts";
 
 declare const Deno: {
   env: { get(key: string): string | undefined };
   serve(handler: (req: Request) => Response | Promise<Response>): void;
 };
-
-const ALLOWED_ORIGINS = [
-  "https://earthorafarms.com",
-  "https://www.earthorafarms.com",
-  "http://localhost:5173",
-  "http://localhost:3000",
-];
-
-function buildCorsHeaders(req: Request): Record<string, string> {
-  const origin = req.headers.get("origin") || "";
-  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
-  return {
-    "Access-Control-Allow-Origin": allowed,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-admin-password",
-    "Vary": "Origin",
-  };
-}
 
 function constantTimeEqual(a: string, b: string): boolean {
   const encoder = new TextEncoder();
@@ -208,7 +191,7 @@ async function recordAttempt(
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
-  const corsHeaders = buildCorsHeaders(req);
+  const corsHeaders = buildCorsHeaders(req, "x-admin-password");
 
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });

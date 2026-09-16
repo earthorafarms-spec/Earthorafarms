@@ -1,5 +1,7 @@
 // Server-only administration boundary. Never trust the browser's Gate flag.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+// @ts-ignore
+import { isAllowedOrigin } from "../_shared/cors.ts";
 
 const categories = new Set(["description", "benefits", "dosage", "directions", "ingredients", "warnings", "contraindications", "storage", "faq"]);
 const locales = new Set(["en-IN", "hi-IN", "gu-IN", "hi-Latn", "gu-Latn"]);
@@ -7,15 +9,15 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 Deno.serve(async (req: Request): Promise<Response> => {
   const origin = req.headers.get("origin") || "";
-  const allowed = (Deno.env.get("ADMIN_ALLOWED_ORIGINS") || "https://earthorafarms.com,https://www.earthorafarms.com,http://localhost:5173,http://localhost:3000").split(",").map((v) => v.trim());
+  const originOk = isAllowedOrigin(origin);
   const headers: Record<string, string> = {
     "Content-Type": "application/json", "Vary": "Origin",
     "Access-Control-Allow-Headers": "authorization, apikey, x-client-info, content-type, x-admin-password",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
   };
-  if (allowed.includes(origin)) headers["Access-Control-Allow-Origin"] = origin;
+  if (originOk) headers["Access-Control-Allow-Origin"] = origin;
   const reply = (status: number, data: unknown) => new Response(JSON.stringify(data), { status, headers });
-  if (origin && !allowed.includes(origin)) return reply(403, { error: "Origin not allowed" });
+  if (origin && !originOk) return reply(403, { error: "Origin not allowed" });
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers });
   if (req.method !== "POST") return reply(405, { error: "POST required" });
   const password = req.headers.get("x-admin-password");
