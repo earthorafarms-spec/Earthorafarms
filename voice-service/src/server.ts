@@ -19,8 +19,7 @@ import { registerSmartfloStreamRoutes } from './routes/smartflo-stream.js';
 import { registerCheckoutRoutes } from './routes/checkout.js';
 import { registerPaymentWebhookRoutes } from './routes/payment-webhook.js';
 import { registerInvoiceRoutes } from './routes/invoice.js';
-import { registerWhatsAppRoutes, registerWhatsAppTrackingRoute } from '../../whatsapp-chatbot/routes.js';
-import { startWhatsAppWorker } from '../../whatsapp-chatbot/worker.js';
+import { registerWhatsAppTrackingRoute } from '../../whatsapp-chatbot/routes.js';
 
 const publicDirectory = path.resolve(process.cwd(), 'public');
 
@@ -30,11 +29,10 @@ const publicDirectory = path.resolve(process.cwd(), 'public');
  * against a real app instance without binding a port.
  */
 export interface BuildAppOptions {
-  mode?: 'all' | 'whatsapp';
+  // Reserved for testing options
 }
 
-export async function buildApp(options: BuildAppOptions = {}) {
-  const mode = options.mode ?? 'all';
+export async function buildApp(_options: BuildAppOptions = {}) {
   const app = Fastify({
     logger: {
       level: config.LOG_LEVEL,
@@ -67,41 +65,33 @@ export async function buildApp(options: BuildAppOptions = {}) {
 
   await registerHealthRoutes(app);
 
-  if (mode === 'all') {
-    // Payment webhook route is registered before any other body-parsing route
-    // so Razorpay signatures are always checked against the exact bytes.
-    await registerPaymentWebhookRoutes(app);
-    await registerInvoiceRoutes(app);
-    await app.register(websocket);
-    await registerVoiceRoutes(app);
-    await registerVoiceStreamRoutes(app);
-    await registerSmartfloStreamRoutes(app);
-    await registerCheckoutRoutes(app);
-  }
+  // Payment webhook route is registered before any other body-parsing route
+  // so Razorpay signatures are always checked against the exact bytes.
+  await registerPaymentWebhookRoutes(app);
+  await registerInvoiceRoutes(app);
+  await app.register(websocket);
+  await registerVoiceRoutes(app);
+  await registerVoiceStreamRoutes(app);
+  await registerSmartfloStreamRoutes(app);
+  await registerCheckoutRoutes(app);
 
   const whatsappOutboundConfigured = config.WHATSAPP_PROVIDER === 'tata_omni'
     ? Boolean(config.TATA_OMNI_ACCESS_TOKEN)
     : Boolean(config.WHATSAPP_PHONE_NUMBER_ID && config.WHATSAPP_TOKEN);
 
-  if (config.whatsappConfigured) {
-    await registerWhatsAppRoutes(app);
-    startWhatsAppWorker(app);
-  } else if (whatsappOutboundConfigured && config.WHATSAPP_INTERNAL_KEY) {
-    // Shipment tracking is an authenticated internal route. It must stay
-    // available even if inbound WhatsApp callbacks are not configured yet.
+  // Authenticated server-to-server shipment tracking route. Inbound WhatsApp customer
+  // messaging, webhook callbacks, and the inbox polling worker are exclusively owned
+  // and run by the dedicated whatsapp-chatbot service (whatsapp-chatbot/app.ts).
+  if (whatsappOutboundConfigured && config.WHATSAPP_INTERNAL_KEY) {
     await registerWhatsAppTrackingRoute(app);
-  } else if (mode === 'whatsapp') {
-    throw new Error('WhatsApp-only service cannot start: provider configuration is incomplete');
   }
 
-  if (mode === 'all') {
-    // Dev-only text-mode harness (see voice-service/README.md) — not a
-    // customer-facing surface, never linked from the main site.
-    await app.register(fastifyStatic, {
-      root: publicDirectory,
-      prefix: '/',
-    });
-  }
+  // Dev-only text-mode harness (see voice-service/README.md) — not a
+  // customer-facing surface, never linked from the main site.
+  await app.register(fastifyStatic, {
+    root: publicDirectory,
+    prefix: '/',
+  });
 
   return app;
 }
