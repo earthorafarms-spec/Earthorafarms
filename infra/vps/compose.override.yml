@@ -1,0 +1,27 @@
+services:
+  api:
+    build:
+      context: /opt/earthora/src-repo
+      dockerfile: apps/api/Dockerfile
+    image: earthora-api:latest
+    container_name: earthora-api
+    restart: unless-stopped
+    env_file: /opt/earthora/infra/api.env
+    environment: { ROLE: api }
+    depends_on:
+      postgres: { condition: service_healthy }
+    ports:
+      - "127.0.0.1:4100:4100"
+    volumes:
+      - /opt/earthora/data/assets:/app/data/assets
+  worker:
+    image: earthora-api:latest
+    container_name: earthora-worker
+    restart: unless-stopped
+    env_file: /opt/earthora/infra/api.env
+    environment: { ROLE: worker }
+    depends_on:
+      postgres: { condition: service_healthy }
+      api: { condition: service_started }
+    volumes:
+      - /opt/earthora/data/assets:/app/data/assets

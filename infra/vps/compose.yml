@@ -1,0 +1,26 @@
+name: earthora
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: earthora-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: earthora
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: earthora
+      TZ: UTC
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - /opt/earthora/data/postgres:/var/lib/postgresql/data
+      - /opt/earthora/migration:/migration
+      - /opt/earthora/backups:/backups
+    command: >
+      postgres -c shared_buffers=1GB -c effective_cache_size=3GB -c work_mem=32MB
+               -c maintenance_work_mem=256MB -c max_connections=120 -c wal_level=replica
+               -c log_min_duration_statement=500 -c timezone=UTC
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U earthora -d earthora"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
