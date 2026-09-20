@@ -1,9 +1,31 @@
 # Earthora — Team Handover
 
 > Authoritative handover for the team taking over Earthora on a new system.
-> Last updated 2026-09-19. This file lives on the **`main`** branch (the authoritative branch — see §1).
+> Last updated 2026-09-20. This file lives on the **`main`** branch (the authoritative branch — see §1).
 > **Secrets are NOT in this repo.** Everything a fresh clone lacks is in the separate
 > **credentials bundle** (`earthora-credentials-YYYYMMDD.zip`) delivered out-of-band — see §9.
+
+---
+
+## Voice deployment update — 20 September 2026
+
+Web microphone and Tata phone voice now use the dedicated UniExl-derived
+LiveKit service under `livekit-voice/`, deployed on the Earthora VPS at
+`/opt/earthora/uniexl-voice`. GPU inference uses Whisper/IndicConformer,
+Indic Parler (Neha across English, Hindi/Hinglish and Gujarati), and Qwen 3.5 9B.
+Existing storefront/chat appearance and typed-chat behavior are preserved.
+
+Tata endpoint 2163 now uses
+`wss://earthora.srv1915512.hstgr.cloud/ws/voice/smartflo`.
+The legacy `voice-service/` container is retained for rollback; it is not the
+active web/phone media path. The current API build context is
+`/opt/earthora/releases/livekit-api-1f13f6bd24e5`.
+
+Read [the voice deployment handoff](livekit-voice/DEPLOYMENT.md) and
+[runtime guide](livekit-voice/README.md) before deploying voice changes.
+These supersede older voice/Render instructions below. Public synthetic tests
+passed; a real handset call has not yet been tested. Runtime secrets stay on
+the VPS and outside Git.
 
 ---
 
