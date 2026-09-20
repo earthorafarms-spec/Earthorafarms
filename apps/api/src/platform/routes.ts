@@ -5,6 +5,7 @@ import { chatChannelRoutes } from './channels/chat.js';
 import { whatsappRoutes } from './channels/whatsapp.js';
 import { voiceRoutes } from './channels/voice.js';
 import { livekitRoutes } from './channels/livekit.js';
+import { sunpathRoutes } from './channels/sunpath.js';
 
 /** All AI-platform HTTP + WS routes (mounted under /api). */
 export async function platformRoutes(app: FastifyInstance): Promise<void> {
@@ -14,4 +15,5 @@ export async function platformRoutes(app: FastifyInstance): Promise<void> {
   await app.register(whatsappRoutes);
   await app.register(voiceRoutes);
   await app.register(livekitRoutes);
+  await app.register(sunpathRoutes);
 }

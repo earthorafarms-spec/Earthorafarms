@@ -1,5 +1,7 @@
 # Earthora voice verification — 20 September 2026
 
+> Historical test evidence for the earlier deployment. See [SUNPATH-DEPLOYMENT.md](../SUNPATH-DEPLOYMENT.md) for the active SunPath service and its validation.
+
 The corrected UniExl-derived runtime passed synthetic browser and public Smartflo WebSocket tests on runtime image `2ef95445…`, with the deployed Node language correction. All 66 Python checks also passed before activation.
 
 The tests use four prerecorded Neha WAVs containing harmless English, Hindi, Gujarati and Hinglish utterances. No real phone was dialled and no purchase, order change or callback was requested. The frontend appearance and typed chat are outside this transport test.

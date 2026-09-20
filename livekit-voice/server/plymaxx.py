@@ -160,6 +160,30 @@ def _reported_language(payload: dict, text: str, fallback: str) -> str:
     return fallback if fallback != "auto" else "en"
 
 
+_GUJARATI_LETTERS = re.compile(r"[\u0a85-\u0ab9\u0ad0\u0ae0-\u0ae1]")
+_DEVANAGARI_LETTERS = re.compile(r"[\u0904-\u0939\u0958-\u0961]")
+_GUJARATI_PRONOUN_CUES = frozenset({
+    "तमारा", "तमारी", "तमारु", "तमारूँ", "तमारूं", "तमने", "मने",
+    "tamara", "tamari", "tamaru", "tamne", "mane",
+})
+_GUJARATI_VERB_CUES = frozenset({
+    "छे", "छूँ", "छूं", "छुं", "छु", "छो", "शकूँ", "शकूं", "शकुं", "शकु",
+    "chhe", "che", "chhu", "chhun", "shaku", "shakun",
+})
+
+
+def _gujarati_phonetic_cues(text: str) -> bool:
+    """Detect multiple Gujarati grammar cues mistranscribed as Hindi.
+
+    This is only a reason to re-recognize the ORIGINAL AUDIO with Indic. It
+    never transliterates, translates or fabricates a Gujarati transcript.
+    Whole words and both categories are required: e.g. Hindi 'छू', 'छः', a
+    company called Tamara, or a single 'छे' are not sufficient evidence.
+    """
+    words = set(re.findall(r"[a-z]+|[\u0900-\u0963\u0971-\u097f]+", text.lower()))
+    return bool(words & _GUJARATI_PRONOUN_CUES) and bool(words & _GUJARATI_VERB_CUES)
+
+
 def _confidence(payload: dict) -> float:
     segments = payload.get("segments")
     if not isinstance(segments, list):
@@ -231,10 +255,21 @@ class PlymaxxSTT(stt.STT):
         detected = _reported_language(payload, text, selected)
         # Known Gujarati never pays for Whisper first. Auto re-decode is an
         # explicit opt-in, at most once, because it doubles GPU recognition work.
-        if self._redetect_gujarati and selected == "auto" and detected == "gu":
-            payload = await self._transcribe(audio, "gu")
-            text = payload["text"].strip()
-            detected = "gu"
+        if self._redetect_gujarati and selected == "auto":
+            gujarati_script = bool(_GUJARATI_LETTERS.search(text))
+            suspect_gujarati = detected == "gu" or gujarati_script or (detected == "hi" and _gujarati_phonetic_cues(text))
+            if suspect_gujarati:
+                corrected = await self._transcribe(audio, "gu")
+                corrected_text = corrected["text"].strip()
+                # A model/language label alone cannot turn empty, English or
+                # Hindi output into Gujarati. Retain the usable first decode
+                # unless Indic actually returns Gujarati speech text.
+                if _GUJARATI_LETTERS.search(corrected_text) and not _DEVANAGARI_LETTERS.search(corrected_text):
+                    payload, text, detected = corrected, corrected_text, "gu"
+                elif gujarati_script:
+                    # Direct script evidence is stronger than a contradictory
+                    # Whisper language label; no transcript rewriting occurs.
+                    detected = "gu"
         return stt.SpeechEvent(
             type=stt.SpeechEventType.FINAL_TRANSCRIPT, request_id=uuid.uuid4().hex,
             alternatives=[stt.SpeechData(text=text, language=detected, end_time=duration,

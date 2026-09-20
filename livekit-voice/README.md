@@ -1,23 +1,27 @@
 # Earthora voice service
 
-This is the UniExl voice-addon server copied at commit
-`4660ed296b3152884aa72fd86ec4e4ced172b8c4`, adapted to Earthora's GPU and business
-API. `upstream/` is the unmodified reference; `SOURCE.json` records every file's
-hash. The original SchoolExl/UniExl deployments are not used at runtime.
+Earthora's current conversation worker follows the MyScanHub SunPath source at
+`D:/MSH/sun/sunpath-voicebot`. See [SUNPATH-DEPLOYMENT.md](SUNPATH-DEPLOYMENT.md)
+for the active architecture and [SUNPATH-PARITY.md](SUNPATH-PARITY.md) for the
+adaptation map. `SOURCE-SUNPATH.json` records the exact reference subset.
+The prior `upstream/` and `SOURCE.json` are retained historical provenance;
+they do not define the current conversation loop. The old Render bot is not a
+reference for this migration.
 
 ## Runtime
 
-- `server/earthora_agent.py`: UniExl LiveKit AgentServer/AgentSession, prewarmed
-  Silero VAD, multilingual turn detection, speech filtering and interruptions.
+- `server/earthora_agent.py`: native SunPath-style LiveKit AgentSession, Qwen
+  function tools, prewarmed Silero VAD, deterministic lifecycle and interruptions.
 - `server/plymaxx.py`: local GPU speech adapters. Whisper Turbo detects each
   utterance's language; detected Gujarati is decoded again with IndicConformer
   when `AI_STT_REDECODE_GUJARATI=1`. Indic Parler uses speaker **Neha** in English,
   Hindi/Hinglish and Gujarati. There is no paid inference fallback.
-- `server/earthora_bridge.py`: completed utterances go to Earthora's authenticated
-  `/api/platform/voice/internal/turn`. The existing application owns catalogue,
-  approved knowledge, prices, conversation state and checkout validation. Qwen
-  3.5 9B is selected only within voice requests; typed chat keeps its existing
-  provider configuration. Only validated replies are spoken.
+- `server/sunpath_bridge.py`: authenticated context/tool/transcript access.
+  Qwen runs directly inside AgentSession; no completed-turn LLM HTTP bridge is
+  used. Earthora owns live catalogue, approved knowledge, durable cart and
+  checkout validation. Typed chat keeps its existing provider configuration.
+- `server/sunpath_runtime.py`: current-turn facts, language and business checks
+  before generated text reaches TTS; bounded history and brief spoken replies.
 - `server/earthora_control.py`: bounded room admission and short-lived room
   tokens, plus Tata Smartflo G.711/8 kHz WebSocket-to-LiveKit transport. Web and
   phone use the same agent and voice configuration.
@@ -30,7 +34,7 @@ tokens/audio. LiveKit supplies continuous transport, turn detection and
 interruptions. Synthesizing the first phrase still takes time; this deployment
 must not be described as zero-latency inference.
 
-UniExl's three-word interruption threshold assumed interim STT results. Here it
+SunPath's streaming-word interruption threshold assumed interim STT results. Here it
 is configurable and defaults to zero words with a 0.5-second VAD guard, allowing
 barge-in before completed-utterance recognition finishes. Confirmed interruption
 events clear the phone's playback buffer.
@@ -39,8 +43,8 @@ events clear the phone's playback buffer.
 
 Earthora VPS: `187.52.121.146`.
 
-- Voice source/runtime: `/opt/earthora/uniexl-voice`
-- API release source: `/opt/earthora/releases/livekit-api-1f13f6bd24e5`
+- Active immutable voice release: read `/opt/earthora/SUNPATH_VOICE_ACTIVE`
+- API release source: `/opt/earthora/releases/livekit-api-7e6c7675be30`
 - Existing API compose/environment: `/opt/earthora/infra`
 - Public signaling: `wss://earthora.srv1915512.hstgr.cloud/livekit`
 - Public phone bridge: `wss://earthora.srv1915512.hstgr.cloud/ws/voice/smartflo`
@@ -88,13 +92,12 @@ routing or audio quality on a real handset.
 
 ## Rollback
 
-Before activation, the deployment stores the former API environment, compose
-override, nginx virtual host and image ID under
-`/opt/earthora/backups/pre-livekit-<timestamp>`. The location is recorded in
-`/opt/earthora/uniexl-voice/ROLLBACK_PATH`. Restore those exact files and recreate
-only the API service, then validate/reload nginx. The previous worker and legacy
-voice container remain available. If Tata was switched, restore its former
-endpoint separately; rolling back nginx does not change the carrier dashboard.
+Each immutable release contains `ROLLBACK_PATH`, pointing to a backup of the
+prior runtime image IDs and compose configuration. That backup records
+`PREVIOUS_DIRECTORY`. Restore only voice-control and agent from that directory
+with the recorded image IDs, after active rooms finish. API compose backups
+are separate under `/opt/earthora/backups/sunpath-api-<timestamp>`.
+This migration does not change Nginx, the SFU or Tata's configured endpoint.
 
 No database schema or storefront build migration is required.
 

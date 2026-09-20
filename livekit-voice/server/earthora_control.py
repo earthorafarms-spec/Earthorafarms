@@ -1,8 +1,8 @@
-"""UniExl room/token pattern adapted for Earthora and Tata Smartflo ingress.
+"""Earthora room admission and MSH-compatible Tata Smartflo transport.
 
-The browser and the phone publish audio into the SAME LiveKit agent. This
-process owns transport only; all conversation decisions stay in Earthora's API.
-The original UniExl token server is preserved in ../upstream/server.
+Browser and phone audio reach the same explicitly dispatched SunPath-style
+agent. This process owns admission/media only; Earthora's agent and validated
+business tools own conversation decisions.
 """
 import asyncio
 import audioop
@@ -23,13 +23,18 @@ from pydantic import BaseModel, Field
 from earthora_bridge import VoiceContext
 
 log = logging.getLogger('earthora.control')
-app = FastAPI(title='Earthora UniExl Voice Control')
+app = FastAPI(title='Earthora SunPath Voice Control')
 ACCESS_KEY = os.environ['EARTHORA_VOICE_INTERNAL_KEY']
 LK_URL = os.environ['LIVEKIT_URL']
 PUBLIC_URL = os.environ['LIVEKIT_PUBLIC_URL']
 API_URL = os.environ['EARTHORA_API_URL'].rstrip('/')
 PUBLIC_ORIGIN = os.environ['EARTHORA_PUBLIC_ORIGIN'].rstrip('/')
 MAX_SESSIONS = int(os.environ.get('VOICE_MAX_SESSIONS', '2'))
+AGENT_NAME = os.environ.get('VOICE_AGENT_NAME', 'earthora-sunpath').strip()
+if not AGENT_NAME:
+    raise ValueError('VOICE_AGENT_NAME must name the explicitly dispatched worker')
+AGENT_JOIN_TIMEOUT = max(0.05, float(os.environ.get('VOICE_AGENT_JOIN_TIMEOUT_SECONDS', '8')))
+CONNECT_TIMEOUT = max(0.05, float(os.environ.get('VOICE_CONNECT_TIMEOUT_SECONDS', '10')))
 _admission_lock = asyncio.Lock()
 
 
@@ -71,6 +76,9 @@ async def start_session(req: StartRequest):
         raise HTTPException(400, 'Session metadata is too large')
     room_name = f'earthora-{uuid.uuid4().hex[:16]}'
     identity = f"{metadata['channel']}-{uuid.uuid4().hex[:12]}"
+    # Bind the agent input to the admitted caller. An observer joining during
+    # worker startup must never become the microphone source by join ordering.
+    metadata['caller_identity'] = identity
     # Includes rooms waiting for their browser to join; avoids unlimited idle jobs.
     async with _admission_lock:
         async with lk_api() as client:
@@ -78,7 +86,11 @@ async def start_session(req: StartRequest):
             active = [r for r in rooms.rooms if r.name.startswith('earthora-') and (r.num_participants or time.time() - r.creation_time < 45)]
             if len(active) >= MAX_SESSIONS:
                 raise HTTPException(429, 'Both voice lines are busy. Please try again shortly.')
-            await client.room.create_room(api.CreateRoomRequest(name=room_name, metadata=json.dumps(metadata), empty_timeout=45, departure_timeout=10, max_participants=3))
+            # The room is created here for admission accounting. A join token's
+            # room_config is ignored for an existing room, so attach the named
+            # dispatch to this actual room-creation request instead.
+            await client.room.create_room(api.CreateRoomRequest(name=room_name, metadata=json.dumps(metadata), empty_timeout=45, departure_timeout=10, max_participants=3,
+                                                               agents=[api.RoomAgentDispatch(agent_name=AGENT_NAME)]))
     token = (api.AccessToken(os.environ['LIVEKIT_API_KEY'], os.environ['LIVEKIT_API_SECRET'])
              .with_identity(identity).with_name('Earthora caller').with_ttl(timedelta(minutes=20))
              .with_grants(api.VideoGrants(room_join=True, room=room_name, can_publish=True, can_subscribe=True, can_publish_data=True)))
@@ -88,7 +100,8 @@ async def start_session(req: StartRequest):
 @app.get('/voice/stream/endpoint')
 @app.post('/voice/stream/endpoint')
 async def endpoint():
-    return {'success': True, 'wss_url': PUBLIC_ORIGIN.replace('https://', 'wss://').replace('http://', 'ws://') + '/ws/voice/smartflo'}
+    # MSH bridge returns both spellings: Smartflo's prose and schema differ.
+    return {'success': True, 'sucess': True, 'wss_url': PUBLIC_ORIGIN.replace('https://', 'wss://').replace('http://', 'ws://') + '/ws/voice/smartflo'}
 
 
 class PhoneBridge:
@@ -112,6 +125,8 @@ class PhoneBridge:
         self.end_mark = None
         self.mark_received = asyncio.Event()
         self.drop_audio = False
+        self.agent_audio_ready = asyncio.Event()
+        self.cleanup_started = False
 
     def spawn(self, coro):
         task = asyncio.create_task(coro)
@@ -199,6 +214,7 @@ class PhoneBridge:
         @self.room.on('track_subscribed')
         def on_track(track, publication, participant):
             if track.kind == rtc.TrackKind.KIND_AUDIO:
+                self.agent_audio_ready.set()
                 self.spawn(self.outbound(track))
 
         @self.room.on('data_received')
@@ -217,10 +233,22 @@ class PhoneBridge:
                 self.spawn(self.finish_playback())
 
         # Bridge uses local SFU signalling; public clients use the HTTPS URL.
-        await self.room.connect(LK_URL, session['token'])
+        await asyncio.wait_for(self.room.connect(LK_URL, session['token']), timeout=CONNECT_TIMEOUT)
         track = rtc.LocalAudioTrack.create_audio_track('phone-microphone', self.source)
         await self.room.local_participant.publish_track(track, rtc.TrackPublishOptions(source=rtc.TrackSource.SOURCE_MICROPHONE))
+        self.spawn(self.watch_agent_join())
         log.info('phone room connected')
+
+    async def watch_agent_join(self):
+        # Match MSH: wait for the agent's published audio track, not the first
+        # audible TTS sample. A cold GPU can delay speech after track creation.
+        try:
+            await asyncio.wait_for(self.agent_audio_ready.wait(), timeout=AGENT_JOIN_TIMEOUT)
+        except asyncio.TimeoutError:
+            if not self.closed:
+                log.warning('Agent audio track did not arrive before the admission deadline')
+                with contextlib.suppress(Exception):
+                    await self.ws.close(code=1011)
 
     async def inbound(self, event):
         if not self.stream_sid:
@@ -274,12 +302,19 @@ class PhoneBridge:
             await stream.aclose()
 
     async def close(self):
+        if self.cleanup_started:
+            return
+        self.cleanup_started = True
         self.closed = True
         tasks = tuple(task for task in self.tasks if task is not asyncio.current_task())
         for task in tasks: task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
-        await self.room.disconnect()
-        await self.source.aclose()
+        # Attempt every cleanup step independently, as the MSH bridge does.
+        # A disconnected SFU must not prevent the explicit room deletion.
+        with contextlib.suppress(Exception):
+            await self.room.disconnect()
+        with contextlib.suppress(Exception):
+            await self.source.aclose()
         if self.room_name:
             with contextlib.suppress(Exception):
                 async with lk_api() as client:

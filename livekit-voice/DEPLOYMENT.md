@@ -1,5 +1,7 @@
 # Earthora LiveKit deployment handoff — 20 September 2026
 
+> Historical deployment record, superseded by [SUNPATH-DEPLOYMENT.md](SUNPATH-DEPLOYMENT.md). The runtime, endpoints and rollback instructions below describe the earlier deployment and must not be used for the current SunPath service.
+
 Earthora’s web microphone now uses a dedicated UniExl-derived LiveKit deployment on the Earthora VPS. Web and Smartflo transport share the same agent, GPU speech providers and validated Earthora conversation engine. Public web/phone synthetic acceptance passed, and Tata endpoint 2163 is saved to the new VPS URL. A real handset call has not been performed.
 
 **Source and deployment**

@@ -142,6 +142,86 @@ async def test_stt_gujarati_redetection_is_one_explicit_extra_call():
     assert [form_fields(call)["model"] for call in session.calls] == [p.WHISPER_MODEL, p.GUJARATI_MODEL]
 
 
+@pytest.mark.parametrize("whisper_text", [
+    "हुँ तमारा ओर्डर नी माहिती आपी शकूँ छूँ",
+    "मने ओर्डर नी माहिती जोईए छे।",
+    "hu tamara order ni mahiti api shaku chhu",
+])
+@pytest.mark.asyncio
+async def test_hi_label_with_multiple_gujarati_grammar_cues_redecodes_real_audio(whisper_text):
+    corrected = "હું તમારા ઓર્ડરની માહિતી આપી શકું છું."
+    session = Session(Response(json.dumps({"text": whisper_text, "language": "hi"}).encode()),
+                      Response(json.dumps({"text": corrected, "language": "gu"}).encode()))
+    event = await p.PlymaxxSTT(http_session=session, redetect_gujarati=True).recognize(audio())
+    assert event.alternatives[0].text == corrected
+    assert event.alternatives[0].language == "gu"
+    first, second = map(form_fields, session.calls)
+    assert (first["model"], second["model"]) == (p.WHISPER_MODEL, p.GUJARATI_MODEL)
+    assert second["language"] == "gu"
+    assert first["file"] == second["file"]  # Original audio, not translated/transliterated text.
+
+
+@pytest.mark.parametrize("text", [
+    "मैं आपके ऑर्डर की जानकारी दे सकती हूँ।",
+    "मुझे प्रोडक्ट की कीमत बताइए।",
+    "क्या आप मेरी मदद कर सकते हैं?",
+    "तुम्हारा ऑर्डर कहाँ है?",
+    "मैं तुम्हारा हाथ छू सकती हूँ।",
+    "मुझे छः टैबलेट चाहिए।",
+    "तमारा नाम की कंपनी का प्रोडक्ट है।",
+    "मने सब बताओ", "मने", "तमारा", "छूँ", "छे",
+    "tamarafoo chhe", "Mane said hello", "The company Tamara shipped the package",
+])
+@pytest.mark.asyncio
+async def test_hindi_and_single_or_substring_gujarati_cues_do_not_trigger_redecode(text):
+    session = Session(Response(json.dumps({"text": text, "language": "hi"}).encode()))
+    event = await p.PlymaxxSTT(http_session=session, redetect_gujarati=True).recognize(audio())
+    assert event.alternatives[0].text == text
+    assert event.alternatives[0].language == "hi"
+    assert len(session.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_actual_gujarati_script_overrides_contradictory_whisper_hi_label_for_redecode():
+    original, corrected = "તમારા ઓર્ડરની માહિતી આપું છું", "હું તમારા ઓર્ડરની માહિતી આપી શકું છું."
+    session = Session(Response(json.dumps({"text": original, "language": "hi"}).encode()),
+                      Response(json.dumps({"text": corrected}).encode()))
+    event = await p.PlymaxxSTT(http_session=session, redetect_gujarati=True).recognize(audio())
+    assert event.alternatives[0].text == corrected and event.alternatives[0].language == "gu"
+    assert len(session.calls) == 2
+
+
+@pytest.mark.parametrize("corrected", ["", "   ", "I can help with your order.", "मैं आपकी मदद कर सकती हूँ।", "૧૨૩૪", "ગુજરાતી हिंदी"])
+@pytest.mark.asyncio
+async def test_invalid_gujarati_redecode_preserves_usable_whisper_text_and_confidence(corrected):
+    original = "हुँ तमारा ओर्डर नी माहिती आपी शकूँ छूँ"
+    session = Session(Response(json.dumps({"text": original, "language": "hi", "segments": [{"avg_logprob": -.1}]}).encode()),
+                      Response(json.dumps({"text": corrected, "language": "gu"}).encode()))
+    event = await p.PlymaxxSTT(http_session=session, redetect_gujarati=True).recognize(audio())
+    assert event.alternatives[0].text == original
+    assert event.alternatives[0].language == "hi"
+    assert event.alternatives[0].confidence > .9
+    assert len(session.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_gujarati_script_first_decode_remains_usable_after_empty_indic_result():
+    original = "તમારા ઓર્ડરની માહિતી આપું છું"
+    session = Session(Response(json.dumps({"text": original, "language": "hi"}).encode()),
+                      Response(b'{"text":"","language":"gu"}'))
+    event = await p.PlymaxxSTT(http_session=session, redetect_gujarati=True).recognize(audio())
+    assert event.alternatives[0].text == original and event.alternatives[0].language == "gu"
+
+
+@pytest.mark.parametrize("selected,opted_in", [("auto", False), ("hi", True), ("en", True)])
+@pytest.mark.asyncio
+async def test_phonetic_redecode_requires_both_auto_mode_and_explicit_opt_in(selected, opted_in):
+    original = "हुँ तमारा ओर्डर नी माहिती आपी शकूँ छूँ"
+    session = Session(Response(json.dumps({"text": original, "language": "hi"}).encode()))
+    event = await p.PlymaxxSTT(language=selected, http_session=session, redetect_gujarati=opted_in).recognize(audio())
+    assert event.alternatives[0].text == original and len(session.calls) == 1
+
+
 @pytest.mark.asyncio
 async def test_stt_update_options_changes_next_model():
     session = Session(Response(json.dumps({"text": "નમસ્તે"}).encode()))
