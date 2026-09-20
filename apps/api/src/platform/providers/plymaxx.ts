@@ -47,7 +47,10 @@ export function fitVoiceContext(messages: ChatMessage[], tools: ToolDef[], outpu
     if (used + additional > budget) break;
     used += additional; start--;
   }
-  return [...system, ...groups.slice(start).flat()];
+  const kept = new Set(groups.slice(start).flat());
+  // In particular, keep the current-turn language reminder after history.
+  // Moving all system messages to the front weakens that override on Qwen.
+  return messages.filter((message) => message.role === 'system' || kept.has(message));
 }
 
 export const plymaxxVoiceLlm: LlmAdapter = {

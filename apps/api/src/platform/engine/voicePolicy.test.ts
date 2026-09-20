@@ -15,4 +15,11 @@ describe('validated Indian female voice replies', () => {
     expect(spokenLanguageInstruction('hi')).toContain('कर सकती हूँ');
     for (const lang of ['en', 'hi', 'gu']) expect(checkVoiceOutput(safeVoiceReply(lang), new Set()).ok).toBe(true);
   });
+  it('requires actual reply script to match the current language while allowing Hindi-English mixing', () => {
+    expect(checkVoiceOutput('नमस्ते, आपका order number बताएं।', new Set(), 'en')).toEqual({ ok: false, reason: 'language-mismatch' });
+    expect(checkVoiceOutput('How can I help?', new Set(), 'gu')).toEqual({ ok: false, reason: 'language-mismatch' });
+    expect(checkVoiceOutput('હું મદદ કરી શકું છું.', new Set(), 'hi')).toEqual({ ok: false, reason: 'language-mismatch' });
+    expect(checkVoiceOutput('मैं आपका order status check कर सकती हूँ।', new Set(), 'hi').ok).toBe(true);
+    for (const lang of ['en', 'hi', 'gu']) expect(checkVoiceOutput(safeVoiceReply(lang, 'language-mismatch'), new Set(), lang).ok).toBe(true);
+  });
 });

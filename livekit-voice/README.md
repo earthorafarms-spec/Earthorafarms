@@ -40,7 +40,7 @@ events clear the phone's playback buffer.
 Earthora VPS: `187.52.121.146`.
 
 - Voice source/runtime: `/opt/earthora/uniexl-voice`
-- API release source: `/opt/earthora/releases/livekit-api-20260920`
+- API release source: `/opt/earthora/releases/livekit-api-1f13f6bd24e5`
 - Existing API compose/environment: `/opt/earthora/infra`
 - Public signaling: `wss://earthora.srv1915512.hstgr.cloud/livekit`
 - Public phone bridge: `wss://earthora.srv1915512.hstgr.cloud/ws/voice/smartflo`
@@ -97,3 +97,15 @@ voice container remain available. If Tata was switched, restore its former
 endpoint separately; rolling back nginx does not change the carrier dashboard.
 
 No database schema or storefront build migration is required.
+
+## September 20 follow-up fixes
+
+The current turn's language instruction is kept after conversation history,
+and voice output is checked against that language before playback. This prevents
+a prior Hindi/Gujarati exchange from keeping a later English response in the
+wrong language. Conversational Hinglish remains supported.
+
+Normal speech is scheduled without waiting for all playback inside LiveKit's
+completed-turn callback. This allows the next completed utterance to interrupt
+an earlier reply promptly. Terminal replies still finish before the call closes,
+with interruption and stale-response checks retained.

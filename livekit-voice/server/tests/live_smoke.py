@@ -84,6 +84,7 @@ class Trace:
         self.phone_clear_count = 0
         self.phone_mark_count = 0
         self.phone_bad_frame_count = 0
+        self.pipeline_errors = 0
 
     def event(self, message: Any) -> None:
         if not isinstance(message, dict):
@@ -93,17 +94,27 @@ class Trace:
         self.events.append({'type': kind, 'state': message.get('state'), 'at': now})
         if kind == 'agent_state':
             self.agent_state = message.get('state', '')
+        if kind == 'error':
+            self.pipeline_errors += 1
         case = self.active
         if case is None:
             return
         if kind == 'user_transcript':
-            case.setdefault('transcript_at', now)
+            # A pause inside the prerecorded input may make multiple VAD
+            # turns. Time the final segment against its own reply, never the
+            # first segment's timestamp with the final segment's transcript.
+            if case.get('turn_id') != message.get('turn_id'):
+                for field in ('reply_at', 'reply_text', 'reply_language', 'audio_at'):
+                    case.pop(field, None)
+                case['transcript_at'] = now
+                case['transcript_segments'] = case.get('transcript_segments', 0) + 1
             case['turn_id'] = message.get('turn_id')
             case['transcript'] = str(message.get('text') or message.get('transcript') or '')
         elif kind == 'agent_reply_text' and message.get('turn_id') == case.get('turn_id') and case.get('turn_id'):
             case.setdefault('reply_at', now)
             case['reply_language'] = message.get('language')
-            case['reply_characters'] = len(str(message.get('text', '')))
+            case['reply_text'] = str(message.get('text', ''))
+            case['reply_characters'] = len(case['reply_text'])
         elif kind == 'agent_interrupted':
             case.setdefault('interrupted_at', now)
         elif kind == 'user_state' and message.get('state') == 'speaking':
@@ -132,6 +143,8 @@ class Trace:
     async def settle(self, timeout: float) -> None:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
+            if self.pipeline_errors:
+                raise SmokeFailure('Speech pipeline reported an error')
             if self.last_audible > 0 and self.agent_state in {'listening', 'idle'} and time.monotonic() - self.last_audible >= 0.4:
                 return
             await asyncio.sleep(0.04)
@@ -140,9 +153,12 @@ class Trace:
     async def first_reply_audio(self, case: dict, timeout: float) -> None:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            if case.get('pipeline_errors'):
+            if self.pipeline_errors or case.get('pipeline_errors'):
                 raise SmokeFailure('Speech pipeline reported an error')
-            if case.get('audio_at'):
+            # Ignore a reply to an early segment while the remainder of this
+            # synthetic utterance is still arriving. Small trailing silence
+            # in a WAV is allowed; a several-second early reply is not.
+            if case.get('audio_at') and case.get('transcript_at', 0) >= case.get('input_stop_at', 0) - 0.6:
                 return
             await asyncio.sleep(0.02)
         raise SmokeFailure('Timed out waiting for validated reply audio')
@@ -163,12 +179,14 @@ class Trace:
                 output['confirmed_interruption_to_phone_clear_seconds'] = round(case['phone_clear_at'] - case['interrupted_at'], 3)
             expected = 'hi' if case['input_language'] == 'hinglish' else case['input_language']
             output['transcript_script_language'] = transcript_script(case.get('transcript', ''))
-            output['language_match'] = bool(case.get('transcript')) and output['transcript_script_language'] == expected and case.get('reply_language') == expected
+            output['reply_script_language'] = transcript_script(case.get('reply_text', ''))
+            output['language_match'] = bool(case.get('transcript')) and bool(case.get('reply_text')) and output['transcript_script_language'] == expected and output['reply_script_language'] == expected and case.get('reply_language') == expected
             output['audio_received'] = bool(case.get('audio_at'))
             if case['interrupting']:
                 output['interruption_confirmed'] = bool(case.get('interrupted_at'))
             results.append(output)
         return {'turns': results, 'received_audio_frames': self.total_audio_frames,
+                'pipeline_error_count': self.pipeline_errors,
                 'phone_clear_count': self.phone_clear_count, 'phone_mark_count': self.phone_mark_count,
                 'phone_invalid_outbound_frame_count': self.phone_bad_frame_count}
 
@@ -345,6 +363,8 @@ async def phone_smoke(args) -> dict:
         async def read_phone():
             try:
                 async for packet in ws:
+                    if packet.type == aiohttp.WSMsgType.ERROR:
+                        raise SmokeFailure('Phone WebSocket reported a transport error')
                     if packet.type != aiohttp.WSMsgType.TEXT:
                         continue
                     message = json.loads(packet.data)
@@ -361,7 +381,13 @@ async def phone_smoke(args) -> dict:
                     elif kind == 'mark':
                         trace.phone_mark_count += 1
                         await ws.send_json({'event': 'mark', 'streamSid': stream_id, 'mark': message['mark']})
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                # Do not expose transport URLs or tokens from exception text.
+                report['phone_reader_error'] = type(error).__name__
             finally:
+                report['phone_close_code'] = ws.close_code
                 closed.set()
         reader = asyncio.create_task(read_phone())
         await ws.send_json({'event': 'start', 'streamSid': stream_id, 'start': {
@@ -387,7 +413,9 @@ async def phone_smoke(args) -> dict:
         await run_cases(args, trace, send_input)
         await observer.room.local_participant.publish_data(json.dumps({'type': 'call_end', 'reason': 'synthetic_smoke_complete'}).encode(), reliable=True, topic=TOPIC)
         await asyncio.wait_for(closed.wait(), timeout=10)
-        report['phone_close_received'] = True
+        report['phone_close_received'] = ws.closed and ws.close_code == 1000 and not report.get('phone_reader_error')
+        if not report['phone_close_received']:
+            raise SmokeFailure('Phone did not receive a clean normal WebSocket close')
     except Exception as error:
         report['failure'] = str(error) if isinstance(error, SmokeFailure) else type(error).__name__
     finally:
@@ -412,14 +440,14 @@ async def phone_smoke(args) -> dict:
 
 def passed(report: dict, *, interruption: bool) -> bool:
     turns = report.get('turns', [])
-    if report.get('failure') or not report.get('room_cleanup') or not turns:
+    if report.get('failure') or report.get('pipeline_error_count') or not report.get('room_cleanup') or not turns:
         return False
     if not all(turn['audio_received'] and turn['language_match'] and not turn.get('pipeline_errors') for turn in turns):
         return False
     if interruption and not any(turn.get('interruption_confirmed') for turn in turns):
         return False
     if report['transport'] == 'synthetic_smartflo':
-        if report['phone_invalid_outbound_frame_count'] or not report['phone_mark_count'] or not report.get('phone_close_received'):
+        if report['phone_invalid_outbound_frame_count'] or not report['phone_mark_count'] or not report.get('phone_close_received') or report.get('phone_reader_error') or report.get('phone_close_code') != 1000:
             return False
         if interruption and not report['phone_clear_count']:
             return False

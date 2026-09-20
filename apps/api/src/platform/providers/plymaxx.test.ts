@@ -39,4 +39,8 @@ describe('voice-scoped Qwen', () => {
     expect(fitted.slice(-3)).toEqual(messages.slice(-3));
     expect(() => fitVoiceContext([{ role: 'system', content: 'अ'.repeat(9000) }, { role: 'user', content: 'hello' }], [], 256)).toThrow('context budget');
   });
+  it('preserves the language override after multilingual history when fitting context', () => {
+    const messages: ChatMessage[] = [{ role: 'system', content: 'Approved facts only.' }, { role: 'user', content: 'મારા order ની માહિતી આપો.' }, { role: 'assistant', content: 'कृपया अपना order number बताएं।' }, { role: 'system', content: 'CURRENT TURN LANGUAGE: English. Previous conversation language must not override it.' }, { role: 'user', content: 'Hello, help me check my order status.' }];
+    expect(fitVoiceContext(messages, [], 256)).toEqual(messages);
+  });
 });

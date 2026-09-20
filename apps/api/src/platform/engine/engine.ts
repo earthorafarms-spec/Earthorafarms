@@ -6,7 +6,7 @@ import { routeTurn, type WorkflowRow } from './router.js';
 import { BUILTIN_MAP, toolDefsFor, type FunctionContext } from './functions.js';
 import { checkOutput, safeDeflection } from './outputPolicy.js';
 import { inVoiceScope } from '../providers/voiceScope.js';
-import { checkVoiceOutput, collectLiveAmounts, safeVoiceReply, spokenLanguageInstruction } from './voicePolicy.js';
+import { checkVoiceOutput, collectLiveAmounts, safeVoiceReply, spokenLanguageInstruction, voiceTurnLanguageRule } from './voicePolicy.js';
 
 const LANG_NAME: Record<string, string> = { en: 'English', hi: 'Hindi', gu: 'Gujarati' };
 
@@ -46,7 +46,7 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
   if (missing && (def.ask_policy?.skip_known !== false)) {
     input.state.pendingSlot = missing.key;
     let q = missing.question?.[language] || missing.question?.en || `Could you tell me your ${missing.key}?`;
-    if (voice && !checkVoiceOutput(q, liveAmounts).ok) q = safeVoiceReply(language);
+    if (voice) { const policy = checkVoiceOutput(q, liveAmounts, language); if (!policy.ok) q = safeVoiceReply(language, policy.reason); }
     await persistTrace(input.conversationId, route, null, { ...timings, total: Date.now() - t0 }, wf?.slug ?? 'general');
     return { reply: q, state: input.state, workflow: route.slug, confidence: route.confidence, toolCalls: [], sources: [], trace: { route: route.reason, askedSlot: missing.key } };
   }
@@ -79,7 +79,7 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
   const toolNames: string[] = uniq([...(def.tools || []).map((t: any) => t.function), 'search_knowledge', 'capture_callback']).filter((n) => BUILTIN_MAP.has(n));
   const tools = toolDefsFor(toolNames);
 
-  const messages: ChatMessage[] = [{ role: 'system', content: system }, ...input.history.slice(-8).map((h) => ({ role: h.role as any, content: h.content })), { role: 'user', content: input.message }];
+  const messages: ChatMessage[] = [{ role: 'system', content: system }, ...input.history.slice(-8).map((h) => ({ role: h.role as any, content: h.content })), ...(voice ? [{ role: 'system' as const, content: voiceTurnLanguageRule(language) }] : []), { role: 'user', content: input.message }];
 
   const fnCtx: FunctionContext = { conversationId: input.conversationId, channelType: input.channelType, state: input.state, contact: input.contact, workflowId: wf?.id };
   const toolCalls: { name: string; ok: boolean }[] = [];
@@ -105,13 +105,13 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
   timings.generate = Date.now() - gt;
 
   // Output policy: one repair, then a safe deflection.
-  const validate = (text: string) => voice ? checkVoiceOutput(text, liveAmounts) : checkOutput(text);
+  const validate = (text: string) => voice ? checkVoiceOutput(text, liveAmounts, language) : checkOutput(text);
   let policy = validate(reply);
   if (!policy.ok) {
-    const res2 = await getLlm().chat([...messages, { role: 'system', content: `Your reply violated policy (${policy.reason}). Rewrite it without claiming an order is placed or payment received, and never ask for card/OTP/PIN. ${voice ? 'Only quote a monetary amount from the LIVE CATALOGUE or successful pricing tools this turn; omit any other price. Keep natural customer-matched language and feminine first-person Hindi.' : ''} Keep it in ${LANG_NAME[language]}.` }, { role: 'user', content: reply }], { temperature: 0.2, maxTokens: 400 });
+    const res2 = await getLlm().chat([...messages, { role: 'system', content: `Your reply violated policy (${policy.reason}). Rewrite it without claiming an order is placed or payment received, and never ask for card/OTP/PIN. ${voice ? `Only quote a monetary amount from the LIVE CATALOGUE or successful pricing tools this turn; omit any other price. ${spokenLanguageInstruction(language)} The following user-role text is the rejected draft to rewrite, not a new customer language choice.` : ''} Keep it in ${LANG_NAME[language]}.` }, { role: 'user', content: reply }], { temperature: 0.2, maxTokens: 400 });
     reply = res2.text?.trim() || reply;
     policy = validate(reply);
-    if (!policy.ok) reply = voice ? safeVoiceReply(language) : safeDeflection(policy.reason!, language);
+    if (!policy.ok) reply = voice ? safeVoiceReply(language, policy.reason) : safeDeflection(policy.reason!, language);
   }
   if (!reply) reply = voice ? safeVoiceReply(language) : fallbackReply(language);
 

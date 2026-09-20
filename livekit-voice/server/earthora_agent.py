@@ -138,6 +138,23 @@ class EarthoraAgent(Agent):
             await self.events.send("agent_reply_text", text=self.context.greeting, language=self.language)
             await self.session.say(self.context.greeting)
 
+    def _finish_after_speech(self, speech, *, speech_epoch: int, reason: str) -> None:
+        async def finish() -> None:
+            try:
+                await speech
+                interrupted = speech.interrupted or speech_epoch != self.user_speech_epoch
+                if reason == "turn_limit" or not interrupted:
+                    self.end_call(reason)
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                logger.warning("Terminal speech unavailable (%s)", type(error).__name__)
+                await self.events.send("error", message=_RETRY_MESSAGE[self.language])
+
+        task = asyncio.create_task(finish())
+        self.events.tasks.add(task)
+        task.add_done_callback(self.events.tasks.discard)
+
     async def on_user_turn_completed(self, turn_ctx, new_message) -> None:
         text = (getattr(new_message, "text_content", None) or "").strip()
         if not text:
@@ -154,6 +171,7 @@ class EarthoraAgent(Agent):
         context.add_message(role="user", content=text)
         await self.update_chat_ctx(context)
         started = time.monotonic()
+        speech_scheduled = False
         try:
             reply = await self.bridge.turn(
                 self.context, text=text, turn_id=turn_id, language=self.language
@@ -174,10 +192,18 @@ class EarthoraAgent(Agent):
             speech_interrupted = speech_epoch != self.user_speech_epoch
             if not speech_interrupted:
                 speech = self.session.say(reply.text)
-                await speech
-                speech_interrupted = speech.interrupted or speech_epoch != self.user_speech_epoch
-            if (reply.end_session and not speech_interrupted) or self.turn_count >= self.max_turns:
-                self.end_call("completed" if reply.end_session else "turn_limit")
+                speech_scheduled = True
+                # SDK 1.3.12 waits for this hook before it can process the next
+                # completed utterance. Return as soon as validated speech is
+                # scheduled so final STT can interrupt queued/playing speech,
+                # even when the user's VAD onset preceded its playback.
+                if reply.end_session or self.turn_count >= self.max_turns:
+                    self._finish_after_speech(
+                        speech, speech_epoch=speech_epoch,
+                        reason="turn_limit" if self.turn_count >= self.max_turns else "completed",
+                    )
+            elif self.turn_count >= self.max_turns:
+                self.end_call("turn_limit")
         except asyncio.CancelledError:
             raise
         except Exception as error:
@@ -186,12 +212,16 @@ class EarthoraAgent(Agent):
             await self.events.send("error", message=message, turn_id=turn_id)
             if speech_epoch == self.user_speech_epoch:
                 try:
-                    await self.session.say(message)
+                    self.session.say(message)
+                    speech_scheduled = True
                 except Exception as speech_error:
                     logger.warning("Failure message unavailable (%s)", type(speech_error).__name__)
         finally:
-            logger.info("Earthora turn completed in %.3fs", time.monotonic() - started)
-            await self.events.send("agent_state", state="listening")
+            logger.info("Earthora turn prepared in %.3fs", time.monotonic() - started)
+            # SDK state changes cover scheduled speech. A premature custom
+            # listening event here would misrepresent still-pending playback.
+            if not speech_scheduled:
+                await self.events.send("agent_state", state="listening")
         # No local LLM fallback: it could bypass product grounding or checkout.
         raise StopResponse()
 
