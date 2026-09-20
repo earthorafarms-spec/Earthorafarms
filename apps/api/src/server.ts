@@ -59,6 +59,12 @@ export async function buildServer(): Promise<FastifyInstance> {
     reply.header('Content-Type', 'application/javascript').header('Cache-Control', 'public, max-age=300');
     return reply.send(js);
   });
+  const voiceClientPath = resolve(new URL('.', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'), '..', 'public', 'voice-client.js');
+  app.get('/voice-client.js', async (_req, reply) => {
+    const js = await readFile(voiceClientPath, 'utf8').catch(() => readFile(resolve('public/voice-client.js'), 'utf8'));
+    reply.header('Content-Type', 'application/javascript').header('Cache-Control', 'public, max-age=300');
+    return reply.send(js);
+  });
   app.get('/assistant/:channelKey', async (req, reply) => {
     const key = (req.params as { channelKey: string }).channelKey;
     reply.header('Content-Type', 'text/html');

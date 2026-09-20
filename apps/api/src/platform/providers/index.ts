@@ -2,11 +2,14 @@ import { config } from '../../config.js';
 import { openaiEmbedding, openaiLlm, openaiStt, openaiTts } from './openai.js';
 import { geminiEmbedding, geminiLlm, googleAvailable } from './google.js';
 import type { EmbeddingAdapter, LlmAdapter, SttAdapter, TtsAdapter } from './types.js';
+import { inVoiceScope } from './voiceScope.js';
+import { plymaxxVoiceLlm } from './plymaxx.js';
 
 export type ProviderName = 'openai' | 'gemini' | 'auto';
 
 /** Resolve the LLM for a channel/workflow. Default is OpenAI (works today); 'gemini' when the project is enabled. */
 export function getLlm(pref?: ProviderName): LlmAdapter {
+  if (inVoiceScope()) return plymaxxVoiceLlm;
   if (pref === 'gemini' && googleAvailable()) return geminiLlm;
   return openaiLlm;
 }

@@ -1,0 +1,3 @@
+# Keep deployable source portable and preserve the exact archived UniExl bytes.
+* text=auto eol=lf
+upstream/** -text

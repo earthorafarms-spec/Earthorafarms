@@ -7,6 +7,7 @@ import { getChannelByKey, publishedConfig } from './config.js';
 import { loadConversation, appendMessage, saveState } from '../engine/conversation.js';
 import { runTurn, type PersonaConfig } from '../engine/engine.js';
 import { tenantId } from '../kb/ingest.js';
+import { livekitConfigured } from './livekit.js';
 
 /**
  * Browser voicebot: the widget records a mic utterance and POSTs it here.
@@ -18,7 +19,7 @@ export async function voiceRoutes(app: FastifyInstance): Promise<void> {
     const ch = await getChannelByKey((req.params as any).channelKey);
     if (!ch || ch.type !== 'voice') throw notFound('Voice channel not found');
     const cfg = publishedConfig(ch);
-    return { name: cfg.name || 'Eva', greeting: cfg.greeting || 'Hi, how can I help?', voice: cfg.voice || 'shimmer', languages: ['en', 'hi', 'gu'] };
+    return { name: cfg.name || 'Eva', greeting: cfg.greeting || 'Hi, how can I help?', voice: livekitConfigured() ? 'Neha' : cfg.voice || 'shimmer', languages: ['en', 'hi', 'gu'], useLiveKit: livekitConfigured() };
   });
 
   app.post('/platform/voice/:channelKey/session', async (req) => {

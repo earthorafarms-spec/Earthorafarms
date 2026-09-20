@@ -213,33 +213,35 @@
     octx.globalAlpha = 1;
     raf = requestAnimationFrame(drawOrb);
   }
-  // The one control under the orb changes job with the turn. Crucially it
-  // stays usable when idle: a denied microphone or a missed utterance would
-  // otherwise be a dead end, with closing and reopening voice mode as the only
-  // way back.
-  var VSTATE_LABEL = {
-    listening: 'Stop and send',
-    thinking: 'Thinking…',
-    speaking: 'Speaking…',
-    idle: 'Start speaking',
-  };
+  // Same controls and layout; LiveKit owns continuous audio and turn detection.
+  var voiceConnection = null, voiceAbort = null, voiceLoad = null, voiceTurn = 0;
+  var voiceConversationId = null, playbackBlocked = false;
   function setVState(s, text) {
     orbState = s;
     vstate.textContent = s;
     if (text !== undefined) cap.textContent = text;
-    stopBtn.textContent = VSTATE_LABEL[s] || VSTATE_LABEL.idle;
-    stopBtn.disabled = s === 'thinking' || s === 'speaking';
+    stopBtn.textContent = playbackBlocked ? 'Play audio' : s === 'idle' ? 'Start speaking' : s === 'connecting' ? 'Connecting...' : 'End call';
+    stopBtn.disabled = s === 'connecting';
   }
-
-  var mediaRec = null, chunks = [], stream = null, audioCtx = null, analyser = null, dataArr = null, autoStop = null, turnId = 0;
-
-  micBtn.onclick = function () { openVoice(); };
-  panel.querySelector('.ea-voice-x').onclick = function () { closeVoice(); };
+  function loadVoiceClient() {
+    if (window.EarthoraVoice) return Promise.resolve();
+    if (!voiceLoad) voiceLoad = new Promise(function (resolve, reject) {
+      var tag = document.createElement('script');
+      tag.src = API + '/voice-client.js';
+      tag.onload = resolve;
+      tag.onerror = function () { voiceLoad = null; tag.remove(); reject(new Error('Voice could not load. Please try again.')); };
+      document.head.appendChild(tag);
+    });
+    return voiceLoad;
+  }
+  micBtn.onclick = openVoice;
+  panel.querySelector('.ea-voice-x').onclick = closeVoice;
   stopBtn.onclick = function () {
-    if (orbState === 'listening') finishRecording();
-    else startVoice(); // idle: recover from a denied mic or a missed utterance
+    if (playbackBlocked && voiceConnection) {
+      voiceConnection.resumeAudio().then(function () { playbackBlocked = false; setVState('listening', 'Listening... speak naturally.'); });
+    } else if (orbState === 'idle') startVoice();
+    else closeVoice();
   };
-
   function openVoice() {
     if (!cfg.voiceChannelKey) return;
     voicePane.classList.add('open');
@@ -252,90 +254,62 @@
     voicePane.classList.remove('open');
     micBtn.focus();
   }
-
-  function startVoice() {
-    if (!navigator.mediaDevices || !window.MediaRecorder) {
-      setVState('idle', 'Voice is not supported in this browser. You can still type your question.');
-      return;
-    }
-    setVState('listening', 'Listening… speak now, then press Stop and send.');
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (s) {
-      stream = s;
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      var src = audioCtx.createMediaStreamSource(s);
-      analyser = audioCtx.createAnalyser(); analyser.fftSize = 256;
-      dataArr = new Uint8Array(analyser.frequencyBinCount);
-      src.connect(analyser);
-      (function meter() {
-        if (!analyser) return;
-        analyser.getByteFrequencyData(dataArr);
-        var sum = 0; for (var i = 0; i < dataArr.length; i++) sum += dataArr[i];
-        level = Math.min(1, sum / dataArr.length / 90);
-        if (orbState === 'listening' || orbState === 'speaking') requestAnimationFrame(meter);
-      })();
-      chunks = [];
-      mediaRec = new MediaRecorder(s);
-      mediaRec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
-      mediaRec.onstop = sendVoice;
-      mediaRec.start();
-      // A turn is capped so a forgotten open mic cannot record indefinitely;
-      // the server also rejects clips longer than its own limit.
-      clearTimeout(autoStop);
-      autoStop = setTimeout(function () { finishRecording(); }, 12000);
-    }).catch(function () {
-      setVState('idle', 'Microphone permission was denied. You can still type your question.');
-    });
-  }
-
-  function finishRecording() {
-    clearTimeout(autoStop);
-    try { if (mediaRec && mediaRec.state === 'recording') mediaRec.stop(); } catch (e) { /* already stopped */ }
-  }
-
   function stopVoice() {
-    turnId++; // invalidate any in-flight reply so it cannot play after closing
-    clearTimeout(autoStop);
-    try { if (mediaRec && mediaRec.state === 'recording') mediaRec.stop(); } catch (e) {}
-    mediaRec = null;
-    if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
-    if (audioCtx) { try { audioCtx.close(); } catch (e) {} audioCtx = null; }
-    analyser = null;
+    voiceTurn++;
+    if (voiceAbort) { voiceAbort.abort(); voiceAbort = null; }
+    if (voiceConnection) { voiceConnection.disconnect(); voiceConnection = null; }
+    playbackBlocked = false; level = 0;
     if (raf !== null) { cancelAnimationFrame(raf); raf = null; }
     setVState('idle', '');
   }
-
-  function sendVoice() {
-    if (!chunks.length) { setVState('idle', 'I did not catch that. Press the mic to try again.'); return; }
-    var myTurn = ++turnId;
-    setVState('thinking', 'Thinking…'); level = 0;
-    var blob = new Blob(chunks, { type: 'audio/webm' });
-    chunks = [];
-    var fd = new FormData();
-    fd.append('audio', blob, 'a.webm');
-
-    fetch(API + '/api/platform/voice/turn?channelKey=' + encodeURIComponent(cfg.voiceChannelKey) + (convId ? '&conversationId=' + encodeURIComponent(convId) : ''), { method: 'POST', body: fd })
-      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
-      .then(function (j) {
-        if (myTurn !== turnId) return; // the user closed voice or started again
-        if (j.conversationId) convId = j.conversationId;
-        if (j.transcript) addMsg('u', j.transcript);
-        if (j.reply) { addMsg('a', j.reply); setVState('speaking', j.reply); }
-        if (!j.transcript && !j.reply) { setVState('idle', 'I did not catch that. Press the mic to try again.'); return; }
-        if (j.audioBase64) {
-          var au = new Audio('data:' + (j.audioMime || 'audio/mpeg') + ';base64,' + j.audioBase64);
-          au.onended = function () {
-            if (myTurn === turnId && voicePane.classList.contains('open')) startVoice();
-          };
-          au.play().catch(function () {
-            setVState('idle', 'Tap Stop and send to speak again.');
-          });
-        } else if (voicePane.classList.contains('open')) {
-          setTimeout(function () { if (myTurn === turnId) startVoice(); }, 600);
+  function startVoice() {
+    if (!navigator.mediaDevices) { setVState('idle', 'Voice is not supported in this browser. You can still type your question.'); return; }
+    if (voiceAbort) voiceAbort.abort();
+    var myTurn = ++voiceTurn;
+    voiceAbort = new AbortController();
+    playbackBlocked = false;
+    if (raf === null) drawOrb();
+    setVState('connecting', 'Connecting your voice call...');
+    loadVoiceClient().then(function () {
+      if (myTurn !== voiceTurn) return;
+      return window.EarthoraVoice.connect({
+        baseUrl: API, channelKey: cfg.voiceChannelKey, conversationId: voiceConversationId,
+        signal: voiceAbort.signal,
+        onLevel: function (value) { if (myTurn === voiceTurn) level = value; },
+        onEvent: function (event) {
+          if (myTurn !== voiceTurn) return;
+          if (event.type === 'connected') {
+            if (event.conversationId) voiceConversationId = event.conversationId;
+            setVState('listening', 'Listening... speak naturally.');
+          } else if (event.type === 'user_transcript') {
+            if (event.text && event.is_final !== false) addMsg('u', event.text);
+            setVState('thinking', 'Thinking...');
+          } else if (event.type === 'agent_reply_text') {
+            if (event.text) { addMsg('a', event.text); setVState('speaking', event.text); }
+          } else if (event.type === 'agent_state') {
+            var state = event.state === 'speaking' ? 'speaking' : event.state === 'thinking' ? 'thinking' : 'listening';
+            setVState(state, state === 'listening' ? 'Listening... speak naturally.' : undefined);
+          } else if (event.type === 'user_state' && event.state === 'speaking') {
+            setVState('listening', 'Listening...');
+          } else if (event.type === 'playback_blocked') {
+            playbackBlocked = true; setVState(orbState, 'Tap Play audio to hear the assistant.');
+          } else if (event.type === 'reconnecting') {
+            setVState('connecting', 'Reconnecting...');
+          } else if (event.type === 'call_end' || event.type === 'disconnected') {
+            stopVoice(); setVState('idle', 'Call ended. Tap Start speaking to reconnect.');
+          } else if (event.type === 'error') {
+            setVState('listening', event.message || 'I missed that. Please try again.');
+          }
         }
-      })
-      .catch(function () {
-        if (myTurn !== turnId) return;
-        setVState('idle', 'Sorry, I missed that. Press the mic to try again.');
       });
+    }).then(function (connection) {
+      if (!connection) return;
+      if (myTurn !== voiceTurn) { connection.disconnect(); return; }
+      voiceConnection = connection;
+    }).catch(function (error) {
+      if (myTurn !== voiceTurn || error.name === 'AbortError') return;
+      var message = error.name === 'NotAllowedError' ? 'Allow microphone access, then tap Start speaking.' : error.message || 'Voice could not connect. Please try again.';
+      stopVoice(); setVState('idle', message);
+    });
   }
 })();

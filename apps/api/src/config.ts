@@ -55,6 +55,15 @@ const schema = z.object({
   GOOGLE_CLOUD_PROJECT_ID: z.string().default(''),
   SARVAM_API_KEY: z.string().default(''),
 
+  // Earthora's private LiveKit control plane and self-hosted voice reasoning.
+  // These settings do not change the storefront chat or its embedding model.
+  VOICE_CONTROL_URL: z.union([z.string().url(), z.literal('')]).default(''),
+  EARTHORA_VOICE_INTERNAL_KEY: z.string().default(''),
+  VOICE_PHONE_CHANNEL_KEY: z.string().default(''),
+  AI_BASE_URL: z.union([z.string().url(), z.literal('')]).default(''),
+  AI_API_KEY: z.string().default(''),
+  AI_LLM_MODEL: z.string().default('qwen3.5:9b'),
+
   WHATSAPP_PROVIDER: z.enum(['meta', 'tata_omni', 'none']).default('none'),
   TATA_OMNI_API_BASE_URL: z.string().default('https://wb.omni.tatatelebusiness.com'),
   TATA_OMNI_ACCESS_TOKEN: z.string().default(''),

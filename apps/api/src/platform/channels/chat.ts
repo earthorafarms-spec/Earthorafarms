@@ -7,6 +7,7 @@ import { getChannel, getChannelByKey, publishedConfig } from './config.js';
 import { loadConversation, appendMessage, saveState } from '../engine/conversation.js';
 import { runTurn, type PersonaConfig } from '../engine/engine.js';
 import { tenantId } from '../kb/ingest.js';
+import { livekitConfigured } from './livekit.js';
 
 const sendSchema = z.object({ channelKey: z.string(), conversationId: z.string().nullish(), message: z.string().min(1).max(2000), contact: z.object({ phone: z.string().optional(), email: z.string().optional(), name: z.string().optional() }).optional() });
 
@@ -30,6 +31,7 @@ export async function chatChannelRoutes(app: FastifyInstance): Promise<void> {
       appearance: cfg.appearance || {},
       voiceEnabled: cfg.voiceEnabled !== false && Boolean(voiceChannelKey),
       voiceChannelKey,
+      useLiveKit: livekitConfigured(),
     };
   });
 
