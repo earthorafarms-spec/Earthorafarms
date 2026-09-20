@@ -12,9 +12,12 @@ def build_llm():
         raise ValueError("AI_BASE_URL and AI_API_KEY are required; no hosted fallback")
     return openai.LLM(
         model=os.getenv("AI_LLM_MODEL", "qwen3.5:9b"), base_url=base_url, api_key=key,
-        temperature=0.2, parallel_tool_calls=False, max_retries=0,
+        temperature=0, parallel_tool_calls=False, max_retries=0,
         extra_body={"max_tokens": 256, "think": False, "thinking": False,
-                    "chat_template_kwargs": {"enable_thinking": False}, "options": {"num_ctx": 8192}},
+                    "chat_template_kwargs": {"enable_thinking": False},
+                    # The installed Open WebUI OpenAI-to-Ollama converter
+                    # preserves native options but drops root temperature.
+                    "options": {"num_ctx": 8192, "temperature": 0}},
     )
 
 

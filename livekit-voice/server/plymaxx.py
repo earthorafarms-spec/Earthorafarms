@@ -12,7 +12,9 @@ import json
 import math
 import os
 import re
+import time
 import uuid
+import unicodedata
 import wave
 import weakref
 from dataclasses import replace
@@ -25,6 +27,7 @@ from livekit.agents import APIConnectionError, APIStatusError, APITimeoutError, 
 from livekit.agents.types import (
     DEFAULT_API_CONNECT_OPTIONS, NOT_GIVEN, APIConnectOptions, NotGivenOr,
 )
+from speech_pacing import SpeechPacingError, configured_speed, pace_pcm
 
 WHISPER_MODEL = "whisper-large-v3-turbo"
 GUJARATI_MODEL = "indic-conformer-600m-multilingual"
@@ -160,6 +163,26 @@ def _reported_language(payload: dict, text: str, fallback: str) -> str:
     return fallback if fallback != "auto" else "en"
 
 
+class UnrecognizedSpeech(APIConnectionError):
+    """Recognition stayed outside this application's languages after recovery."""
+
+
+def _unsupported_recognition(payload: dict, text: str) -> bool:
+    if any(character.isalpha() and not unicodedata.name(character, "").startswith(
+            ("LATIN", "DEVANAGARI", "GUJARATI")) for character in text):
+        return True
+    # Direct supported-script evidence wins over a contradictory language label.
+    if _DEVANAGARI_LETTERS.search(text) or _GUJARATI_LETTERS.search(text):
+        return False
+    reported = payload.get("language") or payload.get("detected_language")
+    if isinstance(reported, str) and reported.strip():
+        try:
+            _language(reported)
+        except ValueError:
+            return True
+    return False
+
+
 _GUJARATI_LETTERS = re.compile(r"[\u0a85-\u0ab9\u0ad0\u0ae0-\u0ae1]")
 _DEVANAGARI_LETTERS = re.compile(r"[\u0904-\u0939\u0958-\u0961]")
 _GUJARATI_PRONOUN_CUES = frozenset({
@@ -201,6 +224,7 @@ class PlymaxxSTT(stt.STT):
     ) -> None:
         super().__init__(capabilities=stt.STTCapabilities(streaming=False, interim_results=False))
         self._language = _language(language, auto=True)
+        self._language_hint = self._language if self._language != "auto" else "en"
         self._http = _PlymaxxHTTP(http_session)
         self._timeout = float(os.getenv("VOICE_STT_TIMEOUT_MS", "20000")) / 1000
         self._redetect_gujarati = (os.getenv("AI_STT_REDECODE_GUJARATI", "0") == "1"
@@ -214,16 +238,25 @@ class PlymaxxSTT(stt.STT):
     def provider(self) -> str:
         return "Plymaxx"
 
-    def update_options(self, *, language: str) -> None:
+    def update_options(self, *, language: str, language_hint: str | None = None) -> None:
         self._language = _language(language, auto=True)
+        if language_hint is not None:
+            self._language_hint = _language(language_hint)
+        elif self._language != "auto":
+            self._language_hint = self._language
 
     async def recognize(
         self, buffer: utils.AudioBuffer, *, language: NotGivenOr[str] = NOT_GIVEN,
         conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS,
     ) -> stt.SpeechEvent:
         # The HTTP layer alone retries 429 once. SDK retries would multiply load.
-        return await super().recognize(buffer, language=language,
-                                       conn_options=replace(conn_options, max_retry=0))
+        try:
+            # Language recovery shares the original request deadline.
+            async with asyncio.timeout(self._timeout):
+                return await super().recognize(buffer, language=language,
+                                               conn_options=replace(conn_options, max_retry=0))
+        except TimeoutError as exc:
+            raise APITimeoutError("Speech recognition timed out", retryable=False) from exc
 
     async def _transcribe(self, audio: bytes, language: str) -> dict:
         def body() -> dict:
@@ -252,10 +285,28 @@ class PlymaxxSTT(stt.STT):
             return stt.SpeechEvent(type=stt.SpeechEventType.FINAL_TRANSCRIPT, alternatives=[])
         payload = await self._transcribe(audio, selected)
         text = payload["text"].strip()
+        recovered_language = False
+        if selected == "auto" and text and _unsupported_recognition(payload, text):
+            # Unrestricted auto detection mistook actual short calls for German
+            # and Russian. Re-recognize the SAME audio with the conversation's
+            # supported language; never translate or rewrite a guessed transcript.
+            payload = await self._transcribe(audio, self._language_hint)
+            text = payload["text"].strip()
+            recovered_language = True
+            invalid_gujarati = self._language_hint == "gu" and (not _GUJARATI_LETTERS.search(text) or bool(_DEVANAGARI_LETTERS.search(text)))
+            if not text or _unsupported_recognition(payload, text) or invalid_gujarati:
+                # A final recognition miss is recoverable at the conversation
+                # level, not an STT transport failure. Raising here would make
+                # SDK 1.3.12 close AgentSession and kill the VAD adapter loop.
+                self.emit("error", stt.STTError(
+                    timestamp=time.time(), label=self._label, recoverable=True,
+                    error=UnrecognizedSpeech("Please repeat that in English, Hindi or Gujarati.", retryable=False),
+                ))
+                return stt.SpeechEvent(type=stt.SpeechEventType.FINAL_TRANSCRIPT, alternatives=[])
         detected = _reported_language(payload, text, selected)
         # Known Gujarati never pays for Whisper first. Auto re-decode is an
         # explicit opt-in, at most once, because it doubles GPU recognition work.
-        if self._redetect_gujarati and selected == "auto":
+        if self._redetect_gujarati and selected == "auto" and not recovered_language:
             gujarati_script = bool(_GUJARATI_LETTERS.search(text))
             suspect_gujarati = detected == "gu" or gujarati_script or (detected == "hi" and _gujarati_phonetic_cues(text))
             if suspect_gujarati:
@@ -270,6 +321,8 @@ class PlymaxxSTT(stt.STT):
                     # Direct script evidence is stronger than a contradictory
                     # Whisper language label; no transcript rewriting occurs.
                     detected = "gu"
+        if text and detected in {"en", "hi", "gu"}:
+            self._language_hint = detected
         return stt.SpeechEvent(
             type=stt.SpeechEventType.FINAL_TRANSCRIPT, request_id=uuid.uuid4().hex,
             alternatives=[stt.SpeechData(text=text, language=detected, end_time=duration,
@@ -317,6 +370,7 @@ class PlymaxxTTS(tts.TTS):
                          sample_rate=TTS_SAMPLE_RATE, num_channels=1)
         self._language = _language(language)
         self._voice = voice
+        self._speed = configured_speed()
         self._http = _PlymaxxHTTP(http_session)
         self._timeout = float(os.getenv("AI_TTS_COMPLETED_TIMEOUT_MS", "90000")) / 1000
         self._streams: weakref.WeakSet = weakref.WeakSet()
@@ -363,7 +417,11 @@ class _PlymaxxSpeech(tts.ChunkedStream):
             data = await self._provider._http.request(
                 "/audio/speech", lambda: {"json": payload}, timeout=self._provider._timeout,
             )
-            output_emitter.push(_wav_pcm(data))
+            try:
+                pcm = await pace_pcm(_wav_pcm(data), speed=self._provider._speed)
+            except SpeechPacingError as exc:
+                raise APIConnectionError("Speech pacing failed", retryable=False) from exc
+            output_emitter.push(pcm)
             if index < len(chunks) - 1:
                 output_emitter.flush()
             # Cancellation propagates into the HTTP context; no background

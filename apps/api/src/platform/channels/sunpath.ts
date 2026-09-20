@@ -3,7 +3,6 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { config } from '../../config.js';
-import { sql } from '../../db/client.js';
 import { badRequest, notFound, unauthorized } from '../../lib/errors.js';
 import { getChannelByKey, publishedConfig } from './config.js';
 import { appendMessage, loadConversation, saveState } from '../engine/conversation.js';
@@ -11,6 +10,7 @@ import { BUILTIN_MAP, toolDefsFor } from '../engine/functions.js';
 import { withVoiceScope } from '../providers/voiceScope.js';
 import { VoiceTurnQueue } from './voiceTurns.js';
 import { listProducts } from '../../modules/commerce/pricing.js';
+import { approvedVoiceProductKnowledge, indexedVoiceKnowledge, searchVoiceKnowledge, voiceCatalogIds } from './sunpathKnowledge.js';
 
 const identifier = z.string().min(1).max(180).regex(/^[a-zA-Z0-9:_-]+$/);
 const common = z.object({ session_id: identifier, channel_key: z.string().min(1).max(180), channel: z.enum(['web', 'phone']) });
@@ -86,11 +86,11 @@ export async function sunpathRoutes(app: FastifyInstance): Promise<void> {
     const { ch, conversation: conv, channelType } = await resolve(parsed.data);
     const cfg = publishedConfig(ch);
     const catalog = await withVoiceScope(ch.tenant_id, () => BUILTIN_MAP.get('list_products')!.run({}, { conversationId: conv.id, channelType, state: conv.state, contact: conv.contact }));
-    const knowledge = await sql<{ title: string; text: string }[]>`
-      SELECT d.title, left(c.content, 1400) AS text FROM kb_chunks c JOIN kb_documents d ON d.id = c.document_id
-      WHERE c.tenant_id = ${ch.tenant_id} AND d.tenant_id = ${ch.tenant_id} AND c.visibility = 'public' AND d.status = 'indexed'
-        AND (d.effective_from IS NULL OR d.effective_from <= now()) AND (d.effective_until IS NULL OR d.effective_until > now())
-      ORDER BY d.authority ASC, d.id, c.id LIMIT 20`;
+    const [canonical, indexed] = await Promise.all([
+      approvedVoiceProductKnowledge(ch.tenant_id, voiceCatalogIds(catalog.ok ? catalog.data : [])),
+      indexedVoiceKnowledge(ch.tenant_id),
+    ]);
+    const knowledge = [...canonical, ...indexed];
     return { persona: { ...(cfg.persona || {}), name: cfg.name || 'Eva' }, language: conv.state.language, history: conv.history.slice(-8),
       catalog: catalog.ok ? catalog.data : [], knowledge, tools: nativeToolDefinitions(), cart: conv.state.cart, checkout: conv.state.checkout };
   });
@@ -104,6 +104,16 @@ export async function sunpathRoutes(app: FastifyInstance): Promise<void> {
       const fn = BUILTIN_MAP.get(data.name);
       if (!fn) throw badRequest('Unsupported voice tool');
       validateArguments(fn.parameters, data.arguments);
+      if (data.name === 'search_knowledge') {
+        const products = await withVoiceScope(ch.tenant_id, () => listProducts());
+        const activeIds = products.filter(product => product.status === 'active').map(product => product.id);
+        const requestedId = data.arguments.productId;
+        if (requestedId !== undefined && !activeIds.includes(String(requestedId))) {
+          return { ok: false, message: 'Unknown product ID. Use an exact current catalogue id for product knowledge.' };
+        }
+        const ids = requestedId === undefined ? activeIds : [String(requestedId)];
+        return { ok: true, data: await withVoiceScope(ch.tenant_id, () => searchVoiceKnowledge(ch.tenant_id, ids, String(data.arguments.query))) };
+      }
       if (data.name === 'capture_callback') {
         const normalized = normalizeCallbackArguments(data.arguments, conv);
         if (!normalized.ok) return normalized;

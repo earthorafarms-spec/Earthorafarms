@@ -6,11 +6,13 @@ vi.mock('../../db/client.js', () => ({ sql: vi.fn() }));
 vi.mock('./config.js', () => ({ getChannelByKey: vi.fn(), publishedConfig: (ch: any) => ch.published_config }));
 vi.mock('../engine/conversation.js', () => ({ loadConversation: vi.fn(), appendMessage: vi.fn(), saveState: vi.fn() }));
 vi.mock('../../modules/commerce/pricing.js', () => ({ listProducts: vi.fn() }));
+vi.mock('../kb/retrieve.js', () => ({ retrieve: vi.fn() }));
 const run = vi.hoisted(() => vi.fn());
 vi.mock('../engine/functions.js', () => ({
   BUILTIN_MAP: new Map([
     ['list_products', { name: 'list_products', run, parameters: { type: 'object', properties: { query: { type: 'string' } } } }],
     ['capture_callback', { name: 'capture_callback', run, parameters: { type: 'object', properties: { reason: { type: 'string' }, name: { type: 'string' }, phone: { type: 'string' } }, required: ['reason'] } }],
+    ['search_knowledge', { name: 'search_knowledge', run, parameters: { type: 'object', properties: { query: { type: 'string' }, productId: { type: 'string' } }, required: ['query'] } }],
     ...['add_to_cart', 'update_cart'].map(name => [name, { name, run, parameters: { type: 'object', properties: { productId: { type: 'string' }, quantity: { type: 'integer', minimum: name === 'add_to_cart' ? 1 : 0 } }, required: ['productId', 'quantity'] } }] as const),
   ]),
   toolDefsFor: (names: string[]) => names.map(name => ({ name })),
@@ -22,6 +24,7 @@ import { getChannelByKey } from './config.js';
 import { appendMessage, loadConversation, saveState } from '../engine/conversation.js';
 import { inVoiceScope } from '../providers/voiceScope.js';
 import { listProducts } from '../../modules/commerce/pricing.js';
+import { retrieve } from '../kb/retrieve.js';
 
 const common = { session_id: 'voice_test', channel_key: 'pk_voice', channel: 'web' };
 const headers = { authorization: 'Bearer test-key' };
@@ -32,8 +35,9 @@ beforeEach(() => {
   vi.mocked(listProducts).mockResolvedValue([{ id: 'product1', name: 'Product', slug: 'product', status: 'active' }] as any);
   vi.mocked(getChannelByKey).mockResolvedValue({ id: 'channel1', tenant_id: 'tenant1', type: 'voice', enabled: true, public_key: 'pk_voice', published_config: { name: 'Eva' } } as any);
   vi.mocked(loadConversation).mockResolvedValue({ id: 'conv1', history: [], contact: {}, state: { slots: {}, cart: [], checkout: { phone: '9876543210' }, summary: '', language: 'en' } });
-  vi.mocked(sql).mockResolvedValue([{ title: 'Approved info', text: 'Earthora product information.' }] as any);
-  run.mockImplementation(async () => { expect(inVoiceScope()).toBe(true); return { ok: true, data: [{ name: 'Product', price: 10 }] }; });
+  vi.mocked(sql).mockImplementation(((strings: TemplateStringsArray) => Promise.resolve(strings.join('').includes('FROM product_knowledge') ? [] : [{ title: 'Approved info', text: 'Earthora product information.' }])) as any);
+  vi.mocked(retrieve).mockResolvedValue([]);
+  run.mockImplementation(async () => { expect(inVoiceScope()).toBe(true); return { ok: true, data: [{ id: 'product1', name: 'Product', price: 10 }] }; });
 });
 afterEach(async () => { await Promise.all(servers.splice(0).map(app => app.close())); });
 
@@ -47,7 +51,7 @@ describe('SunPath-style worker data boundary', () => {
     const app = await server();
     const res = await app.inject({ method: 'POST', url: '/platform/voice/internal/context', headers, payload: common });
     expect(res.statusCode).toBe(200); expect(res.json()).toMatchObject({ persona: { name: 'Eva' }, catalog: [{ price: 10 }], knowledge: [{ title: 'Approved info' }] });
-    const query = vi.mocked(sql).mock.calls[0][0].join(' ');
+    const query = vi.mocked(sql).mock.calls.find(([strings]) => strings.join('').includes('FROM kb_chunks'))![0].join(' ');
     expect(query).toContain("c.visibility = 'public'"); expect(query).toContain("d.status = 'indexed'"); expect(query).toContain('effective_until'); expect(query).toContain('c.tenant_id');
     expect(res.body).not.toContain('test-key');
   });
@@ -58,6 +62,28 @@ describe('SunPath-style worker data boundary', () => {
     vi.mocked(getChannelByKey).mockResolvedValue({ enabled: true, type: 'voice', public_key: 'other' } as any);
     expect((await app.inject({ method: 'POST', url: '/platform/voice/internal/context', headers, payload: { ...common, channel: 'phone' } })).statusCode).toBe(404);
     expect(loadConversation).not.toHaveBeenCalled();
+  });
+  it('puts complete approved product records before copied documents and retains provenance', async () => {
+    const canonical = { title: 'Product', text: 'Each tablet contains 500 mg of Moringa Leaf. ' + 'Approved detail. '.repeat(100), source: 'product_knowledge', source_id: 'fact1', product_id: 'product1', category: 'ingredients', question: null, locale: 'en-IN', version: 2, status: 'approved', approved_at: '2026-09-09T00:00:00Z', effective_from: '2026-09-09T00:00:00Z', effective_until: null };
+    const indexed = { title: 'Website FAQ', text: 'Copied website wording.', source: 'kb_document', source_id: 'doc1', chunk_id: 'chunk1', product_ids: ['product1'], authority: 3, version: 1, status: 'indexed' };
+    vi.mocked(sql).mockImplementation(((strings: TemplateStringsArray) => Promise.resolve(strings.join('').includes('FROM product_knowledge') ? [canonical] : [indexed])) as any);
+    const app = await server();
+    const res = await app.inject({ method: 'POST', url: '/platform/voice/internal/context', headers, payload: common });
+    expect(res.statusCode).toBe(200); expect(res.json().knowledge).toEqual([canonical, indexed]);
+    expect(res.json().knowledge[0].text.length).toBeGreaterThan(1400);
+  });
+  it('uses the same approved evidence for native search without executing the shared tool or saving state', async () => {
+    const canonical = { title: 'Product', text: 'Each tablet contains 500 mg of Moringa Leaf.', source: 'product_knowledge', source_id: 'fact1', product_id: 'product1', category: 'ingredients', version: 1, status: 'approved' };
+    vi.mocked(sql).mockResolvedValue([canonical] as any);
+    vi.mocked(retrieve).mockImplementation(async () => { expect(inVoiceScope()).toBe(true); return []; });
+    const app = await server();
+    const request = { method: 'POST' as const, url: '/platform/voice/internal/tool', headers, payload: { ...common, call_id: 'search1', name: 'search_knowledge', arguments: { query: 'Product ingredients', productId: 'product1' } } };
+    const res = await app.inject(request);
+    expect(res.statusCode).toBe(200); expect(res.json()).toEqual({ ok: true, data: [canonical] });
+    await app.inject(request);
+    expect(retrieve).toHaveBeenCalledTimes(1); expect(run).not.toHaveBeenCalled(); expect(saveState).not.toHaveBeenCalled();
+    const unknown = await app.inject({ ...request, payload: { ...request.payload, call_id: 'search2', arguments: { query: 'ingredients', productId: 'powder-not-in-current-catalog' } } });
+    expect(unknown.json().ok).toBe(false); expect(retrieve).toHaveBeenCalledTimes(1);
   });
   it('executes tools in local-only voice scope and deduplicates callbacks', async () => {
     const app = await server();

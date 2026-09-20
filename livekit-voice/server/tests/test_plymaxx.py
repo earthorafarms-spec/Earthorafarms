@@ -22,6 +22,7 @@ def configuration(monkeypatch):
     monkeypatch.setenv("AI_BASE_URL", "https://speech.invalid/v1")
     monkeypatch.setenv("VOICE_STT_TIMEOUT_MS", "20000")
     monkeypatch.setenv("AI_TTS_COMPLETED_TIMEOUT_MS", "90000")
+    monkeypatch.setenv("VOICE_TTS_SPEED", "1")
     monkeypatch.delenv("AI_STT_REDECODE_GUJARATI", raising=False)
 
 
@@ -131,6 +132,108 @@ async def test_stt_auto_gujarati_has_no_extra_decode_by_default():
     event = await provider.recognize(audio())
     assert event.alternatives[0].language == "gu"
     assert len(session.calls) == 1
+
+
+@pytest.mark.parametrize("first", [
+    {"text": "Aber die Lerft, oder?", "language": "de"},
+    {"text": "Денуэс пик бюджраты.", "language": "ru"},
+    {"text": "Денуэс пик бюджраты."},
+])
+@pytest.mark.asyncio
+async def test_unsupported_auto_language_redecodes_same_audio_once_with_conversation_hint(first):
+    corrected = "क्या आप गुजराती बोल सकते हैं?"
+    session = Session(Response(json.dumps(first).encode()),
+                      Response(json.dumps({"text": corrected, "language": "hi"}).encode()))
+    provider = p.PlymaxxSTT(http_session=session, redetect_gujarati=True)
+    provider.update_options(language="auto", language_hint="hi")
+    event = await provider.recognize(audio())
+    assert event.alternatives[0].text == corrected
+    assert event.alternatives[0].language == "hi"
+    first_call, recovery = map(form_fields, session.calls)
+    assert first_call["language"] == "auto" and recovery["language"] == "hi"
+    assert first_call["file"] == recovery["file"]
+
+
+@pytest.mark.asyncio
+async def test_language_recovery_uses_indic_directly_after_gujarati_switch_without_third_call():
+    session = Session(Response(b'{"text":"unusable","language":"de"}'),
+                      Response(json.dumps({"text":"મને મદદ જોઈએ છે", "language":"gu"}).encode()))
+    provider = p.PlymaxxSTT(http_session=session, redetect_gujarati=True)
+    provider.update_options(language="auto", language_hint="gu")
+    event = await provider.recognize(audio())
+    assert event.alternatives[0].language == "gu"
+    assert [form_fields(call)["model"] for call in session.calls] == [p.WHISPER_MODEL, p.GUJARATI_MODEL]
+
+
+@pytest.mark.parametrize("retry", [{"text":"", "language":"en"}, {"text":"Да", "language":"en"}, {"text":"Ja", "language":"de"}])
+@pytest.mark.asyncio
+async def test_failed_language_recovery_requests_repeat_instead_of_publishing_a_false_transcript(retry):
+    session = Session(Response(b'{"text":"Ja","language":"de"}'), Response(json.dumps(retry).encode()),
+                      Response(b'{"text":"Please help me","language":"en"}'))
+    provider = p.PlymaxxSTT(http_session=session)
+    errors = []
+    provider.on("error", errors.append)
+    event = await provider.recognize(audio())
+    assert event.type == p.stt.SpeechEventType.FINAL_TRANSCRIPT and not event.alternatives
+    assert len(errors) == 1 and errors[0].recoverable
+    assert isinstance(errors[0].error, p.UnrecognizedSpeech)
+    assert len(session.calls) == 2
+    # The next VAD utterance can reuse the provider normally; no exception
+    # escaped to terminate StreamAdapterWrapper's recognition loop.
+    next_event = await provider.recognize(audio())
+    assert next_event.alternatives[0].text == "Please help me"
+    assert len(session.calls) == 3 and len(errors) == 1
+
+
+@pytest.mark.parametrize("text", ["Hello there", "मुझे मदद चाहिए", "૧૨૩", "મને मदद જોઈએ"])
+@pytest.mark.asyncio
+async def test_gujarati_hint_recovery_requires_actual_gujarati_letters_without_hindi(text):
+    session = Session(Response(b'{"text":"Ja","language":"de"}'),
+                      Response(json.dumps({"text": text, "language": "gu"}).encode()))
+    provider = p.PlymaxxSTT(http_session=session)
+    provider.update_options(language="auto", language_hint="gu")
+    errors = []
+    provider.on("error", errors.append)
+    event = await provider.recognize(audio())
+    assert not event.alternatives and len(session.calls) == 2
+    assert len(errors) == 1 and errors[0].recoverable
+    assert isinstance(errors[0].error, p.UnrecognizedSpeech)
+
+
+@pytest.mark.parametrize("text", ["Ja १२३", "Ja ૧૨૩", "Ja ।"])
+@pytest.mark.asyncio
+async def test_native_digits_or_punctuation_do_not_override_foreign_language_label(text):
+    session = Session(Response(json.dumps({"text": text, "language": "de"}).encode()),
+                      Response(b'{"text":"Please help me","language":"en"}'))
+    event = await p.PlymaxxSTT(http_session=session).recognize(audio())
+    assert len(session.calls) == 2
+    assert event.alternatives[0].text == "Please help me"
+
+
+@pytest.mark.asyncio
+async def test_supported_language_switch_does_not_get_forced_to_conversation_hint():
+    session = Session(Response(b'{"text":"Can you speak English?","language":"en"}'))
+    provider = p.PlymaxxSTT(http_session=session)
+    provider.update_options(language="auto", language_hint="gu")
+    event = await provider.recognize(audio())
+    assert event.alternatives[0].language == "en" and len(session.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_supported_script_overrides_wrong_foreign_language_label_without_recovery():
+    session = Session(Response(json.dumps({"text":"मुझे मदद चाहिए", "language":"ru"}).encode()))
+    event = await p.PlymaxxSTT(http_session=session).recognize(audio())
+    assert event.alternatives[0].language == "hi" and len(session.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_language_recovery_shares_original_timeout(monkeypatch):
+    monkeypatch.setenv("VOICE_STT_TIMEOUT_MS", "20")
+    session = Session(Response(b'{"text":"Ja","language":"de"}'),
+                      Response(b'{"text":"hello","language":"en"}', blocker=asyncio.Event()))
+    with pytest.raises(APITimeoutError):
+        await p.PlymaxxSTT(http_session=session).recognize(audio())
+    assert len(session.calls) == 2
 
 
 @pytest.mark.asyncio
@@ -256,6 +359,41 @@ async def test_tts_same_neha_voice_all_languages_and_correct_audio(language):
     payload = session.calls[0][1]["json"]
     assert payload == {"model": "indic-parler-tts", "voice": "Neha", "language": language,
                        "input": "A short answer.", "response_format": "wav"}
+
+
+@pytest.mark.asyncio
+async def test_tts_paces_pcm_before_publishing_without_changing_voice(monkeypatch):
+    monkeypatch.setenv("VOICE_TTS_SPEED", "1.2")
+    observed = []
+
+    async def pace(pcm, *, speed):
+        observed.append((pcm, speed))
+        return pcm[:4410 * 2]
+
+    monkeypatch.setattr(p, "pace_pcm", pace)
+    session = Session(Response(wav_bytes(count=8820)))
+    provider = p.PlymaxxTTS(language="gu", http_session=session)
+    async with provider.synthesize("તમે કેમ છો?") as stream:
+        frames = [event.frame async for event in stream]
+    assert len(observed) == 1 and observed[0][1] == 1.2
+    assert len(observed[0][0]) == 8820 * 2
+    assert sum(frame.samples_per_channel for frame in frames) == 4410
+    assert session.calls[0][1]["json"]["voice"] == "Neha"
+    assert "speed" not in session.calls[0][1]["json"]
+
+
+@pytest.mark.asyncio
+async def test_tts_pacing_failure_has_no_slow_audio_or_sdk_retry(monkeypatch):
+    async def fail(pcm, *, speed):
+        raise p.SpeechPacingError("Speech tempo processing failed")
+
+    monkeypatch.setattr(p, "pace_pcm", fail)
+    session = Session(Response(wav_bytes()))
+    provider = p.PlymaxxTTS(http_session=session)
+    with pytest.raises(APIConnectionError, match="Speech pacing failed"):
+        async with provider.synthesize("Hello", conn_options=APIConnectOptions(max_retry=8)) as stream:
+            assert not [event async for event in stream]
+    assert len(session.calls) == 1
 
 
 @pytest.mark.asyncio

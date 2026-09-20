@@ -57,6 +57,18 @@ and verified in the intended environment.
 
 ## Project map
 
+### Current voice path (20 September 2026)
+
+For Earthora web/phone voice, `livekit-voice/` is the active MSH/Sun Pathology
+adaptation with GPU-only inference. Its runtime guide and `SUNPATH-DEPLOYMENT.md`
+supersede the historical Render voice map below. The active voice API reads the
+current VPS PostgreSQL catalogue and approved product knowledge. Legacy Supabase
+and Render material may be used as a knowledge reference when requested; do not
+restore that media architecture or import its prompts as new approved facts.
+See `livekit-voice/verification/sunpath/20260920-naturalness-and-knowledge.md` for
+the latest deployment and verification evidence. Other channels retain their
+existing contracts; this voice update does not authorize changing them.
+
 - `src/`: React 19, TypeScript, Vite, Tailwind storefront and the developer,
   SUN/Earthora, and KACC admin surfaces.
 - `supabase/`: website/agent schemas, incremental migrations, and Edge Functions

@@ -433,3 +433,92 @@ def test_conflicting_directions_are_explained_before_any_inference_or_audio(monk
         assert bridge.records[-1]["text"] == result[0]
         assert not any(kind == "error" for kind, _ in events.sent)
     asyncio.run(exercise())
+
+
+def test_unrecognized_speech_clarifies_once_per_utterance_without_retrying_tts_errors():
+    async def exercise():
+        agent, events, bridge, closed = make_agent()
+        failure = agent_module.UnrecognizedSpeech("synthetic unsupported speech", retryable=False)
+        assert agent.handle_recognition_error(SimpleNamespace(error=failure))
+        assert agent.handle_recognition_error(failure)
+        await asyncio.gather(*tuple(events.tasks))
+        assert [text for text, _ in agent.test_session.speeches] == [agent_module.COPY["en"]["clarify"]]
+        assert not agent.handle_recognition_error(RuntimeError("synthetic TTS error"))
+        assert not closed and not bridge.records
+        agent.user_started_speaking()
+        assert agent.handle_recognition_error(failure)
+        await asyncio.gather(*tuple(events.tasks))
+        assert len(agent.test_session.speeches) == 2
+        for _, speech in agent.test_session.speeches:
+            speech.finish()
+    asyncio.run(exercise())
+
+
+def test_later_speech_cancels_queued_recognition_clarification():
+    async def exercise():
+        agent, events, bridge, closed = make_agent()
+        assert agent.handle_recognition_error(agent_module.UnrecognizedSpeech("synthetic", retryable=False))
+        agent.user_started_speaking()
+        await asyncio.gather(*tuple(events.tasks))
+        assert not agent.test_session.speeches
+    asyncio.run(exercise())
+
+
+def test_installed_sdk_keeps_session_open_for_recoverable_recognition_miss():
+    from livekit.agents import AgentSession, APIConnectionError, stt
+    async def exercise():
+        agent, events, bridge, closed = make_agent()
+        sdk_session = AgentSession()
+        error = stt.STTError(timestamp=0, label="synthetic", recoverable=True,
+                             error=agent_module.UnrecognizedSpeech("synthetic unsupported speech", retryable=False))
+        # This is the actual installed 1.3.12 error policy, not a copied stub
+        # or a monkeypatch. AgentActivity emits to our handler before this call.
+        assert agent.handle_recognition_error(error)
+        sdk_session._on_error(error)
+        assert sdk_session._closing_task is None
+        await asyncio.gather(*tuple(events.tasks))
+        assert len(agent.test_session.speeches) == 1 and not closed
+        agent.test_session.speeches[0][1].finish()
+        ordinary = stt.STTError(timestamp=0, label="synthetic", recoverable=False,
+                                error=APIConnectionError("ordinary transport failure", retryable=False))
+        assert not agent.handle_recognition_error(ordinary)
+        assert not ordinary.recoverable
+        await sdk_session.aclose()
+    asyncio.run(exercise())
+
+
+def test_current_explicit_language_sets_hint_without_disabling_auto_stt():
+    async def exercise():
+        agent, events, bridge, closed = make_agent()
+        options = []
+        agent.stt_provider = SimpleNamespace(update_options=lambda **kwargs: options.append(kwargs))
+        await completed_turn(agent, "कैन यू स्पीक गुजराती")
+        assert agent.turn.language == "gu"
+        assert options == [{"language": "auto", "language_hint": "gu"}]
+    asyncio.run(exercise())
+
+
+@pytest.mark.parametrize("question,answer", [
+    ("What is your delivery policy?", "Orders are delivered across India."),
+    ("How do I use checkout?", "I can help you review your cart before checkout."),
+    ("મારે આ લેવું છે.", "તમને કેટલી બોટલ જોઈએ છે?"),
+])
+def test_non_dosage_intent_reaches_native_model_despite_unrelated_dose_conflict(monkeypatch, question, answer):
+    async def exercise():
+        agent, events, bridge, closed = make_agent()
+        await completed_turn(agent, question)
+        agent.turn.data["knowledge"] = [
+            {"title": "Sample", "text": "Take 1 tablet daily."},
+            {"title": "Sample FAQ", "text": "Take 4 tablets daily."},
+            {"title": "Shipping", "text": "Orders are delivered across India. Free shipping."},
+        ]
+        invoked = []
+        async def model(*args):
+            invoked.append(True)
+            yield answer
+        monkeypatch.setattr(Agent.default, "llm_node", model)
+        ctx = llm.ChatContext()
+        ctx.add_message(role="user", content=question)
+        result = [chunk async for chunk in agent.llm_node(ctx, [], None)]
+        assert invoked and result == [answer]
+    asyncio.run(exercise())

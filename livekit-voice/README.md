@@ -34,6 +34,15 @@ tokens/audio. LiveKit supplies continuous transport, turn detection and
 interruptions. Synthesizing the first phrase still takes time; this deployment
 must not be described as zero-latency inference.
 
+`VOICE_TTS_SPEED=1.20` applies the same pitch-preserving tempo adjustment to
+Neha's completed audio on web and phone. The Earthora-only helper uses local
+FFmpeg, keeps mono PCM16 at 44,100 Hz, and cancels processing when interrupted.
+Values from `1.0` through `1.4` are accepted; `1.0` bypasses processing exactly.
+The setting does not change the named voice, GPU generation defaults or model
+streaming capability. Long pauses are retained to avoid cutting quiet speech.
+Synthetic before/after clips and the reproducible CPU-only measurements are in
+[verification/sunpath/pacing](verification/sunpath/pacing/README.md).
+
 SunPath's streaming-word interruption threshold assumed interim STT results. Here it
 is configurable and defaults to zero words with a 0.5-second VAD guard, allowing
 barge-in before completed-utterance recognition finishes. Confirmed interruption
@@ -44,7 +53,7 @@ events clear the phone's playback buffer.
 Earthora VPS: `187.52.121.146`.
 
 - Active immutable voice release: read `/opt/earthora/SUNPATH_VOICE_ACTIVE`
-- API release source: `/opt/earthora/releases/livekit-api-7e6c7675be30`
+- API release source: `/opt/earthora/releases/knowledge-api-625dc2a12bc8`
 - Existing API compose/environment: `/opt/earthora/infra`
 - Public signaling: `wss://earthora.srv1915512.hstgr.cloud/livekit`
 - Public phone bridge: `wss://earthora.srv1915512.hstgr.cloud/ws/voice/smartflo`
@@ -112,3 +121,18 @@ Normal speech is scheduled without waiting for all playback inside LiveKit's
 completed-turn callback. This allows the next completed utterance to interrupt
 an earlier reply promptly. Terminal replies still finish before the call closes,
 with interruption and stale-response checks retained.
+
+Native voice context and search now carry the complete approved product records,
+including product/category, question, version and effective dates. For the same
+product and attribute these take precedence over copied website passages. This
+preserves tablet strength and directions, while keeping conflicting active
+approved records unresolved. The nine current tablet records were compared with
+the legacy bot's configured Supabase source and matched exactly; the old Render
+voice implementation was not restored.
+
+Knowledge is selected for the current question before prompt budgeting. Language
+changes receive a short acknowledgement; purchase intent asks for missing quantity
+without becoming dosage advice. Unknown dispatch calendars are left unconfirmed.
+Unsupported STT language results are decoded once more from the same audio using
+the conversation language, then request repetition if still unusable. A recognition
+miss remains recoverable so the next utterance can continue the session.

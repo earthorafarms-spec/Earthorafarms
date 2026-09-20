@@ -27,7 +27,11 @@ from livekit.plugins.turn_detector.multilingual import MultilingualModel
 from earthora_bridge import VoiceContext
 from sunpath_bridge import SunPathBridge
 from sunpath_config import build_llm, build_stt, build_tts
-from sunpath_runtime import (COPY, TurnState, bounded_reply, detect_language, instructions,
+from plymaxx import UnrecognizedSpeech
+from conversation_controls import (DISPATCH_UNKNOWN, dispatch_schedule_missing, language_only_reply, policy_reply,
+                                   trim_unsolicited_followup, turn_guidance)
+from source_fact_localizations import approved_fact_reply
+from sunpath_runtime import (COPY, TurnState, bounded_reply, detect_language, instructions, select_knowledge,
                              is_farewell, normalize_spoken, token_estimate, validate_arguments, validate_reply,
                              validated_caller_identity, compact_knowledge_result, knowledge_issue, knowledge_query)
 
@@ -134,6 +138,7 @@ class EarthoraAgent(Agent):
         self.error_streak = 0
         self._tool_turns: dict[str, TurnState] = {}
         self.terminal_turn_id: str | None = None
+        self._clarified_speech_epoch = -1
 
     def _make_tool(self, schema: dict):
         name = schema["name"]
@@ -171,6 +176,22 @@ class EarthoraAgent(Agent):
 
     def user_started_speaking(self) -> None:
         self.user_speech_epoch += 1
+
+    def handle_recognition_error(self, error) -> bool:
+        cause = getattr(error, "error", error)
+        if not isinstance(cause, UnrecognizedSpeech):
+            return False
+        epoch = self.user_speech_epoch
+        if self._clarified_speech_epoch == epoch:
+            return True
+        self._clarified_speech_epoch = epoch
+        async def clarify():
+            if epoch == self.user_speech_epoch:
+                await self.say_fixed("clarify")
+        task = asyncio.create_task(clarify())
+        self.events.tasks.add(task)
+        task.add_done_callback(self.events.tasks.discard)
+        return True
 
     async def stt_node(self, audio, model_settings):
         async for event in Agent.default.stt_node(self, audio, model_settings):
@@ -219,7 +240,7 @@ class EarthoraAgent(Agent):
         self.turn_count += 1
         self.language = detect_language(text, self.language, self.detected_language)
         self.tts_provider.update_options(language=self.language)
-        self.stt_provider.update_options(language="auto")
+        self.stt_provider.update_options(language="auto", language_hint=self.language)
         await self.events.send("user_transcript", text=text, transcript=text, is_final=True, turn_id=turn_id)
         await self.events.send("agent_state", state="thinking")
         speech_epoch = self.user_speech_epoch
@@ -272,7 +293,7 @@ class EarthoraAgent(Agent):
         groups = groups[-5:]
         # Keep the authoritative live catalogue/cart and current native tool
         # chain intact. Static KB is the only evidence we may compact later.
-        knowledge = list(turn.data.get("knowledge", []))
+        knowledge = select_knowledge(turn)
 
         def base_context():
             base = llm.ChatContext()
@@ -282,7 +303,7 @@ class EarthoraAgent(Agent):
 
         base = base_context()
         guard = llm.ChatContext()
-        guard.add_message(role="system", content=f"CURRENT TURN LANGUAGE: {turn.language}. This overrides all prior conversation language. Answer only the latest customer question, using the current Earthora facts and successful tools.")
+        guard.add_message(role="system", content=turn_guidance(turn.text, turn.language, turn.data.get("catalog", [])))
         schema_cost = token_estimate(json.dumps(self.initial_data["tools"], ensure_ascii=False)) + 600
         while True:
             items = list(base.items)
@@ -307,6 +328,16 @@ class EarthoraAgent(Agent):
             return
         draft, has_tools = [], False
         try:
+            acknowledgement = language_only_reply(turn.text, turn.language) or policy_reply(turn.text, turn.language)
+            if acknowledgement:
+                turn.reply_count += 1
+                await self.bridge.record(self.context, message_id=f"{turn.id}:assistant:{turn.reply_count}", role="assistant", text=acknowledgement, language=turn.language)
+                if self.turn is not turn or turn.speech_epoch != self.user_speech_epoch:
+                    return
+                await self.events.send("agent_reply_text", text=acknowledgement, language=turn.language, turn_id=turn.id)
+                self.error_streak = 0
+                yield acknowledgement
+                return
             model_context = self._model_context(chat_ctx, turn, tools)
             if self.turn is not turn or turn.speech_epoch != self.user_speech_epoch:
                 return
@@ -324,7 +355,19 @@ class EarthoraAgent(Agent):
             issue = knowledge_issue(turn)
             async def no_evidence_reply():
                 yield COPY[turn.language]["conflict" if issue == "conflicting-knowledge" else "knowledge"]
-            stream = no_evidence_reply() if issue else Agent.default.llm_node(self, model_context, tools, model_settings)
+            async def no_dispatch_schedule_reply():
+                yield DISPATCH_UNKNOWN[turn.language]
+            localized_fact = approved_fact_reply(turn) if not issue else None
+            async def localized_fact_reply():
+                yield localized_fact
+            evidence = list(turn.data.get("knowledge", []))
+            for result in turn.tool_results:
+                if result.get("name") == "search_knowledge" and result.get("ok") and isinstance(result.get("data"), list):
+                    evidence.extend(result["data"])
+            missing_dispatch = dispatch_schedule_missing(turn.text, evidence)
+            stream = (no_evidence_reply() if issue else localized_fact_reply() if localized_fact
+                      else no_dispatch_schedule_reply() if missing_dispatch
+                      else Agent.default.llm_node(self, model_context, tools, model_settings))
             async for chunk in stream:
                 if isinstance(chunk, str):
                     draft.append(chunk)
@@ -347,7 +390,7 @@ class EarthoraAgent(Agent):
                 return  # AgentSession continues with the native tool results.
             if self.turn is not turn or turn.speech_epoch != self.user_speech_epoch:
                 return
-            text = normalize_spoken("".join(draft))
+            text = trim_unsolicited_followup(normalize_spoken("".join(draft)), turn.text)
             reason = validate_reply(text, turn)
             if reason:
                 logger.warning("Speech guard replaced draft reason=%s", reason)
@@ -364,7 +407,7 @@ class EarthoraAgent(Agent):
         except asyncio.CancelledError:
             raise
         except Exception as error:
-            logger.warning("Native voice generation failed (%s)", type(error).__name__)
+            logger.warning("Native voice generation failed (%s, status=%s)", type(error).__name__, getattr(error, "status_code", None))
             if self.turn is turn and turn.speech_epoch == self.user_speech_epoch:
                 self.error_streak += 1
                 await self.events.send("error", message=_RETRY_MESSAGE[turn.language], turn_id=turn.id)
@@ -520,6 +563,8 @@ async def entrypoint(ctx: JobContext) -> None:
 
     @session.on("error")
     def pipeline_error(event) -> None:
+        if agent.handle_recognition_error(event.error):
+            return
         logger.warning("Voice pipeline error (%s)", type(event.error).__name__)
         events.emit("error", message=_RETRY_MESSAGE[agent.language])
         agent.error_streak += 1

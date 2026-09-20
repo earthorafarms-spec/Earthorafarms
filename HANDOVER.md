@@ -9,9 +9,10 @@
 
 ## Voice deployment update — 20 September 2026
 
-Web microphone and Tata phone voice now use the dedicated UniExl-derived
-LiveKit service under `livekit-voice/`, deployed on the Earthora VPS at
-`/opt/earthora/uniexl-voice`. GPU inference uses Whisper/IndicConformer,
+Web microphone and Tata phone voice now use the MSH/Sun Pathology-derived
+LiveKit service under `livekit-voice/`. On the Earthora VPS, read
+`/opt/earthora/SUNPATH_VOICE_ACTIVE` for its current immutable release.
+GPU inference uses Whisper/IndicConformer,
 Indic Parler (Neha across English, Hindi/Hinglish and Gujarati), and Qwen 3.5 9B.
 Existing storefront/chat appearance and typed-chat behavior are preserved.
 
@@ -19,13 +20,20 @@ Tata endpoint 2163 now uses
 `wss://earthora.srv1915512.hstgr.cloud/ws/voice/smartflo`.
 The legacy `voice-service/` container is retained for rollback; it is not the
 active web/phone media path. The current API build context is
-`/opt/earthora/releases/livekit-api-1f13f6bd24e5`.
+`/opt/earthora/releases/knowledge-api-625dc2a12bc8`.
 
-Read [the voice deployment handoff](livekit-voice/DEPLOYMENT.md) and
+Read [the SunPath deployment handoff](livekit-voice/SUNPATH-DEPLOYMENT.md) and
 [runtime guide](livekit-voice/README.md) before deploying voice changes.
 These supersede older voice/Render instructions below. Public synthetic tests
 passed; a real handset call has not yet been tested. Runtime secrets stay on
 the VPS and outside Git.
+
+The September 20 follow-up verifies the nine approved tablet knowledge records
+against the legacy bot's configured source; current Postgres records match.
+The voice context now preserves complete records and provenance before prompt
+budgeting. The same Neha voice uses a pitch-preserving 1.20× tempo on web and
+phone. See [the conversation, knowledge and audio verification](livekit-voice/verification/sunpath/20260920-naturalness-and-knowledge.md)
+for measured latency and the remaining completed-phrase synthesis limitation.
 
 ---
 
