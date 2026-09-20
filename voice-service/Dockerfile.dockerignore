@@ -21,3 +21,6 @@ infra
 voice-service/tests
 voice-service/scripts
 **/*.md
+
+# Keep voice-service/public: @fastify/static serves it at runtime.
+!voice-service/public

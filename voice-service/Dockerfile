@@ -24,5 +24,9 @@ COPY --from=build /app/voice-service/dist ./dist
 # invoice-pdf.ts resolves Devanagari/Gujarati fonts from
 # process.cwd()/assets/fonts at runtime, so they must ship with the image.
 COPY voice-service/assets ./assets
+# server.ts serves this directory with @fastify/static and warns at boot if it
+# is absent. Dev-only test harnesses; they stay on loopback because nginx only
+# proxies the telephony socket.
+COPY voice-service/public ./public
 EXPOSE 4200
 CMD ["node", "dist/main.js"]
