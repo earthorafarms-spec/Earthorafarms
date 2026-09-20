@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { randomToken } from '../../lib/crypto.js';
 import { sql } from '../../db/client.js';
 import { badRequest, notFound } from '../../lib/errors.js';
-import { getChannelByKey, publishedConfig } from './config.js';
+import { getChannel, getChannelByKey, publishedConfig } from './config.js';
 import { loadConversation, appendMessage, saveState } from '../engine/conversation.js';
 import { runTurn, type PersonaConfig } from '../engine/engine.js';
 import { tenantId } from '../kb/ingest.js';
@@ -16,7 +16,21 @@ export async function chatChannelRoutes(app: FastifyInstance): Promise<void> {
     const ch = await getChannelByKey((req.params as any).channelKey);
     if (!ch || ch.type !== 'chat') throw notFound('Channel not found');
     const cfg = publishedConfig(ch);
-    return { name: cfg.name || 'Earthora Assistant', greeting: cfg.greeting || 'Hi! How can I help you today?', starters: cfg.starters || ['Recommend a product for me', 'What are moringa benefits?', 'Where is my order?'], appearance: cfg.appearance || {}, voiceEnabled: cfg.voiceEnabled !== false };
+    // The voice endpoints require a VOICE channel key, not this chat one. The
+    // widget is embedded with a single key, so hand it the matching voice
+    // channel here — otherwise every spoken turn 404s, which is exactly what
+    // it used to do. A missing or disabled voice channel hides the mic rather
+    // than offering a button that cannot work.
+    const voice = await getChannel(ch.tenant_id, 'voice', ch.slug);
+    const voiceChannelKey = voice?.enabled ? voice.public_key : null;
+    return {
+      name: cfg.name || 'Earthora Assistant',
+      greeting: cfg.greeting || 'Hi! How can I help you today?',
+      starters: cfg.starters || ['Recommend a product for me', 'What are moringa benefits?', 'Where is my order?'],
+      appearance: cfg.appearance || {},
+      voiceEnabled: cfg.voiceEnabled !== false && Boolean(voiceChannelKey),
+      voiceChannelKey,
+    };
   });
 
   app.post('/platform/chat/:channelKey/session', async (req) => {
