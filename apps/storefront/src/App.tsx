@@ -7,6 +7,7 @@ import { trackPageView } from '@/lib/analytics';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Gate } from '@/components/Gate';
 import ScrollToTop from '@/components/ScrollToTop';
+import { AssistantWidget } from '@/components/AssistantWidget';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
 // Home is eager — it's the LCP page for most visitors
 import Home from './pages/home';
@@ -106,6 +107,7 @@ export default function App() {
             <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
               <PageTracker />
               <ScrollToTop />
+              <AssistantWidget />
               <Suspense fallback={<PageLoader />}>
                 <Switch>
                   <Route path="/" component={Home} />

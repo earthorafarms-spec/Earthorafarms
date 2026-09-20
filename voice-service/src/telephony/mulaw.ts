@@ -124,3 +124,106 @@ export class Pcm16StreamToMulaw8k {
     return Buffer.from([value]);
   }
 }
+
+/**
+ * Incrementally converts raw mono PCM16LE at ANY sample rate >= 8 kHz into
+ * 8 kHz G.711 mu-law.
+ *
+ * Pcm16StreamToMulaw8k above averages a whole number of input samples per
+ * output sample, which only works when the source rate is a multiple of
+ * 8000 (16 kHz and 24 kHz vendors). Piper returns 22 050 Hz, where
+ * 22050 / 8000 = 2.75625, so each output sample falls BETWEEN two input
+ * samples and that converter throws. This one linearly interpolates, using
+ * the same position formula as wavToMulaw8k so a reply sounds identical
+ * whether it was streamed or converted from a complete buffer.
+ *
+ * Each output position is derived from an absolute output index rather than
+ * an accumulated step, so the mapping cannot drift over a long reply. Both an
+ * odd trailing byte and the two-sample interpolation window survive across
+ * chunk boundaries, so a sample split by the network does not click.
+ */
+export class Pcm16ResampleStreamToMulaw8k {
+  private readonly sourceSampleRate: number;
+  private byteCarry = Buffer.alloc(0);
+  /** Held input samples; `head` is the first index still in use. */
+  private samples: number[] = [];
+  private head = 0;
+  /** Absolute index of samples[head]. */
+  private windowStart = 0;
+  private outIndex = 0;
+
+  constructor(sourceSampleRate: number) {
+    if (!Number.isFinite(sourceSampleRate) || sourceSampleRate < 8_000) {
+      throw new Error(`PCM stream sample rate must be at least 8000 Hz, got ${sourceSampleRate}.`);
+    }
+    this.sourceSampleRate = sourceSampleRate;
+  }
+
+  private positionFor(outIndex: number): number {
+    return (outIndex * this.sourceSampleRate) / 8_000;
+  }
+
+  push(chunk: Buffer): Buffer {
+    if (chunk.length === 0) return Buffer.alloc(0);
+    const input = this.byteCarry.length ? Buffer.concat([this.byteCarry, chunk]) : chunk;
+    const completeBytes = input.length - (input.length % 2);
+    this.byteCarry = completeBytes < input.length
+      ? Buffer.from(input.subarray(completeBytes))
+      : Buffer.alloc(0);
+    for (let offset = 0; offset < completeBytes; offset += 2) {
+      this.samples.push(input.readInt16LE(offset));
+    }
+    return this.drain(false);
+  }
+
+  /**
+   * Emits every output sample whose interpolation window is fully available.
+   * When `final` is true the window is allowed to clamp to the last sample,
+   * so the tail of the reply is not clipped.
+   */
+  private drain(final: boolean): Buffer {
+    const output: number[] = [];
+    const lastAbsolute = this.windowStart + (this.samples.length - this.head) - 1;
+    if (lastAbsolute < this.windowStart) return Buffer.alloc(0);
+
+    for (;;) {
+      const position = this.positionFor(this.outIndex);
+      const left = Math.floor(position);
+      const right = left + 1;
+      if (left > lastAbsolute) break;
+      // A future chunk still has to supply the right-hand neighbour.
+      if (right > lastAbsolute && !final) break;
+
+      const a = this.samples[this.head + (left - this.windowStart)]!;
+      const b = this.samples[this.head + (Math.min(right, lastAbsolute) - this.windowStart)]!;
+      output.push(pcm16ToMulawByte(a + (b - a) * (position - left)));
+      this.outIndex++;
+
+      // Release samples no later output can reach, keeping one as the
+      // left-hand neighbour of the next interpolation.
+      const nextLeft = Math.min(Math.floor(this.positionFor(this.outIndex)), lastAbsolute);
+      const release = nextLeft - this.windowStart;
+      if (release > 0) {
+        this.head += release;
+        this.windowStart = nextLeft;
+        // Compact occasionally so the held array cannot grow without bound.
+        if (this.head > 4_096) {
+          this.samples = this.samples.slice(this.head);
+          this.head = 0;
+        }
+      }
+    }
+    return Buffer.from(output);
+  }
+
+  flush(): Buffer {
+    // A dangling byte cannot form a PCM16 sample and is intentionally discarded.
+    this.byteCarry = Buffer.alloc(0);
+    const tail = this.drain(true);
+    this.samples = [];
+    this.head = 0;
+    this.windowStart = 0;
+    this.outIndex = 0;
+    return tail;
+  }
+}

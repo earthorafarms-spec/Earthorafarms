@@ -43,3 +43,7 @@ scrub_secrets.ps1
 # workspace env files
 apps/*/.env
 .env.infra
+
+# Self-hosted AI server credentials, written by the Plymaxx credential helper
+.env.plymaxx.local
+**/.env.plymaxx.local

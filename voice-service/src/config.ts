@@ -26,13 +26,21 @@ const requiredSchema = z.object({
   // and as a fallback if Sarvam errors mid-conversation (e.g. a billing
   // lapse) — a routing failure should degrade to "answers in English"
   // rather than break the caller's turn outright.
-  LLM_PROVIDER: z.enum(['openai', 'sarvam', 'auto']).default('openai'),
+  // 'plymaxx' = Qwen3.5 9B on the self-hosted GPU server. Unlike the speech
+  // seams below it covers all three languages, so no hosted vendor is needed
+  // for text. Generation there is capped at 256 tokens — see AI_MAX_OUTPUT_TOKENS.
+  LLM_PROVIDER: z.enum(['openai', 'sarvam', 'plymaxx', 'auto']).default('openai'),
   // OpenAI STT keeps English calls independent from Sarvam account balance.
   // Sarvam remains selectable when its Indic-language transcription is wanted.
-  STT_PROVIDER: z.enum(['google', 'sarvam', 'openai']).default('openai'),
+  // 'plymaxx' = self-hosted Whisper (Hindi) + IndicConformer (Gujarati), with
+  // English delegated to OpenAI: that server has no English recognizer and
+  // transliterates English speech into Devanagari instead of refusing it.
+  STT_PROVIDER: z.enum(['google', 'sarvam', 'openai', 'plymaxx']).default('openai'),
   // 'auto' = English → OpenAI TTS (nova voice, much better English than
   // bulbul:v3), Hindi/Gujarati → Sarvam TTS. Mirrors LLM_PROVIDER=auto logic.
-  TTS_PROVIDER: z.enum(['google', 'sarvam', 'openai', 'auto']).default('auto'),
+  // 'plymaxx' = self-hosted Piper for Hindi/Gujarati, English → OpenAI TTS;
+  // only Hindi and Gujarati voice models are installed on that server.
+  TTS_PROVIDER: z.enum(['google', 'sarvam', 'openai', 'plymaxx', 'auto']).default('auto'),
 
   RAZORPAY_KEY_ID: z.string().min(1),
   RAZORPAY_KEY_SECRET: z.string().min(1),
@@ -94,6 +102,72 @@ const optionalSchema = z.object({
   VOICE_STREAM_PUBLIC_WSS_URL: z.string().url().refine((url) => url.startsWith('wss://'), {
     message: 'VOICE_STREAM_PUBLIC_WSS_URL must use wss://',
   }).optional(),
+
+  // Self-hosted Plymaxx AI server (Whisper + IndicConformer STT, Piper TTS,
+  // Qwen3.5 LLM) behind an OpenAI-shaped API. Names match the credential
+  // helper's output, so a generated env file can be loaded unchanged.
+  // Required only when a *_PROVIDER above is set to 'plymaxx'; the adapters
+  // raise AdapterNotConfiguredError rather than crashing the process at boot.
+  // Empty string means "not configured" — treat same as absent, so a blank
+  // value in a deployment's env file disables the plymaxx routes instead of
+  // failing the whole service's config validation at boot.
+  AI_BASE_URL: z.string().url().optional().or(z.literal('')),
+  AI_API_KEY: z.string().optional(),
+  AI_LLM_MODEL: z.string().default('qwen3.5:9b'),
+  // The server clamps generation at 256 tokens and silently truncates beyond
+  // it, so asking for more would only hide where a reply was cut off.
+  AI_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(16).max(256).default(256),
+
+  // Model-selectable endpoints. Paths resolve against AI_BASE_URL; absolute
+  // URLs are used as given. These are deliberately NOT the credential
+  // helper's legacy AI_STT_HI_URL/AI_TTS_URL values: on the legacy
+  // /audio/speech/stream route, `model=indic-parler-tts` is an old label for
+  // Piper, so reusing that URL would silently synthesize English with a Hindi
+  // voice instead of Parler.
+  AI_TRANSCRIBE_URL: z.string().default('/audio/transcriptions'),
+  AI_SPEECH_URL: z.string().default('/audio/speech'),
+
+  // Per-language model/voice choices. Every language is served by this
+  // server; nothing falls back to a paid vendor. Override any of them per
+  // deployment — run `npm run smoke:plymaxx` to check a choice against the
+  // live catalogue at GET /audio/voices.
+  //
+  // Recognition: Whisper covers 100 languages plus auto-detection. The Indic
+  // conformer is preferred for Gujarati (it scored better on the owner's
+  // Gujarati fixtures) and rejects English outright with 422.
+  AI_STT_MODEL_EN: z.string().default('whisper-large-v3-turbo'),
+  AI_STT_MODEL_HI: z.string().default('whisper-large-v3-turbo'),
+  AI_STT_MODEL_GU: z.string().default('indic-conformer-600m-multilingual'),
+  // Used when the conversation's language is not yet known. Whisper detects
+  // it rather than us guessing a language and corrupting the transcript.
+  AI_STT_MODEL_AUTO: z.string().default('whisper-large-v3-turbo'),
+
+  // Synthesis: Piper streams progressively at 22.05 kHz and is the low-latency
+  // choice, but only Hindi and Gujarati checkpoints are installed. Parler has
+  // 68 named speakers at 44.1 kHz and covers English, but returns COMPLETED
+  // audio — roughly 1.2-1.5 s for a short phrase versus Piper's ~0.2 s — so an
+  // English reply starts speaking later. `piper-hi-rohan`/`piper-gu-male` are
+  // the real checkpoints; Divya/Neha/Yash are aliases for them, not separate
+  // voices.
+  AI_TTS_MODEL_EN: z.string().default('indic-parler-tts'),
+  AI_TTS_VOICE_EN: z.string().default('Thoma'),
+  AI_TTS_MODEL_HI: z.string().default('piper'),
+  AI_TTS_VOICE_HI: z.string().default('piper-hi-rohan'),
+  AI_TTS_MODEL_GU: z.string().default('piper'),
+  AI_TTS_VOICE_GU: z.string().default('piper-gu-male'),
+  // A completed-audio model (Parler) needs longer than the streaming default:
+  // it returns nothing until the whole phrase is generated, and a queued
+  // request waits behind another project's. Kept well under the server's
+  // ~270 s ceiling so a stuck phrase fails the turn instead of hanging a call.
+  AI_TTS_COMPLETED_TIMEOUT_MS: z.coerce.number().int().min(5_000).max(270_000).default(30_000),
+
+  // Legacy names written by the credential helper. Accepted so a generated
+  // env file loads unchanged, but no longer part of the contract above.
+  AI_STT_HI_URL: z.string().optional(),
+  AI_STT_GU_URL: z.string().optional(),
+  AI_TTS_URL: z.string().optional(),
+  AI_TTS_HI_VOICE: z.string().optional(),
+  AI_TTS_GU_VOICE: z.string().optional(),
 
   GOOGLE_CLOUD_PROJECT_ID: z.string().optional(),
   GOOGLE_APPLICATION_CREDENTIALS_JSON: z.string().optional(),
@@ -192,6 +266,24 @@ function loadConfig(): Config {
       !optional.SARVAM_API_KEY?.trim() && !optional.SARVAM_API_KEYS?.split(/[,\s]+/).some(Boolean)) {
     // eslint-disable-next-line no-console
     console.warn('[config] STT/TTS_PROVIDER=sarvam but no SARVAM_API_KEYS or SARVAM_API_KEY is set — voice routes will fail until configured.');
+  }
+  const plymaxxSelected =
+    required.data.LLM_PROVIDER === 'plymaxx' ||
+    required.data.STT_PROVIDER === 'plymaxx' ||
+    required.data.TTS_PROVIDER === 'plymaxx';
+  if (plymaxxSelected && !(optional.AI_BASE_URL?.trim() && optional.AI_API_KEY?.trim())) {
+    // eslint-disable-next-line no-console
+    console.warn('[config] A provider is set to plymaxx but AI_BASE_URL/AI_API_KEY are unset — those routes will fail until configured.');
+  }
+  if (plymaxxSelected) {
+    // eslint-disable-next-line no-console
+    console.info(
+      '[config] plymaxx selected — English, Hindi and Gujarati all run on the self-hosted GPU. ' +
+        `STT: en=${optional.AI_STT_MODEL_EN}, hi=${optional.AI_STT_MODEL_HI}, gu=${optional.AI_STT_MODEL_GU}. ` +
+        `TTS: en=${optional.AI_TTS_MODEL_EN}/${optional.AI_TTS_VOICE_EN}, ` +
+        `hi=${optional.AI_TTS_MODEL_HI}/${optional.AI_TTS_VOICE_HI}, ` +
+        `gu=${optional.AI_TTS_MODEL_GU}/${optional.AI_TTS_VOICE_GU}.`,
+    );
   }
 
   const smartflowConfigured = Boolean(
