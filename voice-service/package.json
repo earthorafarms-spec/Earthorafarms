@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "smoke:smartflo": "tsx scripts/prod-smartflo-smoke.ts"
+    "smoke:smartflo": "tsx scripts/prod-smartflo-smoke.ts",
+    "smoke:plymaxx": "tsx scripts/plymaxx-smoke.ts"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.2",

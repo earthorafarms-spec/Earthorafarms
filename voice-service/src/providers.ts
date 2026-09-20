@@ -20,6 +20,9 @@ import { SarvamSttAdapter } from './adapters/sarvam-stt.js';
 import { SarvamTtsAdapter } from './adapters/sarvam-tts.js';
 import { GoogleSttAdapter } from './adapters/google-stt.js';
 import { GoogleTtsAdapter } from './adapters/google-tts.js';
+import { PlymaxxLLMAdapter } from './adapters/plymaxx-llm.js';
+import { PlymaxxSttAdapter } from './adapters/plymaxx-stt.js';
+import { PlymaxxTtsAdapter } from './adapters/plymaxx-tts.js';
 
 // Constructed lazily, at most once each, regardless of how many times a
 // factory below is called — cheap to call chatWithRouting() every turn.
@@ -29,6 +32,9 @@ let openaiTtsSingleton: OpenAiTtsAdapter | null = null;
 let sarvamSingleton: SarvamLLMAdapter | null = null;
 let sarvamSttSingleton: SarvamSttAdapter | null = null;
 let sarvamTtsSingleton: SarvamTtsAdapter | null = null;
+let plymaxxSingleton: PlymaxxLLMAdapter | null = null;
+let plymaxxSttSingleton: PlymaxxSttAdapter | null = null;
+let plymaxxTtsSingleton: PlymaxxTtsAdapter | null = null;
 
 function getOpenAiStt(): OpenAiSttAdapter {
   if (!openaiSttSingleton) openaiSttSingleton = new OpenAiSttAdapter();
@@ -52,12 +58,31 @@ function getSarvam(): SarvamLLMAdapter {
   return sarvamSingleton;
 }
 
+// Self-hosted GPU server. Every capability and every language this product
+// speaks is served there, so none of these adapters takes a paid fallback:
+// choosing 'plymaxx' means the GPU, and a GPU failure surfaces rather than
+// silently billing a vendor. TTS_PROVIDER=auto remains the hosted option.
+function getPlymaxx(): PlymaxxLLMAdapter {
+  if (!plymaxxSingleton) plymaxxSingleton = new PlymaxxLLMAdapter();
+  return plymaxxSingleton;
+}
+function getPlymaxxStt(): PlymaxxSttAdapter {
+  if (!plymaxxSttSingleton) plymaxxSttSingleton = new PlymaxxSttAdapter();
+  return plymaxxSttSingleton;
+}
+function getPlymaxxTts(): PlymaxxTtsAdapter {
+  if (!plymaxxTtsSingleton) plymaxxTtsSingleton = new PlymaxxTtsAdapter();
+  return plymaxxTtsSingleton;
+}
+
 export function buildLLM(): LLMAdapter {
   switch (config.LLM_PROVIDER) {
     case 'openai':
       return getOpenAi();
     case 'sarvam':
       return getSarvam();
+    case 'plymaxx':
+      return getPlymaxx();
     case 'auto':
       // 'auto' needs a per-turn language to route on — see
       // chatWithRouting(), which conversation/controller.ts actually calls
@@ -112,6 +137,12 @@ export function buildStt(): SttAdapter {
     case 'sarvam':
       if (!sarvamSttSingleton) sarvamSttSingleton = new SarvamSttAdapter();
       return sarvamSttSingleton;
+    case 'plymaxx':
+      // Picks the recognition model per utterance from opts.languageHint:
+      // Gujarati → IndicConformer, English/Hindi → Whisper, and Whisper's
+      // auto-detection when the language is not yet known. buildStt() has no
+      // language to switch on, so the adapter does it.
+      return getPlymaxxStt();
     case 'google':
       return new GoogleSttAdapter();
     default:
@@ -126,6 +157,11 @@ export function buildTts(): TtsAdapter {
       return sarvamTtsSingleton;
     case 'openai':
       return getOpenAiTts();
+    case 'plymaxx':
+      // Picks the synthesis model per reply: Piper for Hindi/Gujarati
+      // (streams, low latency) and Parler for English (68 named speakers, but
+      // completed audio, so it starts speaking later).
+      return getPlymaxxTts();
     case 'google':
       return new GoogleTtsAdapter();
     case 'auto':
