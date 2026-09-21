@@ -14,7 +14,8 @@ from sunpath_runtime import (COPY, TurnState, bounded_reply, collect_amounts,
                              detect_language, instructions, is_farewell,
                              normalize_spoken, validate_arguments, validate_reply,
                              validated_caller_identity, knowledge_query, knowledge_issue,
-                             compact_knowledge_result, select_knowledge, token_estimate, knowledge_topics)
+                             compact_knowledge_result, select_knowledge, token_estimate, knowledge_topics,
+                             language_request_target)
 
 
 def turn(language="en", catalog=None, knowledge=None):
@@ -411,6 +412,47 @@ def test_normal_descriptive_price_wording_does_not_invent_a_product(draft):
 ])
 def test_explicit_switch_wins_over_asr_script_and_natural_transliteration(text, previous, expected):
     assert detect_language(text, previous) == expected
+
+
+@pytest.mark.parametrize("text,language", [
+    ("So... Hong. Can we talk in Hindi?", "hi"),
+    ("Um, can, can we talk in Hindi?", "hi"),
+    ("ગુજરાતીમાં", "gu"), ("हिंदी में", "hi"),
+    ("क्या आप गुजराती में बोल सकती हैं?", "gu"),
+    ("હવે ગુજરાતી માં વાત કરો.", "gu"),
+    ("શું આપણે ગુજરાતી માં વાત કરી શકીએ?", "gu"),
+    ("Gujarati ma bolo please.", "gu"),
+    ("गुजराती में जवाब दीजिए", "gu"),
+    ("ગુજરાતીમાં જવાબ આપો", "gu"),
+    ("Please switch to English", "en"),
+])
+def test_language_only_target_and_runtime_detection_agree(text, language):
+    assert language_request_target(text) == language
+    assert detect_language(text, previous="en", detected="en") == language
+
+
+@pytest.mark.parametrize("text", [
+    "Never speak Gujarati", "Please do not speak Hindi", "Can I talk to your Hindi team?",
+    "Can you ask your Gujarati staff about shipping?", "Does your Hindi team speak to me?",
+])
+def test_negation_or_third_party_language_does_not_select_that_target(text):
+    assert language_request_target(text) is None
+    assert detect_language(text, previous="en") == "en"
+
+
+@pytest.mark.parametrize("text,language", [("શું?", "gu"), ("કેમ?", "gu"), ("क्या?", "hi")])
+def test_short_meaningful_script_still_controls_language(text, language):
+    assert detect_language(text, previous="en", detected="en") == language
+
+
+def test_hindi_style_covers_actual_agreement_failures_without_new_benefit_claims():
+    prompt = instructions({"catalog": [], "knowledge": []}, "hi")
+    assert "हाँ, मैं हिंदी में बात कर सकती हूँ।" in prompt
+    assert "'[product] के फायदे हैं'" in prompt and "feminine first-person" in prompt
+    assert "never 'कर सकती हूँ'" in prompt and "हम" in prompt
+    assert "familiar technical words in Latin" in prompt
+    assert "Grammar examples supply no product claims" in prompt
+    assert "No diagnosis, prescription, cure" in prompt
 
 
 def test_policy_query_does_not_insert_unrequested_product_into_retrieval():

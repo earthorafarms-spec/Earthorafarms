@@ -187,12 +187,21 @@ _GUJARATI_LETTERS = re.compile(r"[\u0a85-\u0ab9\u0ad0\u0ae0-\u0ae1]")
 _DEVANAGARI_LETTERS = re.compile(r"[\u0904-\u0939\u0958-\u0961]")
 _GUJARATI_PRONOUN_CUES = frozenset({
     "तमारा", "तमारी", "तमारु", "तमारूँ", "तमारूं", "तमने", "मने",
-    "tamara", "tamari", "tamaru", "tamne", "mane",
+    "तमे", "मारे", "मारा", "मारी", "मारु",
+    "tamara", "tamari", "tamaru", "tamne", "mane", "tame", "mare", "mara", "mari", "maru",
 })
 _GUJARATI_VERB_CUES = frozenset({
     "छे", "छूँ", "छूं", "छुं", "छु", "छो", "शकूँ", "शकूं", "शकुं", "शकु",
-    "chhe", "che", "chhu", "chhun", "shaku", "shakun",
+    "chhe", "che", "chhu", "chhun", "cho", "chho", "shaku", "shakun",
 })
+_GUJARATI_FIRST_PERSON_CUES = frozenset({"हुँ", "हुं", "हूं", "हूँ", "hu", "hun"})
+_GUJARATI_CLAUSE_CUES = frozenset({
+    "वात", "जोईए", "जोईये", "लेवु", "लेवूं", "लेवूँ", "केम", "कयो", "कायो", "शु", "शूं", "शूँ",
+    "vaat", "joiye", "joie", "levu", "kem", "kayo", "shu",
+})
+# Whisper's actual Gujarati decode joined "શકું છું" as "शकूछू".
+# Match entire fused words, not Hindi touching (छू) or arbitrary substrings.
+_GUJARATI_FUSED_VERB = re.compile(r"(?:शक[ुू][ँं]?|कर[ुू][ँं]?|बोल[ुू][ँं]?)छ[ुू][ँं]?")
 
 
 def _gujarati_phonetic_cues(text: str) -> bool:
@@ -202,9 +211,16 @@ def _gujarati_phonetic_cues(text: str) -> bool:
     never transliterates, translates or fabricates a Gujarati transcript.
     Whole words and both categories are required: e.g. Hindi 'छू', 'छः', a
     company called Tamara, or a single 'छे' are not sufficient evidence.
+    First-person हूँ is shared with Hindi, so it additionally needs a Gujarati
+    clause word or a complete fused Gujarati verb before requesting re-decode.
     """
-    words = set(re.findall(r"[a-z]+|[\u0900-\u0963\u0971-\u097f]+", text.lower()))
-    return bool(words & _GUJARATI_PRONOUN_CUES) and bool(words & _GUJARATI_VERB_CUES)
+    words = set(re.findall(r"[a-z0-9_\u0900-\u0963\u0966-\u097f]+", text.lower()))
+    fused_verb = any(_GUJARATI_FUSED_VERB.fullmatch(word) for word in words)
+    pronoun = bool(words & _GUJARATI_PRONOUN_CUES) or (
+        bool(words & _GUJARATI_FIRST_PERSON_CUES)
+        and (bool(words & _GUJARATI_CLAUSE_CUES) or fused_verb)
+    )
+    return pronoun and (bool(words & _GUJARATI_VERB_CUES) or fused_verb)
 
 
 def _confidence(payload: dict) -> float:

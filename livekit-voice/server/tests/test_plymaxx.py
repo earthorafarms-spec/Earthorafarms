@@ -250,6 +250,17 @@ async def test_stt_gujarati_redetection_is_one_explicit_extra_call():
     "हुँ तमारा ओर्डर नी माहिती आपी शकूँ छूँ",
     "मने ओर्डर नी माहिती जोईए छे।",
     "hu tamara order ni mahiti api shaku chhu",
+    # Same-model synthetic Gujarati was actually decoded as Hindi with this
+    # fused verb. Its first clause must not depend on the later separate छे.
+    "हाँ, हुँ तमारी मदद करी शकूछू",
+    "हाँ, हुँ तमारी मदद करी शकूछू, तमने कायो प्रदक जोईये छे?",
+    "मारे आ लेवु छे",
+    "तमे शु करो छो",
+    "हूं गुजराती मां वात करूँ छु",
+    "हूँ आ लेवु छु",
+    "हुँ बोलूछू",
+    "mare aa levu chhe",
+    "tame shu karo chho",
 ])
 @pytest.mark.asyncio
 async def test_hi_label_with_multiple_gujarati_grammar_cues_redecodes_real_audio(whisper_text):
@@ -275,6 +286,13 @@ async def test_hi_label_with_multiple_gujarati_grammar_cues_redecodes_real_audio
     "तमारा नाम की कंपनी का प्रोडक्ट है।",
     "मने सब बताओ", "मने", "तमारा", "छूँ", "छे",
     "tamarafoo chhe", "Mane said hello", "The company Tamara shipped the package",
+    "मैं हिंदी में बात कर सकती हूँ।",
+    "हूँ छे",  # A shared first-person word plus one sound is insufficient.
+    "मैं गुजरात में रहती हूँ",
+    "मैं हाथ छू सकती हूँ और बात कर सकती हूँ",
+    "मारे गए लोगों के लिए मदद चाहिए",
+    "मारे", "तमे", "मारी", "हुं", "शकूछू",
+    "तमारी शकूछूfoobar",  # Fused morphology also requires a whole word.
 ])
 @pytest.mark.asyncio
 async def test_hindi_and_single_or_substring_gujarati_cues_do_not_trigger_redecode(text):

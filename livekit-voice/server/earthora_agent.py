@@ -29,10 +29,10 @@ from sunpath_bridge import SunPathBridge
 from sunpath_config import build_llm, build_stt, build_tts
 from plymaxx import UnrecognizedSpeech
 from conversation_controls import (DISPATCH_UNKNOWN, dispatch_schedule_missing, language_only_reply, policy_reply,
-                                   trim_unsolicited_followup, turn_guidance)
+                                   trim_unsolicited_followup, turn_guidance, correct_spoken_grammar)
 from source_fact_localizations import approved_fact_reply
 from browser_actions import BrowserActions
-from concierge_controls import requested_destination, requested_request_type, active_request, concierge_guidance
+from concierge_controls import requested_destination, contextual_destination, navigation_preference, navigation_needs_answer, requested_request_type, active_request, concierge_guidance
 from request_review import request_review_reply, submitted_request_reply
 from request_collection import extract_request_field, request_collection_prompt, is_request_confirmation
 from sunpath_runtime import (COPY, TurnState, bounded_reply, detect_language, instructions, select_knowledge,
@@ -147,6 +147,7 @@ class EarthoraAgent(Agent):
         self._blocked_review_tokens: set[str] = set()
         self._review_tokens: dict[str, tuple[str, str]] = {}
         self._request_fields_attempted: dict[str, set[str]] = {}
+        self._auto_navigation = True
 
     def invalidate_review(self, *, request_id=None, turn_id=None):
         for key, (token, reviewed_turn) in tuple(self._review_tokens.items()):
@@ -163,9 +164,11 @@ class EarthoraAgent(Agent):
         names = {schema["name"] for schema in self.initial_data["tools"]}
         destination = requested_destination(turn.text, turn.data.get("site_guide", [])) if self.context.channel == "web" else None
         navigation_results = [r for r in turn.tool_results if r.get("name") == "navigate_site"]
-        if destination and "navigate_site" in names and not navigation_results:
-            return "navigate_site", {"destination_id": destination}, None
-        if destination and navigation_results and navigation_results[-1].get("ok"):
+        suggested = (contextual_destination(turn.text, turn.data.get("site_guide", []), current=turn.data.get("current_destination"))
+                     if self.context.channel == "web" and self._auto_navigation and not active_request(turn) else None)
+        if (destination or suggested) and "navigate_site" in names and not navigation_results:
+            return "navigate_site", {"destination_id": destination or suggested}, None
+        if destination and not navigation_needs_answer(turn.text) and navigation_results and navigation_results[-1].get("ok"):
             # A concrete acknowledgement cannot invent product facts after a
             # simple page-opening command. Follow-up questions stay conversational.
             label = next((d.get("label", destination) for d in turn.data.get("site_guide", []) if d.get("id") == destination), destination)
@@ -216,6 +219,10 @@ class EarthoraAgent(Agent):
             turn = self._tool_turns.get(call_id)
             if turn is None or turn is not self.turn or turn.speech_epoch != self.user_speech_epoch:
                 return {"ok": False, "message": "The customer interrupted; wait for the latest request."}
+            if name == "navigate_site" and not self._auto_navigation and not requested_destination(turn.text, turn.data.get("site_guide", [])):
+                failure = {"ok": False, "message": "The visitor asked to stay on this page. Answer by voice without navigating."}
+                turn.accept_tool(name, failure)
+                return failure
             try:
                 validate_arguments(raw_arguments, schema["parameters"])
             except ValueError:
@@ -350,6 +357,9 @@ class EarthoraAgent(Agent):
         text = (getattr(new_message, "text_content", None) or "").strip()
         if not text:
             raise StopResponse()
+        preference = navigation_preference(text)
+        if preference is not None:
+            self._auto_navigation = preference
         if not is_request_confirmation(text):
             # Do this before every early language/policy/navigation path, so a
             # later yes cannot accidentally confirm an older request review.
@@ -386,6 +396,7 @@ class EarthoraAgent(Agent):
             data["channel"] = self.context.channel
             if self.browser_actions:
                 data["current_destination"] = self.browser_actions.destination_id
+                data["auto_navigation"] = self._auto_navigation
             if speech_epoch != self.user_speech_epoch:
                 raise StopResponse()
             self.turn = TurnState(turn_id, self.language, text, speech_epoch, data)
@@ -523,6 +534,7 @@ class EarthoraAgent(Agent):
             if self.turn is not turn or turn.speech_epoch != self.user_speech_epoch:
                 return
             text = trim_unsolicited_followup(normalize_spoken("".join(draft)), turn.text)
+            text = correct_spoken_grammar(text, turn.language)
             reason = validate_reply(text, turn, request_collection=collecting_request)
             if reason:
                 logger.warning("Speech guard replaced draft reason=%s", reason)

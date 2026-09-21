@@ -400,20 +400,70 @@ def validated_caller_identity(metadata: dict, channel: str) -> str:
     return identity
 
 
+_LANGUAGE_NAMES = {
+    "en": r"English|अंग्रेज़ी|अंग्रेजी|इंग्लिश|અંગ્રેજી|ઇંગ્લિશ",
+    "hi": r"Hindi|हिंदी|हिन्दी|હિન્દી|હિંદી",
+    "gu": r"Gujarati|गुजराती|ગુજરાતી",
+}
+
+
+def language_request_target(text: str) -> str | None:
+    """Recognize a whole language-only request after bounded ASR hesitation.
+
+    Never discard arbitrary leading sentences: they may contain a business
+    question or a negation. The observed 'So... Hong.' is a specific ASR filler
+    prefix, accepted only before a complete unambiguous language request.
+    """
+    core = text.strip().rstrip(".!?।？ …")
+    core = re.sub(r"^so\s*(?:\.{2,}|…+)\s*hong[.,!।:;…\s]+", "", core, count=1, flags=re.I)
+    filler = r"(?:so|um|uh|erm|hmm|hm|okay|ok|well|hello|hi|हाँ|हां|अच्छा|हम्म|जी|હા|હમ્મ)"
+    for _ in range(6):
+        cleaned = re.sub(r"^" + filler + r"(?:[\s,.!।:;…-]+)", "", core, count=1, flags=re.I)
+        if cleaned == core:
+            break
+        core = cleaned
+    # Only repeated request starters are stutters, not arbitrary duplicated data.
+    for _ in range(3):
+        core = re.sub(r"^(can|could|would|please|I)[\s,.…-]+\1\b", r"\1", core, count=1, flags=re.I)
+    for code, variants in _LANGUAGE_NAMES.items():
+        name = r"(?:" + variants + r")"
+        patterns = (
+            rf"(?:please\s+)?{name}(?:\s*[,،]?\s+please)?",
+            rf"{name}\s*(?:में|માં)",
+            rf"(?:can|could|will|would)\s+(?:you|we)\s+(?:please\s+)?(?:speak|talk|reply|respond|switch|continue)(?:\s+(?:to me|in|to))?\s+{name}(?:\s*[,،]?\s+please)?",
+            rf"(?:please\s+)?(?:speak|talk|reply|respond|switch|continue)(?:\s+(?:to me|in|to))?\s+{name}(?:\s*[,،]?\s+please)?",
+            rf"(?:then\s+)?I\s+(?:speak|want to speak|want to talk in|would like to speak|would like to talk in)\s+{name}",
+            rf"(?:let's|let us)\s+(?:speak|talk)(?:\s+in)?\s+{name}",
+            rf"(?:क्या\s+)?आप\s+{name}\s+(?:में\s+)?(?:बोल|बात कर)\s+(?:सकते|सकती)\s+हैं",
+            rf"(?:कैन यू\s+)?(?:स्पीक\s+)?{name}\s+(?:में\s+)?(?:बोलिए|बोलो|बात कीजिए|बात करो|जवाब दीजिए|जवाब दो)",
+            rf"कैन यू स्पीक\s+{name}",
+            rf"(?:શું\s+)?તમે\s+{name}\s*(?:માં\s*)?(?:બોલી|વાત કરી)\s+શકો\s+છો",
+            rf"(?:શું\s+)?આપણે\s+{name}\s*(?:માં\s*)?વાત\s+કરી\s+શકીએ",
+            rf"(?:હવે\s+)?{name}\s*(?:માં\s*)?(?:બોલો|વાત કરો|વાત કરીએ|જવાબ આપો)",
+            rf"{name}\s+(?:ma|maa|me|mein)\s+(?:bolo|boliye|baat karo|baat kijiye|vaat karo)(?:\s+please)?",
+        )
+        if any(re.fullmatch(pattern, core, re.I) for pattern in patterns):
+            return code
+    return None
+
+
 def detect_language(text: str, previous: str = "en", detected: str | None = None) -> str:
     """Latest substantive turn wins; numbers/names/yes do not switch a call."""
-    names = {"en": r"english|अंग्रेज़ी|अंग्रेजी|इंग्लिश|અંગ્રેજી|ઇંગ્લિશ", "hi": r"hindi|हिंदी|हिन्दी|હિન્દી|હિંદી", "gu": r"gujarati|गुजराती|ગુજરાતી"}
+    target = language_request_target(text)
+    if target:
+        return target
+    names = _LANGUAGE_NAMES
     command = r"\b(?:speak|talk|reply|respond|switch|continue|bolo|boliye)\b|स्पीक|बोल|बात|जवाब|બોલ|વાત|જવાબ"
     explicit = []
     for code, name in names.items():
         for match in re.finditer(name, text, re.I):
             nearby = text[max(0, match.start() - 35):match.end() + 25]
             third_party = re.search(r"\b(?:team|staff|employees?|representatives?)\b", nearby, re.I)
-            direct_request = re.search(r"\b(?:you|we|i)\b", nearby, re.I) or re.match(r"\s*(?:please\s+)?(?:speak|talk|reply|respond|switch|continue)\b", text, re.I)
+            direct_request = re.search(r"\b(?:you|we)\s+(?:please\s+)?(?:speak|talk|reply|respond|switch|continue)\b|\bi\s+(?:want to speak|want to talk|would like to speak)\b", nearby, re.I) or re.match(r"\s*(?:please\s+)?(?:speak|talk|reply|respond|switch|continue)\b", text, re.I)
             if third_party and not direct_request:
                 continue
             if re.search(command, nearby, re.I) or re.fullmatch(r"\s*(?:please\s+)?(?:" + name + r")(?:\s+please)?[.!?\s]*", text, re.I):
-                if not re.search(r"don't|do not|मत|नहीं|નહીં", nearby, re.I):
+                if not re.search(r"\b(?:don't|do not|not|never)\b|मत|नहीं|નહીં|નથી", nearby, re.I):
                     explicit.append((match.start(), code))
     if explicit:
         return max(explicit)[1]
@@ -721,12 +771,21 @@ def token_estimate(text: str) -> int:
     return math.ceil((len(text) - indic) / 3) + indic * 2
 
 
+HINDI_SPEECH_STYLE = (
+    "Speak everyday Hinglish: Hindi in Devanagari, familiar technical words in Latin (product, tablet, mg, immunity, digestion, delivery). "
+    "For Eva use feminine first-person agreement: 'मैं मदद कर सकती हूँ'; 'हम' takes 'कर सकते हैं', never 'कर सकती हूँ'. "
+    "Match number and gender: '[product] के फायदे हैं', 'यह जानकारी है', 'ये मदद करते हैं'. "
+    "Use short direct sentences and familiar words मदद, सेहत, फायदा; avoid invented or literary wellness translations. "
+    "Grammar examples supply no product claims: include a benefit only when approved evidence supports it."
+)
+
+
 def instructions(data: dict, language: str, *, included_knowledge: list[dict] | None = None) -> str:
-    style = {"en": "Speak Indian English only, even after Hindi/Gujarati history.", "hi": "Speak natural conversational Hinglish: Hindi in Devanagari, familiar English words in Latin. Use feminine Hindi verbs (कर सकती हूँ, बताती हूँ), never formal literary Hindi.", "gu": "Speak natural Gujarati in Gujarati script; keep familiar English product terms in Latin. Do not use Hindi."}[language]
+    style = {"en": "Speak Indian English only, even after Hindi/Gujarati history.", "hi": HINDI_SPEECH_STYLE, "gu": "Speak natural Gujarati in Gujarati script; keep familiar English product terms in Latin. Do not use Hindi."}[language]
     name = str(data.get("persona", {}).get("name") or "Eva")[:60]
     examples = {
         "en": 'Language-only request: "Yes, we can speak English." Buying a clearly identified product, quantity missing: "How many bottles would you like?"',
-        "hi": 'Language-only request: "हाँ, हम हिंदी में बात कर सकते हैं।" Buying a clearly identified product, quantity missing: "आपको कितनी बोतलें चाहिए?"',
+        "hi": 'Language-only request: "हाँ, मैं हिंदी में बात कर सकती हूँ।" Buying a clearly identified product, quantity missing: "आपको कितनी बोतलें चाहिए?"',
         "gu": 'Language-only request: "હા, આપણે ગુજરાતીમાં વાત કરીએ." Buying a clearly identified product, quantity missing: "તમને કેટલી બોટલ જોઈએ છે?"',
     }[language]
     header = f"""You are {name}, the automated Indian female voice assistant for Earthora Farms.

@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 import re
-from sunpath_runtime import knowledge_topics, personalized_dose_question
+from sunpath_runtime import knowledge_topics, personalized_dose_question, language_request_target
 
 LANGUAGE_ACK = {
     "en": "Sure, we can speak in English.",
-    "hi": "हाँ, बिल्कुल। हम हिंदी में बात कर सकते हैं।",
+    "hi": "हाँ, मैं हिंदी में बात कर सकती हूँ।",
     "gu": "હા, ચોક્કસ. આપણે ગુજરાતીમાં વાત કરી શકીએ છીએ.",
 }
 
@@ -79,14 +79,26 @@ def trim_unsolicited_followup(reply: str, question: str) -> str:
     Never remove the only sentence, uncertainty clarification, or questions
     needed for a purchase/checkout flow. No new words or facts are introduced.
     """
-    if not re.search(r"ingredients?|composition|benefits?|सामग्री|घटक|फायदे|लाभ|ઘટકો|સામગ્રી|ફાયદા|લાભ|में क्या", question, re.I):
-        return reply
+    factual_question = bool(re.search(r"ingredients?|composition|benefits?|सामग्री|घटक|फायदे|लाभ|ઘટકો|સામગ્રી|ફાયદા|લાભ|में क्या", question, re.I))
     sentences = re.split(r"(?<=[.!?।])\s+", reply.strip())
     if len(sentences) < 2 or not sentences[-1].endswith(("?", "？")):
         return reply
     before = " ".join(sentences[:-1])
     if re.search(r"don't know|not sure|unconfirmed|not confirmed|cannot confirm|which product|पक्का|confirm नहीं|કયો product|ચોક્કસ નથી", before, re.I):
         return reply
+    if not factual_question:
+        # A topic offer is not a benefit claim. The observed compound story
+        # answer was grounded, but its optional 'health benefits or products?'
+        # offer introduced a new topic without the relevant product evidence.
+        # Remove only that extra offer; never relax the downstream claim guard.
+        company_question = (re.search(r"\b(?:earthora|our story|your company|your farm)\b", question, re.I)
+                            and re.search(r"\b(?:what|who|how|tell|explain|about|story)\b", question, re.I))
+        request_flow = re.search(r"\b(?:callback|call me|enquir[yi]|request|submit|buy|purchase|checkout|cart|order)\b", question, re.I)
+        optional_offer = re.fullmatch(r"(?:would|do) you like (?:to |me to ).*\b(?:health benefits|benefits|products)\b.*\?", sentences[-1], re.I)
+        company_answer = any(re.search(r"\bEarthora\b", sentence, re.I) and not sentence.endswith("?") for sentence in sentences[:-1])
+        uncertain = re.search(r"\b(?:don't have|do not have|cannot|can't|couldn't|unsure)\b", before, re.I)
+        if not (company_question and company_answer and optional_offer) or request_flow or uncertain:
+            return reply
     return before
 
 
@@ -96,22 +108,29 @@ def language_only_reply(text: str, language: str) -> str | None:
     Deliberately match a whole request. A request containing a business
     question, negation or third-party language description stays with the LLM.
     """
-    names = r"(?:English|Hindi|Gujarati|अंग्रेज़ी|अंग्रेजी|हिंदी|हिन्दी|गुजराती|ગુજરાતી|હિન્દી|અંગ્રેજી)"
-    patterns = (
-        rf"(?:please\s+)?{names}(?:\s+please)?",
-        rf"(?:can|could|will|would)\s+(?:you|we)\s+(?:please\s+)?(?:speak|talk|reply|respond)(?:\s+(?:to me|in))?\s+{names}(?:\s+please)?",
-        rf"(?:please\s+)?(?:speak|talk|reply|respond|switch|continue)(?:\s+(?:to me|in|to))?\s+{names}(?:\s+please)?",
-        rf"(?:then\s+)?I\s+(?:speak|want to speak|want to talk in)\s+{names}",
-        rf"(?:क्या\s+)?आप\s+{names}\s+(?:में\s+)?(?:बोल|बात कर)\s+(?:सकते|सकती)\s+हैं",
-        rf"(?:कैन यू\s+)?(?:स्पीक\s+)?{names}\s+(?:में\s+)?(?:बोलिए|बोलो|बात कीजिए)",
-        rf"कैन यू स्पीक\s+{names}",
-        rf"(?:શું\s+)?તમે\s+{names}(?:માં)?\s+(?:બોલી|વાત કરી)\s+શકો\s+છો",
-        rf"{names}(?:માં)?\s+(?:બોલો|વાત કરો)",
-    )
-    normalized = text.strip().rstrip(".!?।？ ")
-    if language in LANGUAGE_ACK and any(re.fullmatch(pattern, normalized, re.I) for pattern in patterns):
+    if language in LANGUAGE_ACK and language_request_target(text) == language:
         return LANGUAGE_ACK[language]
     return None
+
+
+def correct_spoken_grammar(text: str, language: str) -> str:
+    """Repair a few observed Hindi agreement errors without another model call.
+
+    Use only on normal generated prose, never verbatim request fields/readbacks.
+    All claims still need the usual output guard after this function. Quotes,
+    hedges and negations are deliberately left unchanged.
+    """
+    if language != "hi" or re.search(r"[\"'“”‘’«»]|\b(?:may|might|could)\b|नहीं|शायद|संभव|सकता है|सकती है", text, re.I):
+        return text
+    corrected = re.sub(r"हम\s+((?:हिंदी|हिन्दी|गुजराती|अंग्रेज़ी|अंग्रेजी)\s+में\s+बात\s+कर)\s+सकती\s+हूँ", r"हम \1 सकते हैं", text)
+    corrected = re.sub(r"मैं\s+((?:(?:हिंदी|हिन्दी|गुजराती|अंग्रेज़ी|अंग्रेजी)\s+में\s+बात\s+कर|(?:आपकी\s+)?मदद\s+कर))\s+(?:सकता\s+हूँ|सकते\s+हैं)", r"मैं \1 सकती हूँ", corrected)
+    # The observed redundant benefits predicate has one exact shape. Preserve
+    # the product and list verbatim; do not rewrite quantities or extra clauses.
+    pattern = r"(?P<product>मोरिंगा|Moringa)\s+(?:की|के)\s+(?:मुख्य\s+)?फायदे\s+(?P<benefits>[^।.!?;:\d\n]{1,160})\s+में\s+मदद\s+करना\s+है(?P<end>[।.!]?)"
+    match = re.fullmatch(pattern, corrected.strip(), re.I)
+    if match and not re.search(r"\b(?:only|always|guaranteed)\b|केवल|सिर्फ|ज़रूर|जरूर|गारंटी|इलाज|ठीक", match["benefits"], re.I):
+        return f'{match["product"]} {match["benefits"]} में मदद करता है{match["end"]}'
+    return corrected
 
 
 def turn_guidance(text: str, language: str, catalog: list[dict]) -> str:
@@ -123,6 +142,9 @@ def turn_guidance(text: str, language: str, catalog: list[dict]) -> str:
     base = (f"CURRENT TURN LANGUAGE: {language}. Address the latest customer intent using current Earthora facts and successful tools. "
             "Answer directly; guide an exploration, purchase or enquiry with ONE relevant next question or tool action. For a simple factual question, no automatic sales pitch. "
             "Use natural everyday words. Keep Moringa in Latin or spell it मोरिंगा / મોરિંગા as appropriate; never split one word across scripts. ")
+    if language == "hi":
+        base += ("Hindi agreement: Eva says 'मैं मदद कर सकती हूँ'; 'हम' takes 'कर सकते हैं'. "
+                 "Use '[product] के फायदे हैं', not 'की फायदे है'. Prefer short everyday Hinglish with familiar technical English words; never invent literary wellness words. ")
     if re.search(r"\b(?:what is|who is|tell me about)\s+(?:earthora|orthora)(?:\s+farms)?[?.!\s]*$|कंपनी|કંપની", text, re.I):
         base += "This is a COMPANY IDENTITY question, not a product lookup. If the heard name is Orthora, ask briefly 'Do you mean Earthora Farms?' and describe the company using only the supplied company facts. Do not say a product is unavailable. "
     if re.search(r"\b(?:want|would like|need).{0,24}(?:buy|purchase)|મારે.{0,30}લેવું છે|ખરીદ|खरीदना", text, re.I):
