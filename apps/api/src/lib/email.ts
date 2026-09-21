@@ -10,40 +10,52 @@ export interface SendEmailInput {
   kind: string;
   replyTo?: string;
   attachments?: EmailAttachment[];
+  idempotencyKey?: string;
 }
 
 export function escapeHtml(s: unknown): string {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
 }
 
-/** Sends through Resend; every attempt is recorded in email_log. Returns provider id or null when email is unconfigured. */
-export async function sendEmail(input: SendEmailInput): Promise<string | null> {
-  const to = Array.isArray(input.to) ? input.to : [input.to];
-  if (!config.RESEND_API_KEY) {
-    await sql`INSERT INTO email_log (to_email, subject, kind, status, error) VALUES (${to.join(',')}, ${input.subject}, ${input.kind}, 'skipped', 'RESEND_API_KEY not configured')`;
-    return null;
-  }
-  const body: Record<string, unknown> = {
+/** Exact provider payload, shared with the Studio immutable-payload fingerprint. */
+export function emailPayload(input: SendEmailInput): Record<string, unknown> {
+  return {
     from: config.RESEND_FROM_EMAIL,
-    to,
+    to: Array.isArray(input.to) ? input.to : [input.to],
     subject: input.subject,
     html: input.html,
     text: input.text,
     reply_to: input.replyTo,
     attachments: input.attachments?.map((a) => ({ filename: a.filename, content: a.content.toString('base64'), content_type: a.contentType })),
   };
+}
+
+/** Sends through Resend; every attempt is recorded in email_log. Returns provider id or null when email is unconfigured. */
+export async function sendEmail(input: SendEmailInput): Promise<string | null> {
+  const to = Array.isArray(input.to) ? input.to : [input.to];
+  if (input.idempotencyKey !== undefined && (!input.idempotencyKey.length || input.idempotencyKey.length > 256 || /[\r\n]/.test(input.idempotencyKey)))
+    throw new Error('Invalid email idempotency key');
+  if (!config.RESEND_API_KEY) {
+    await sql`INSERT INTO email_log (to_email, subject, kind, status, error) VALUES (${to.join(',')}, ${input.subject}, ${input.kind}, 'skipped', 'RESEND_API_KEY not configured')`;
+    return null;
+  }
+  const body = emailPayload(input);
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${config.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${config.RESEND_API_KEY}`, 'Content-Type': 'application/json',
+      ...(input.idempotencyKey ? { 'Idempotency-Key': input.idempotencyKey } : {}) },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(20_000),
   });
   const text = await res.text();
   if (!res.ok) {
-    await sql`INSERT INTO email_log (to_email, subject, kind, status, error) VALUES (${to.join(',')}, ${input.subject}, ${input.kind}, 'failed', ${`${res.status}: ${text.slice(0, 500)}`})`;
-    throw new Error(`Resend ${res.status}: ${text.slice(0, 200)}`);
+    const detail = input.idempotencyKey ? String(res.status) : `${res.status}: ${text.slice(0, 500)}`;
+    await sql`INSERT INTO email_log (to_email, subject, kind, status, error) VALUES (${to.join(',')}, ${input.subject}, ${input.kind}, 'failed', ${detail})`;
+    throw new Error(input.idempotencyKey ? `Resend ${res.status}` : `Resend ${res.status}: ${text.slice(0, 200)}`);
   }
   const id = (() => { try { return (JSON.parse(text) as { id?: string }).id ?? null; } catch { return null; } })();
+  if (input.idempotencyKey && (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,120}$/.test(id)))
+    throw new Error('Email provider did not confirm a message identifier');
   await sql`INSERT INTO email_log (to_email, subject, kind, provider_id, status) VALUES (${to.join(',')}, ${input.subject}, ${input.kind}, ${id}, 'sent')`;
   return id;
 }

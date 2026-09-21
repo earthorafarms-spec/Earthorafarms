@@ -8,6 +8,7 @@ vi.mock('../engine/conversation.js', () => ({ loadConversation: vi.fn(), appendM
 vi.mock('../../modules/commerce/pricing.js', () => ({ listProducts: vi.fn() }));
 vi.mock('../kb/retrieve.js', () => ({ retrieve: vi.fn() }));
 vi.mock('./voiceConcierge.js', () => ({ requestDrafts: vi.fn(async () => []), requestToolNames: ['start_request', 'set_request_field', 'review_request', 'submit_request'], requestTools: [{ name: 'start_request' }], runRequestTool: vi.fn(async () => ({ ok: true, data: { request_id: 'synthetic' } })) }));
+vi.mock('./studioRequests.js', async original => ({ ...(await original<any>()), receiveStudioRequest: vi.fn() }));
 const run = vi.hoisted(() => vi.fn());
 vi.mock('../engine/functions.js', () => ({
   BUILTIN_MAP: new Map([
@@ -26,6 +27,7 @@ import { appendMessage, loadConversation, saveState } from '../engine/conversati
 import { inVoiceScope } from '../providers/voiceScope.js';
 import { listProducts } from '../../modules/commerce/pricing.js';
 import { retrieve } from '../kb/retrieve.js';
+import { receiveStudioRequest } from './studioRequests.js';
 
 const common = { session_id: 'voice_test', channel_key: 'pk_voice', channel: 'web' };
 const headers = { authorization: 'Bearer test-key' };
@@ -45,8 +47,22 @@ afterEach(async () => { await Promise.all(servers.splice(0).map(app => app.close
 describe('SunPath-style worker data boundary', () => {
   it('rejects unauthenticated access before any data load', async () => {
     const app = await server();
-    for (const path of ['context', 'tool', 'record']) expect((await app.inject({ method: 'POST', url: `/platform/voice/internal/${path}`, payload: common })).statusCode).toBe(401);
+    for (const path of ['context', 'tool', 'record', 'flow-request']) expect((await app.inject({ method: 'POST', url: `/platform/voice/internal/${path}`, payload: common })).statusCode).toBe(401);
     expect(loadConversation).not.toHaveBeenCalled(); expect(sql).not.toHaveBeenCalled();
+  });
+  it('routes Studio delivery only through authenticated channel and conversation resolution', async () => {
+    const app = await server();
+    const payload = { ...common, request_id: 'a'.repeat(32), flow_id: 'contact', flow_name: 'Contact', destination: 'earthora_contact', config_revision: 5,
+      fields: { name: 'Synthetic', email: 'test@example.invalid', message: 'Question' }, field_labels: {} };
+    vi.mocked(receiveStudioRequest).mockResolvedValue({ ok: true, data: { recorded: true } } as any);
+    const response = await app.inject({ method: 'POST', url: '/platform/voice/internal/flow-request', headers, payload });
+    expect(response.statusCode).toBe(200); expect(response.json().data.recorded).toBe(true);
+    expect(receiveStudioRequest).toHaveBeenCalledWith(expect.objectContaining({ request_id: 'a'.repeat(32), validate_only: false }), { tenantId: 'tenant1', conversationId: 'conv1' });
+    const calls = vi.mocked(receiveStudioRequest).mock.calls.length;
+    expect((await app.inject({ method: 'POST', url: '/platform/voice/internal/flow-request', headers, payload: { ...payload, unrelated: 'x' } })).statusCode).toBe(400);
+    vi.mocked(getChannelByKey).mockResolvedValue({ enabled: false, type: 'voice' } as any);
+    expect((await app.inject({ method: 'POST', url: '/platform/voice/internal/flow-request', headers, payload })).statusCode).toBe(404);
+    expect(receiveStudioRequest).toHaveBeenCalledTimes(calls);
   });
   it('provides live catalogue, published public knowledge and existing persona without an LLM call', async () => {
     const app = await server();

@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import { sql } from '../db/client.js';
 import { localAssetPath } from '../lib/assets.js';
 import { brandedEmail, escapeHtml, sendEmail } from '../lib/email.js';
+import { isStudioNotification, sendStudioEmail } from '../lib/studioEmail.js';
 import { registerJobHandler } from '../modules/jobs/worker.js';
 import { getEmbedding } from './providers/index.js';
 import { crawlWebsite, ingestFile, syncProductDocuments, tenantId } from './kb/ingest.js';
@@ -57,7 +58,8 @@ export function registerPlatformJobs(): void {
       <p><b>${escapeHtml(p.contact.name || 'Customer')}</b> · ${escapeHtml(p.contact.phone || '')} · ${escapeHtml(p.contact.email || '')}</p>
       <p style="color:#3b4a40">Reason: ${escapeHtml(p.reason)}</p>
       <p><a href="${config.PUBLIC_CONSOLE_URL}/platform/conversations/${p.conversationId}">Open the conversation</a></p>`);
-    const id = await sendEmail({ to: config.ADMIN_NOTIFY_EMAIL, kind: 'escalation', subject: `Callback request — ${p.contact.name || 'customer'}`, html });
+    const email = { to: config.ADMIN_NOTIFY_EMAIL, kind: 'escalation', subject: `Callback request — ${p.contact.name || 'customer'}`, html };
+    const id = isStudioNotification(job.dedupe_key) ? await sendStudioEmail(job.dedupe_key, 'callback', email) : await sendEmail(email);
     return { emailId: id };
   });
 

@@ -13,6 +13,7 @@ import { listProducts } from '../../modules/commerce/pricing.js';
 import { approvedVoiceProductKnowledge, indexedVoiceKnowledge, searchVoiceKnowledge, voiceCatalogIds } from './sunpathKnowledge.js';
 import { navigationResult, navigationTool, siteGuide } from './siteGuide.js';
 import { requestDrafts, requestToolNames, requestTools, runRequestTool } from './voiceConcierge.js';
+import { receiveStudioRequest, studioRequestInput } from './studioRequests.js';
 
 const identifier = z.string().min(1).max(180).regex(/^[a-zA-Z0-9:_-]+$/);
 const common = z.object({ session_id: identifier, channel_key: z.string().min(1).max(180), channel: z.enum(['web', 'phone']) });
@@ -66,6 +67,16 @@ export async function sunpathRoutes(app: FastifyInstance): Promise<void> {
   function serial<T>(data: z.infer<typeof common>, operation: string, content: unknown, work: () => Promise<T>) {
     return queue.run(`${data.channel_key}:${data.channel}:${data.session_id}`, operation, createHash('sha256').update(JSON.stringify(content)).digest('hex'), work);
   }
+
+  app.post('/platform/voice/internal/flow-request', { preHandler: async (req) => authenticate(req) }, async (req) => {
+    const body = req.body as Record<string, unknown> | null;
+    const identity = common.safeParse(body);
+    const { session_id: _session, channel_key: _key, channel: _channel, ...payload } = body && typeof body === 'object' ? body : {};
+    const parsed = studioRequestInput.safeParse(payload);
+    if (!identity.success || !parsed.success) throw badRequest('Invalid Studio request');
+    const { ch, conversation } = await resolve(identity.data);
+    return receiveStudioRequest(parsed.data, { tenantId: ch.tenant_id, conversationId: conversation.id });
+  });
 
   app.post('/platform/voice/internal/context', { preHandler: async (req) => authenticate(req) }, async (req) => {
     const parsed = common.safeParse(req.body);
