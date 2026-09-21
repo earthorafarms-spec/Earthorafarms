@@ -1,5 +1,10 @@
 # Earthora voice service
 
+The 21 September concierge update adds default compact call controls,
+acknowledged website navigation, confirmed enquiry collection and the Neha
+conversational speech profile. See
+[release evidence](verification/sunpath/20260921-concierge-runtime.md).
+
 Earthora's current conversation worker follows the MyScanHub SunPath source at
 `D:/MSH/sun/sunpath-voicebot`. See [SUNPATH-DEPLOYMENT.md](SUNPATH-DEPLOYMENT.md)
 for the active architecture and [SUNPATH-PARITY.md](SUNPATH-PARITY.md) for the

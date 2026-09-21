@@ -15,7 +15,8 @@
   var css = '\
   .ea-fab{position:fixed;bottom:22px;right:22px;width:60px;height:60px;border-radius:50%;background:#26593b;box-shadow:0 8px 30px rgba(0,0,0,.25);cursor:pointer;z-index:2147483000;display:flex;align-items:center;justify-content:center;transition:transform .2s;border:none;padding:0}\
   .ea-fab:hover{transform:scale(1.06)}.ea-fab svg{width:26px;height:26px;fill:#faf8f3}\
-  .ea-fab:focus-visible,.ea-panel button:focus-visible,.ea-chip:focus-visible,.ea-in:focus-visible{outline:3px solid #DC9950;outline-offset:2px}\
+  .ea-fab:focus-visible,.ea-panel button:focus-visible,.ea-call-strip button:focus-visible,.ea-chip:focus-visible,.ea-in:focus-visible{outline:3px solid #DC9950;outline-offset:2px}\
+  body.ea-call-active .ea-fab{display:none!important}\
   .ea-panel{position:fixed;bottom:94px;right:22px;width:380px;max-width:calc(100vw - 32px);height:600px;max-height:calc(100vh - 120px);background:#faf8f3;border-radius:20px;box-shadow:0 24px 70px rgba(0,0,0,.28);z-index:2147483000;display:none;flex-direction:column;overflow:hidden;font-family:Outfit,system-ui,Segoe UI,sans-serif}\
   .ea-panel.open{display:flex}\
   @media (max-width:480px){.ea-panel{bottom:0;right:0;left:0;width:100%;max-width:100%;height:100dvh;max-height:100dvh;border-radius:0}.ea-fab{bottom:16px;right:16px}}\
@@ -42,8 +43,14 @@
   .ea-voice.open{display:flex}\
   .ea-orb-wrap{width:200px;height:200px;display:flex;align-items:center;justify-content:center}\
   .ea-cap{color:#cfe0d4;font-size:14px;text-align:center;padding:0 30px;margin-top:24px;min-height:40px;line-height:1.5}\
-  .ea-voice-x{position:absolute;top:12px;right:12px;color:#cfe0d4;cursor:pointer;font-size:22px;background:none;border:none;width:40px;height:40px;border-radius:10px;z-index:6}\
-  .ea-voice-x:hover{background:rgba(255,255,255,.12)}\
+  .ea-voice-x,.ea-voice-min{position:absolute;top:12px;color:#cfe0d4;cursor:pointer;font-size:22px;background:none;border:none;width:44px;height:44px;border-radius:10px;z-index:6}\
+  .ea-voice-x{right:12px}.ea-voice-min{left:12px}.ea-voice-x:hover,.ea-voice-min:hover{background:rgba(255,255,255,.12)}\
+  .ea-full-mute{margin-top:12px;min-height:44px;padding:8px 16px;background:transparent;border:1px solid #7fae90;color:#cfe0d4;border-radius:999px;font:inherit;font-size:13px;cursor:pointer}\
+  .ea-call-strip{position:fixed;bottom:22px;right:22px;width:280px;max-width:calc(100vw - 24px);height:56px;box-sizing:border-box;padding:6px 8px 6px 12px;display:none;align-items:center;border:1px solid #52745d;border-radius:14px;background:#0f1a13;color:#faf8f3;box-shadow:0 6px 24px rgba(0,0,0,.2);z-index:2147483000;font-family:Outfit,system-ui,Segoe UI,sans-serif}\
+  .ea-call-strip.open{display:flex}.ea-call-status{flex:1;min-width:0;padding-right:4px}.ea-call-title{display:block;font-size:12px;line-height:17px;font-weight:600}.ea-call-state{display:block;color:#cfe0d4;font-size:11px;line-height:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}\
+  .ea-call-strip button{width:44px;height:44px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:transparent;color:#cfe0d4;border:0;border-radius:8px;padding:0;cursor:pointer}.ea-call-strip button:hover{background:#263e2e}.ea-call-strip button:disabled,.ea-full-mute:disabled{opacity:.5;cursor:wait}.ea-call-strip button[aria-pressed=true]{background:#384538;color:#ffd49f}.ea-call-strip .ea-call-end{color:#ffd5c9}.ea-call-strip svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.ea-call-strip .ea-mute-slash{display:none}.ea-call-strip [aria-pressed=true] .ea-mute-slash{display:block}\
+  .ea-call-strip .ea-call-play{display:none;flex:1;width:auto;justify-content:flex-start;font-size:12px;font-family:inherit}\
+  @media(max-width:1023px){.ea-call-strip{bottom:calc(var(--ea-voice-bottom-inset, 0px) + 12px + env(safe-area-inset-bottom, 0px));right:12px}}\
   .ea-vstop{margin-top:22px;background:#DC9950;color:#15271d;border:none;border-radius:999px;padding:12px 26px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;min-height:44px}\
   .ea-vstop[disabled]{opacity:.55;cursor:not-allowed}\
   .ea-vstate{color:#7fae90;font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-top:8px}\
@@ -77,13 +84,27 @@
       '<button type="button" class="ea-send" aria-label="Send message"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 20l18-8L3 4v6l12 2-12 2z"/></svg></button>' +
     '</div>' +
     '<div class="ea-voice" role="dialog" aria-label="Voice conversation">' +
-      '<button type="button" class="ea-voice-x" aria-label="Close voice mode">×</button>' +
+      '<button type="button" class="ea-voice-min" aria-label="Minimize voice call" title="Minimize voice call">−</button>' +
+      '<button type="button" class="ea-voice-x" aria-label="End voice call" title="End voice call">×</button>' +
       '<div class="ea-orb-wrap"><canvas class="ea-orb" width="360" height="360" style="width:200px;height:200px" aria-hidden="true"></canvas></div>' +
       '<p class="ea-vstate" aria-hidden="true">idle</p>' +
       '<p class="ea-cap" role="status" aria-live="polite"></p>' +
+      '<button type="button" class="ea-full-mute" aria-pressed="false">Mute microphone</button>' +
       '<button type="button" class="ea-vstop">Stop and send</button>' +
     '</div>';
   document.body.appendChild(panel);
+
+  var callStrip = document.createElement('div');
+  callStrip.className = 'ea-call-strip'; callStrip.setAttribute('role', 'region'); callStrip.setAttribute('aria-label', 'Earthora voice call');
+  callStrip.innerHTML = '<div class="ea-call-status"><span class="ea-call-title">Earthora voice</span><span class="ea-call-state" role="status" aria-live="polite">Connecting…</span></div>' +
+    '<button type="button" class="ea-call-play">Play audio</button>' +
+    '<button type="button" class="ea-call-mute" aria-label="Mute microphone" title="Mute microphone" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/><path class="ea-mute-slash" d="M3 3l18 18"/></svg></button>' +
+    '<button type="button" class="ea-call-max" aria-label="Maximize voice call" title="Maximize voice call"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5"/></svg></button>' +
+    '<button type="button" class="ea-call-end" aria-label="End voice call" title="End voice call"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>';
+  document.body.appendChild(callStrip);
+  var callStatus = callStrip.querySelector('.ea-call-state'), muteBtn = callStrip.querySelector('.ea-call-mute');
+  var fullMuteBtn = panel.querySelector('.ea-full-mute'), playBtn = callStrip.querySelector('.ea-call-play');
+  var announcement = document.createElement('p'); announcement.className = 'ea-sr'; announcement.setAttribute('role', 'status'); document.body.appendChild(announcement);
 
   var msgs = panel.querySelector('.ea-msgs'), input = panel.querySelector('.ea-in'), starters = panel.querySelector('.ea-starters');
   var voicePane = panel.querySelector('.ea-voice'), cap = panel.querySelector('.ea-cap'), vstate = panel.querySelector('.ea-vstate');
@@ -129,7 +150,7 @@
   panel.querySelector('.ea-x').onclick = close;
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape' || !panel.classList.contains('open')) return;
-    if (voicePane.classList.contains('open')) { closeVoice(); return; }
+    if (voicePane.classList.contains('open') && voiceActive) { minimizeVoice(); return; }
     close();
   });
 
@@ -215,13 +236,23 @@
   }
   // Same controls and layout; LiveKit owns continuous audio and turn detection.
   var voiceConnection = null, voiceAbort = null, voiceLoad = null, voiceTurn = 0;
-  var voiceConversationId = null, playbackBlocked = false;
+  var voiceConversationId = null, playbackBlocked = false, voiceActive = false, voiceMinimized = false, microphoneMuted = false, mutePending = false;
+  function updateCallControls() {
+    var label = microphoneMuted ? 'Unmute microphone' : 'Mute microphone';
+    muteBtn.setAttribute('aria-pressed', String(microphoneMuted)); fullMuteBtn.setAttribute('aria-pressed', String(microphoneMuted));
+    muteBtn.setAttribute('aria-label', label); muteBtn.title = label; fullMuteBtn.textContent = label;
+    muteBtn.disabled = fullMuteBtn.disabled = !voiceConnection || mutePending || orbState === 'connecting';
+    callStatus.textContent = microphoneMuted ? 'Microphone muted' : orbState === 'speaking' ? 'Speaking' : orbState === 'thinking' ? 'Thinking…' : orbState === 'connecting' ? 'Connecting…' : orbState === 'idle' ? 'Call ended' : 'Listening';
+    callStrip.querySelector('.ea-call-status').style.display = playbackBlocked ? 'none' : '';
+    playBtn.style.display = playbackBlocked ? 'flex' : '';
+  }
   function setVState(s, text) {
     orbState = s;
     vstate.textContent = s;
     if (text !== undefined) cap.textContent = text;
     stopBtn.textContent = playbackBlocked ? 'Play audio' : s === 'idle' ? 'Start speaking' : s === 'connecting' ? 'Connecting...' : 'End call';
     stopBtn.disabled = s === 'connecting';
+    updateCallControls();
   }
   function loadVoiceClient() {
     if (window.EarthoraVoice) return Promise.resolve();
@@ -236,29 +267,57 @@
   }
   micBtn.onclick = openVoice;
   panel.querySelector('.ea-voice-x').onclick = closeVoice;
+  panel.querySelector('.ea-voice-min').onclick = function () { minimizeVoice(); };
+  callStrip.querySelector('.ea-call-max').onclick = maximizeVoice;
+  callStrip.querySelector('.ea-call-end').onclick = closeVoice;
+  muteBtn.onclick = fullMuteBtn.onclick = function () {
+    if (!voiceConnection || mutePending) return;
+    mutePending = true; updateCallControls();
+    var turn = voiceTurn;
+    voiceConnection.setMuted(!microphoneMuted).catch(function () {
+      if (turn === voiceTurn) announcement.textContent = 'Could not change the microphone. Please try again.';
+    }).then(function () { if (turn === voiceTurn) { mutePending = false; updateCallControls(); } });
+  };
+  playBtn.onclick = function () {
+    if (voiceConnection) voiceConnection.resumeAudio().then(function () { playbackBlocked = false; updateCallControls(); }).catch(function () { announcement.textContent = 'Audio could not start. Tap Play audio to try again.'; });
+  };
   stopBtn.onclick = function () {
     if (playbackBlocked && voiceConnection) {
       voiceConnection.resumeAudio().then(function () { playbackBlocked = false; setVState('listening', 'Listening... speak naturally.'); });
-    } else if (orbState === 'idle') startVoice();
+    } else if (orbState === 'idle') { startVoice(); if (voiceActive) minimizeVoice(); }
     else closeVoice();
   };
   function openVoice() {
     if (!cfg.voiceChannelKey) return;
     voicePane.classList.add('open');
-    if (raf === null) drawOrb();
     startVoice();
-    stopBtn.focus();
+    if (voiceActive) minimizeVoice();
+  }
+  function minimizeVoice(moveFocus) {
+    if (!voiceActive) return;
+    voiceMinimized = true; panel.classList.remove('open'); callStrip.classList.add('open');
+    fab.setAttribute('aria-expanded', 'false');
+    if (raf !== null) { cancelAnimationFrame(raf); raf = null; }
+    if (moveFocus !== false) callStrip.querySelector('.ea-call-max').focus();
+  }
+  function maximizeVoice() {
+    voiceMinimized = false; callStrip.classList.remove('open'); voicePane.classList.add('open'); panel.classList.add('open');
+    fab.setAttribute('aria-expanded', 'true');
+    if (raf === null) drawOrb();
+    panel.querySelector('.ea-voice-min').focus();
   }
   function closeVoice() {
+    var wasMinimized = voiceMinimized;
     stopVoice();
     voicePane.classList.remove('open');
-    micBtn.focus();
+    if (wasMinimized) { panel.classList.remove('open'); fab.focus(); } else micBtn.focus();
   }
   function stopVoice() {
     voiceTurn++;
     if (voiceAbort) { voiceAbort.abort(); voiceAbort = null; }
     if (voiceConnection) { voiceConnection.disconnect(); voiceConnection = null; }
-    playbackBlocked = false; level = 0;
+    playbackBlocked = false; level = 0; voiceActive = false; voiceMinimized = false; microphoneMuted = false; mutePending = false;
+    callStrip.classList.remove('open'); document.body.classList.remove('ea-call-active');
     if (raf !== null) { cancelAnimationFrame(raf); raf = null; }
     setVState('idle', '');
   }
@@ -267,20 +326,29 @@
     if (voiceAbort) voiceAbort.abort();
     var myTurn = ++voiceTurn;
     voiceAbort = new AbortController();
-    playbackBlocked = false;
-    if (raf === null) drawOrb();
+    playbackBlocked = false; voiceActive = true; document.body.classList.add('ea-call-active');
+    if (!voiceMinimized && panel.classList.contains('open') && raf === null) drawOrb();
     setVState('connecting', 'Connecting your voice call...');
     loadVoiceClient().then(function () {
       if (myTurn !== voiceTurn) return;
       return window.EarthoraVoice.connect({
         baseUrl: API, channelKey: cfg.voiceChannelKey, conversationId: voiceConversationId,
         signal: voiceAbort.signal,
+        onNavigate: function (destination, signal) {
+          if (myTurn !== voiceTurn || !window.EarthoraStorefrontNavigation) return Promise.resolve({ ok: false, reason: 'unsupported_page' });
+          minimizeVoice(false);
+          return window.EarthoraStorefrontNavigation.navigate(destination, signal);
+        },
         onLevel: function (value) { if (myTurn === voiceTurn) level = value; },
         onEvent: function (event) {
           if (myTurn !== voiceTurn) return;
           if (event.type === 'connected') {
             if (event.conversationId) voiceConversationId = event.conversationId;
             setVState('listening', 'Listening... speak naturally.');
+          } else if (event.type === 'microphone_state') {
+            microphoneMuted = event.muted === true; updateCallControls();
+          } else if (event.type === 'voice_state_unconfirmed') {
+            announcement.textContent = 'Microphone updated. Reconnecting call status…';
           } else if (event.type === 'user_transcript') {
             if (event.text && event.is_final !== false) addMsg('u', event.text);
             setVState('thinking', 'Thinking...');
@@ -296,7 +364,10 @@
           } else if (event.type === 'reconnecting') {
             setVState('connecting', 'Reconnecting...');
           } else if (event.type === 'call_end' || event.type === 'disconnected') {
+            var compact = voiceMinimized;
             stopVoice(); setVState('idle', 'Call ended. Tap Start speaking to reconnect.');
+            announcement.textContent = 'Voice call ended.';
+            if (compact) { voicePane.classList.remove('open'); fab.focus(); }
           } else if (event.type === 'error') {
             setVState('listening', event.message || 'I missed that. Please try again.');
           }
@@ -306,10 +377,11 @@
       if (!connection) return;
       if (myTurn !== voiceTurn) { connection.disconnect(); return; }
       voiceConnection = connection;
+      updateCallControls();
     }).catch(function (error) {
       if (myTurn !== voiceTurn || error.name === 'AbortError') return;
       var message = error.name === 'NotAllowedError' ? 'Allow microphone access, then tap Start speaking.' : error.message || 'Voice could not connect. Please try again.';
-      stopVoice(); setVState('idle', message);
+      stopVoice(); maximizeVoice(); setVState('idle', message); stopBtn.focus();
     });
   }
 })();

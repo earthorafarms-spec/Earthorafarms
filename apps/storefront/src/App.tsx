@@ -8,6 +8,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Gate } from '@/components/Gate';
 import ScrollToTop from '@/components/ScrollToTop';
 import { AssistantWidget } from '@/components/AssistantWidget';
+import { VoiceNavigationBridge, withVoicePage } from '@/components/VoiceNavigationBridge';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
 // Home is eager — it's the LCP page for most visitors
 import Home from './pages/home';
@@ -39,19 +40,21 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
   });
 }
 
+const PublicHome = withVoicePage(Home);
+
 // Public routes — lazy-loaded to keep the initial bundle small
-const OurStory       = lazyWithRetry(() => import('./pages/our-story'));
-const Contact        = lazyWithRetry(() => import('./pages/contact'));
-const HealthBenefits = lazyWithRetry(() => import('./pages/health-benefits'));
-const ProductDetail  = lazyWithRetry(() => import('./pages/product-detail'));
-const Cart           = lazyWithRetry(() => import('./pages/cart'));
+const OurStory       = withVoicePage(lazyWithRetry(() => import('./pages/our-story')));
+const Contact        = withVoicePage(lazyWithRetry(() => import('./pages/contact')));
+const HealthBenefits = withVoicePage(lazyWithRetry(() => import('./pages/health-benefits')));
+const ProductDetail  = withVoicePage(lazyWithRetry(() => import('./pages/product-detail')));
+const Cart           = withVoicePage(lazyWithRetry(() => import('./pages/cart')));
 const Favorites      = lazyWithRetry(() => import('./pages/favorites'));
 const VoiceCheckout  = lazyWithRetry(() => import('./pages/voice-checkout'));
 const ReviewOrder    = lazyWithRetry(() => import('./pages/review-order'));
-const ShippingPolicy = lazyWithRetry(() => import('./pages/shipping-policy'));
-const FAQ            = lazyWithRetry(() => import('./pages/faq'));
-const PrivacyPolicy  = lazyWithRetry(() => import('./pages/privacy-policy'));
-const TermsOfUse     = lazyWithRetry(() => import('./pages/terms-of-use'));
+const ShippingPolicy = withVoicePage(lazyWithRetry(() => import('./pages/shipping-policy')));
+const FAQ            = withVoicePage(lazyWithRetry(() => import('./pages/faq')));
+const PrivacyPolicy  = withVoicePage(lazyWithRetry(() => import('./pages/privacy-policy')));
+const TermsOfUse     = withVoicePage(lazyWithRetry(() => import('./pages/terms-of-use')));
 const CookieSettings = lazyWithRetry(() => import('./pages/cookie-settings'));
 
 // Admin routes
@@ -108,9 +111,10 @@ export default function App() {
               <PageTracker />
               <ScrollToTop />
               <AssistantWidget />
+              <VoiceNavigationBridge />
               <Suspense fallback={<PageLoader />}>
                 <Switch>
-                  <Route path="/" component={Home} />
+                  <Route path="/" component={PublicHome} />
                   <Route path="/our-story" component={OurStory} />
                   <Route path="/contact" component={Contact} />
                   <Route path="/health-benefits" component={HealthBenefits} />

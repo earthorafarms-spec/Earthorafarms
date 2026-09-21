@@ -371,6 +371,9 @@ class PlymaxxTTS(tts.TTS):
         self._language = _language(language)
         self._voice = voice
         self._speed = configured_speed()
+        self._profile = os.getenv("VOICE_TTS_PROFILE", "default")
+        if self._profile not in {"default", "conversational"}:
+            raise ValueError("VOICE_TTS_PROFILE must be default or conversational")
         self._http = _PlymaxxHTTP(http_session)
         self._timeout = float(os.getenv("AI_TTS_COMPLETED_TIMEOUT_MS", "90000")) / 1000
         self._streams: weakref.WeakSet = weakref.WeakSet()
@@ -414,6 +417,8 @@ class _PlymaxxSpeech(tts.ChunkedStream):
         for index, chunk in enumerate(chunks):
             payload = {"model": TTS_MODEL, "voice": self._voice, "language": self._language,
                        "input": chunk, "response_format": "wav"}
+            if self._provider._profile != "default":
+                payload["profile"] = self._provider._profile
             data = await self._provider._http.request(
                 "/audio/speech", lambda: {"json": payload}, timeout=self._provider._timeout,
             )

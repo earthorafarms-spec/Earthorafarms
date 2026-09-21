@@ -71,6 +71,23 @@ export function AssistantWidget() {
     if (onStaffPage && panel) panel.classList.remove('open');
   }, [onStaffPage, location]);
 
+  // Keep the compact call controls above the product's mobile purchase bar.
+  // Measuring the actual bar also handles text scaling and safe-area padding.
+  useEffect(() => {
+    let observed:Element|null = null;
+    const resize = new ResizeObserver(()=>measure());
+    const measure=()=>{
+      const bar=document.querySelector<HTMLElement>('[data-voice-bottom-bar]');
+      if (bar !== observed) { resize.disconnect(); if (bar) resize.observe(bar); observed=bar; }
+      const height=bar && bar.getClientRects().length ? Math.ceil(bar.getBoundingClientRect().height) : 0;
+      document.body.style.setProperty('--ea-voice-bottom-inset',`${height}px`);
+    };
+    const observer=new MutationObserver(measure);
+    observer.observe(document.body,{childList:true,subtree:true});
+    window.addEventListener('resize',measure); measure();
+    return ()=>{observer.disconnect();resize.disconnect();window.removeEventListener('resize',measure);};
+  },[location]);
+
   return null;
 }
 

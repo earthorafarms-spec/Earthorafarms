@@ -29,7 +29,7 @@ export function HomeFAQ() {
   const [open, setOpen] = useState<number | null>(0);
 
   return (
-    <section className="bg-[#FAF9F5] py-24 lg:py-32 relative overflow-hidden">
+    <section id="faq" className="bg-[#FAF9F5] py-24 lg:py-32 relative overflow-hidden">
       <div className="container mx-auto max-w-[880px] px-6 sm:px-10">
         <div className="flex flex-col items-center text-center mb-12 lg:mb-16">
           <span className="inline-block px-4 py-1.5 rounded-full border border-black/15 bg-white text-[10px] font-inter font-semibold tracking-[0.25em] uppercase text-black/60 mb-6">

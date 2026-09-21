@@ -31,6 +31,10 @@ from plymaxx import UnrecognizedSpeech
 from conversation_controls import (DISPATCH_UNKNOWN, dispatch_schedule_missing, language_only_reply, policy_reply,
                                    trim_unsolicited_followup, turn_guidance)
 from source_fact_localizations import approved_fact_reply
+from browser_actions import BrowserActions
+from concierge_controls import requested_destination, requested_request_type, active_request, concierge_guidance
+from request_review import request_review_reply, submitted_request_reply
+from request_collection import extract_request_field, request_collection_prompt, is_request_confirmation
 from sunpath_runtime import (COPY, TurnState, bounded_reply, detect_language, instructions, select_knowledge,
                              is_farewell, normalize_spoken, token_estimate, validate_arguments, validate_reply,
                              validated_caller_identity, compact_knowledge_result, knowledge_issue, knowledge_query)
@@ -119,7 +123,7 @@ _TERMINAL_RECORD_TIMEOUT = 1.0
 
 class EarthoraAgent(Agent):
     def __init__(self, *, context: VoiceContext, bridge: SunPathBridge, events: RoomEvents,
-                 stt_provider, tts_provider, end_call, initial_data: dict):
+                 stt_provider, tts_provider, end_call, initial_data: dict, browser_actions=None):
         history = llm.ChatContext()
         for item in initial_data.get("history", [])[-8:]:
             if item.get("role") in {"user", "assistant"} and isinstance(item.get("content"), str):
@@ -139,6 +143,70 @@ class EarthoraAgent(Agent):
         self._tool_turns: dict[str, TurnState] = {}
         self.terminal_turn_id: str | None = None
         self._clarified_speech_epoch = -1
+        self.browser_actions = browser_actions
+        self._blocked_review_tokens: set[str] = set()
+        self._review_tokens: dict[str, tuple[str, str]] = {}
+        self._request_fields_attempted: dict[str, set[str]] = {}
+
+    def invalidate_review(self, *, request_id=None, turn_id=None):
+        for key, (token, reviewed_turn) in tuple(self._review_tokens.items()):
+            if key == request_id or reviewed_turn == turn_id:
+                self._blocked_review_tokens.add(token)
+                del self._review_tokens[key]
+
+    def _concierge_step(self, turn):
+        """Choose native actions for unambiguous answers; the API validates writes.
+
+        No model is needed to persist a stated phone number or ask the next
+        required field. Ambiguous answers and product questions remain with it.
+        """
+        names = {schema["name"] for schema in self.initial_data["tools"]}
+        destination = requested_destination(turn.text, turn.data.get("site_guide", [])) if self.context.channel == "web" else None
+        navigation_results = [r for r in turn.tool_results if r.get("name") == "navigate_site"]
+        if destination and "navigate_site" in names and not navigation_results:
+            return "navigate_site", {"destination_id": destination}, None
+        if destination and navigation_results and navigation_results[-1].get("ok"):
+            # A concrete acknowledgement cannot invent product facts after a
+            # simple page-opening command. Follow-up questions stay conversational.
+            label = next((d.get("label", destination) for d in turn.data.get("site_guide", []) if d.get("id") == destination), destination)
+            text = {"en": f"I've opened {label}. What would you like to know about it?",
+                    "hi": f"मैंने {label} खोल दिया है। इसके बारे में आप क्या जानना चाहेंगे?",
+                    "gu": f"મેં {label} ખોલ્યું છે. તેના વિશે તમે શું જાણવા માંગો છો?"}[turn.language]
+            return None, None, text
+        draft = active_request(turn)
+        kind = requested_request_type(turn.text)
+        attempts = [r for r in turn.tool_results if r.get("name") in {"start_request", "set_request_field", "review_request", "submit_request"}]
+        if attempts and not attempts[-1].get("ok"):
+            return None, None, {"en": "I couldn't save that request detail. Please repeat it, or we can try again later.",
+                                "hi": "यह request detail save नहीं हो पाई। कृपया दोबारा बताइए, या हम बाद में फिर कोशिश कर सकते हैं।",
+                                "gu": "આ request ની વિગત save થઈ નથી. કૃપા કરીને ફરી કહો, અથવા આપણે પછી પ્રયત્ન કરી શકીએ."}[turn.language]
+        if kind and "start_request" in names and not draft and not attempts:
+            return "start_request", {"request_type": kind}, None
+        if not draft or draft.get("status", "draft") != "draft":
+            return None, None, None
+        request_id = draft.get("request_id")
+        previous_review = self._review_tokens.get(request_id)
+        if previous_review and previous_review[1] != turn.id and not is_request_confirmation(turn.text):
+            # A later yes must answer the request review, not an intervening
+            # product question, correction or other conversation.
+            self.invalidate_review(request_id=request_id)
+        supplied = extract_request_field(turn.text, draft)
+        consumed = self._request_fields_attempted.setdefault(turn.id, set())
+        if supplied and supplied[0] not in consumed and "set_request_field" in names:
+            field, value = supplied
+            consumed.add(field)  # A validation failure must not loop/retry writes.
+            return "set_request_field", {"request_id": request_id, "field": field, "value": value}, None
+        if is_request_confirmation(turn.text) and request_id in self._review_tokens and "submit_request" in names:
+            token, reviewed_turn = self._review_tokens[request_id]
+            if reviewed_turn != turn.id and token not in self._blocked_review_tokens:
+                return "submit_request", {"request_id": request_id, "confirmation_token": token}, None
+        if attempts or supplied or kind or is_request_confirmation(turn.text):
+            prompt = request_collection_prompt(draft, turn.language)
+            if prompt:
+                return None, None, prompt
+            if "review_request" in names and not any(r.get("name") == "review_request" for r in attempts):
+                return "review_request", {"request_id": request_id}, None
+        return None, None, None
 
     def _make_tool(self, schema: dict):
         name = schema["name"]
@@ -151,7 +219,13 @@ class EarthoraAgent(Agent):
             try:
                 validate_arguments(raw_arguments, schema["parameters"])
             except ValueError:
-                return {"ok": False, "message": "Invalid or missing arguments; ask the customer to clarify."}
+                failure = {"ok": False, "message": "Invalid or missing arguments; ask the customer to clarify."}
+                turn.accept_tool(name, failure)
+                return failure
+            if name == "submit_request" and raw_arguments.get("confirmation_token") in self._blocked_review_tokens:
+                failure = {"ok": False, "message": "The full request was not read back. Collect a shorter message and obtain a new review before confirmation."}
+                turn.accept_tool(name, failure)
+                return failure
             # Native tool call ID is stable for the server's idempotency boundary.
             try:
                 result = await self.bridge.tool(self.context, call_id=call_id, name=name, arguments=raw_arguments)
@@ -159,10 +233,48 @@ class EarthoraAgent(Agent):
                 raise
             except Exception as error:
                 logger.warning("Earthora tool failed name=%s type=%s", name, type(error).__name__)
-                return {"ok": False, "message": "The request could not be confirmed. Do not retry a cart, checkout or callback mutation automatically; ask the customer."}
+                failure = {"ok": False, "message": "The request could not be confirmed. Do not retry a cart, checkout or callback mutation automatically; ask the customer."}
+                turn.accept_tool(name, failure)
+                return failure
             if name == "search_knowledge":
                 turn.knowledge_search_attempted = True
                 result = compact_knowledge_result(turn, result)
+            if name == "review_request" and result.get("ok"):
+                if turn is not self.turn or turn.speech_epoch != self.user_speech_epoch:
+                    token = result.get("data", {}).get("confirmation_token")
+                    if isinstance(token, str):
+                        self._blocked_review_tokens.add(token)
+                    failure = {"ok": False, "message": "The visitor interrupted before this review. Review current details again before any submission."}
+                    turn.accept_tool(name, failure)
+                    return failure
+                review = request_review_reply(result, turn.language)
+                if review is None or not review.ready_for_confirmation:
+                    token = result.get("data", {}).pop("confirmation_token", None)
+                    if isinstance(token, str):
+                        self._blocked_review_tokens.add(token)
+                    result.setdefault("data", {})["review_ready"] = False
+                if review:
+                    turn.request_speech = review.text
+                    if review.ready_for_confirmation:
+                        self._review_tokens[review.request_id] = (result["data"]["confirmation_token"], turn.id)
+                else:
+                    result = {"ok": False, "message": "The exact request details could not be reviewed. Ask the visitor to clarify; do not submit."}
+            elif name == "submit_request":
+                turn.request_speech = submitted_request_reply(result, turn.language)
+                if result.get("ok"):
+                    self.invalidate_review(request_id=raw_arguments.get("request_id"))
+            elif name == "set_request_field" and result.get("ok"):
+                self.invalidate_review(request_id=raw_arguments.get("request_id"))
+            if name == "navigate_site" and result.get("ok"):
+                navigation = result.get("data", {}).get("navigation")
+                if self.context.channel != "web" or self.browser_actions is None or not isinstance(navigation, dict):
+                    result = {"ok": False, "message": "Screen navigation is unavailable here. Continue helping by voice."}
+                elif turn is self.turn and turn.speech_epoch == self.user_speech_epoch:
+                    result = await self.browser_actions.navigate(navigation, turn_id=turn.id)
+                    if result.get("ok"):
+                        turn.data["current_destination"] = navigation["destination_id"]
+                else:
+                    result = {"ok": False, "message": "The visitor interrupted. Do not navigate for the earlier request."}
             # No filler speech here: it adds a second expensive GPU TTS request.
             # The whole successful result remains available to the accuracy gate.
             text = json.dumps(result, ensure_ascii=False, separators=(",", ":"))
@@ -176,6 +288,8 @@ class EarthoraAgent(Agent):
 
     def user_started_speaking(self) -> None:
         self.user_speech_epoch += 1
+        if self.browser_actions:
+            self.browser_actions.cancel_pending()
 
     def handle_recognition_error(self, error) -> bool:
         cause = getattr(error, "error", error)
@@ -236,6 +350,11 @@ class EarthoraAgent(Agent):
         text = (getattr(new_message, "text_content", None) or "").strip()
         if not text:
             raise StopResponse()
+        if not is_request_confirmation(text):
+            # Do this before every early language/policy/navigation path, so a
+            # later yes cannot accidentally confirm an older request review.
+            for request_id in tuple(self._review_tokens):
+                self.invalidate_review(request_id=request_id)
         turn_id = uuid.uuid4().hex
         self.turn_count += 1
         self.language = detect_language(text, self.language, self.detected_language)
@@ -264,6 +383,9 @@ class EarthoraAgent(Agent):
                 await self.say_fixed("closing", reason=terminal_reason, turn_id=turn_id)
                 raise StopResponse()
             data = await self.bridge.context(self.context)
+            data["channel"] = self.context.channel
+            if self.browser_actions:
+                data["current_destination"] = self.browser_actions.destination_id
             if speech_epoch != self.user_speech_epoch:
                 raise StopResponse()
             self.turn = TurnState(turn_id, self.language, text, speech_epoch, data)
@@ -303,7 +425,7 @@ class EarthoraAgent(Agent):
 
         base = base_context()
         guard = llm.ChatContext()
-        guard.add_message(role="system", content=turn_guidance(turn.text, turn.language, turn.data.get("catalog", [])))
+        guard.add_message(role="system", content=turn_guidance(turn.text, turn.language, turn.data.get("catalog", [])) + concierge_guidance(turn))
         schema_cost = token_estimate(json.dumps(self.initial_data["tools"], ensure_ascii=False)) + 600
         while True:
             items = list(base.items)
@@ -328,7 +450,15 @@ class EarthoraAgent(Agent):
             return
         draft, has_tools = [], False
         try:
-            acknowledgement = language_only_reply(turn.text, turn.language) or policy_reply(turn.text, turn.language)
+            acknowledgement = language_only_reply(turn.text, turn.language) or policy_reply(turn.text, turn.language) or turn.request_speech
+            if not acknowledgement:
+                direct_name, direct_args, acknowledgement = self._concierge_step(turn)
+                if direct_name:
+                    call_id = "concierge_" + uuid.uuid4().hex
+                    self._tool_turns[call_id] = turn
+                    yield llm.ChatChunk(id=call_id, delta=llm.ChoiceDelta(tool_calls=[llm.FunctionToolCall(
+                        call_id=call_id, name=direct_name, arguments=json.dumps(direct_args))]))
+                    return
             if acknowledgement:
                 turn.reply_count += 1
                 await self.bridge.record(self.context, message_id=f"{turn.id}:assistant:{turn.reply_count}", role="assistant", text=acknowledgement, language=turn.language)
@@ -341,7 +471,9 @@ class EarthoraAgent(Agent):
             model_context = self._model_context(chat_ctx, turn, tools)
             if self.turn is not turn or turn.speech_epoch != self.user_speech_epoch:
                 return
-            query = knowledge_query(turn)
+            kind = requested_request_type(turn.text)
+            collecting_request = bool(kind or any(result.get("name") in {"start_request", "set_request_field", "review_request", "submit_request"} for result in turn.tool_results))
+            query = None if collecting_request else knowledge_query(turn)
             if query and any(schema["name"] == "search_knowledge" for schema in self.initial_data["tools"]):
                 # Missing facts are a deterministic retrieval prerequisite in
                 # every language. AgentSession executes the SAME native tool
@@ -352,12 +484,12 @@ class EarthoraAgent(Agent):
                 yield llm.ChatChunk(id=call_id, delta=llm.ChoiceDelta(tool_calls=[llm.FunctionToolCall(
                     call_id=call_id, name="search_knowledge", arguments=json.dumps({"query": query}))]))
                 return
-            issue = knowledge_issue(turn)
+            issue = None if collecting_request else knowledge_issue(turn)
             async def no_evidence_reply():
                 yield COPY[turn.language]["conflict" if issue == "conflicting-knowledge" else "knowledge"]
             async def no_dispatch_schedule_reply():
                 yield DISPATCH_UNKNOWN[turn.language]
-            localized_fact = approved_fact_reply(turn) if not issue else None
+            localized_fact = approved_fact_reply(turn) if not issue and not collecting_request else None
             async def localized_fact_reply():
                 yield localized_fact
             evidence = list(turn.data.get("knowledge", []))
@@ -391,12 +523,12 @@ class EarthoraAgent(Agent):
             if self.turn is not turn or turn.speech_epoch != self.user_speech_epoch:
                 return
             text = trim_unsolicited_followup(normalize_spoken("".join(draft)), turn.text)
-            reason = validate_reply(text, turn)
+            reason = validate_reply(text, turn, request_collection=collecting_request)
             if reason:
                 logger.warning("Speech guard replaced draft reason=%s", reason)
                 text = COPY[turn.language]["conflict" if reason == "conflicting-knowledge" else "knowledge" if reason == "missing-knowledge" else "safe"]
             else:
-                text = bounded_reply(text)
+                text = bounded_reply(text, request_review=any(result.get("name") == "review_request" and result.get("ok") for result in turn.tool_results))
             turn.reply_count += 1
             await self.bridge.record(self.context, message_id=f"{turn.id}:assistant:{turn.reply_count}", role="assistant", text=text, language=turn.language)
             if self.turn is not turn or turn.speech_epoch != self.user_speech_epoch:
@@ -475,7 +607,8 @@ async def entrypoint(ctx: JobContext) -> None:
         min_interruption_words=int(os.getenv("VOICE_MIN_INTERRUPT_WORDS", "0")),
         min_interruption_duration=float(os.getenv("VOICE_MIN_INTERRUPT_DURATION", "0.5")),
         resume_false_interruption=False,
-        user_away_timeout=float(os.getenv("USER_AWAY_TIMEOUT", "10")),
+        user_away_timeout=float(os.getenv("VOICE_WEB_IDLE_SECONDS", "60") if context.channel == "web"
+                                else os.getenv("VOICE_PHONE_IDLE_SECONDS", "30")),
         max_tool_steps=6,
         conn_options=SessionConnectOptions(llm_conn_options=APIConnectOptions(max_retry=0, timeout=20)),
         tts_text_transforms=["filter_markdown", "filter_emoji"],
@@ -496,9 +629,14 @@ async def entrypoint(ctx: JobContext) -> None:
             # Closure runs outside the turn handler to avoid awaiting itself.
             asyncio.create_task(finish(reason))
 
+    browser_actions = BrowserActions(events, caller_identity) if context.channel == "web" else None
+    if browser_actions:
+        ctx.room.on("data_received", browser_actions.receive)
+    initial_data["channel"] = context.channel
     agent = EarthoraAgent(
         context=context, bridge=bridge, events=events,
         stt_provider=stt_provider, tts_provider=tts_provider, end_call=end_call, initial_data=initial_data,
+        browser_actions=browser_actions,
     )
     lifecycle_tasks: set[asyncio.Task] = set()
     away_task: asyncio.Task | None = None
@@ -510,11 +648,29 @@ async def entrypoint(ctx: JobContext) -> None:
         return task
 
     async def away_check():
+        if browser_actions and browser_actions.muted:
+            return
         speech = await agent.say_fixed("away")
         await speech
-        await asyncio.sleep(float(os.getenv("AWAY_GRACE_SECONDS", "10")))
-        if session.user_state == "away" and not closing:
+        await asyncio.sleep(float(os.getenv("VOICE_WEB_IDLE_GRACE_SECONDS", "90") if context.channel == "web"
+                                 else os.getenv("AWAY_GRACE_SECONDS", "20")))
+        if session.user_state == "away" and not closing and not (browser_actions and browser_actions.muted):
             await agent.say_fixed("closing", reason="silence")
+
+    async def unmuted_idle_check():
+        await asyncio.sleep(float(os.getenv("VOICE_WEB_IDLE_SECONDS", "60")))
+        if session.user_state == "away" and not closing and not browser_actions.muted:
+            await away_check()
+
+    def mute_changed(muted: bool):
+        nonlocal away_task
+        if away_task and not away_task.done():
+            away_task.cancel()
+        if not muted and session.user_state == "away" and not closing:
+            away_task = background(unmuted_idle_check())
+
+    if browser_actions:
+        browser_actions.on_mute = mute_changed
 
     async def cap_session():
         await asyncio.sleep(float(os.getenv("MAX_SESSION_SECONDS", "900")))
@@ -530,7 +686,7 @@ async def entrypoint(ctx: JobContext) -> None:
             agent.user_started_speaking()
             if away_task and not away_task.done():
                 away_task.cancel()
-        elif event.new_state == "away" and not closing:
+        elif event.new_state == "away" and not closing and not (browser_actions and browser_actions.muted):
             if not away_task or away_task.done():
                 away_task = background(away_check())
         events.emit("user_state", state=event.new_state)
@@ -546,6 +702,7 @@ async def entrypoint(ctx: JobContext) -> None:
         while not speech.done() and not speech.interrupted:
             await asyncio.sleep(0.02)
         if speech.interrupted:
+            agent.invalidate_review(turn_id=turn_id)
             await events.send("agent_interrupted")
         await speech
         if turn_id and agent.terminal_turn_id == turn_id:
@@ -566,6 +723,8 @@ async def entrypoint(ctx: JobContext) -> None:
         if agent.handle_recognition_error(event.error):
             return
         logger.warning("Voice pipeline error (%s)", type(event.error).__name__)
+        if agent.turn:
+            agent.invalidate_review(turn_id=agent.turn.id)
         events.emit("error", message=_RETRY_MESSAGE[agent.language])
         agent.error_streak += 1
         # A failed TTS cannot reliably speak its own error. Do not recurse into
@@ -579,6 +738,8 @@ async def entrypoint(ctx: JobContext) -> None:
             events.emit("call_end", reason=str(event.reason))
 
     async def cleanup() -> None:
+        if browser_actions:
+            browser_actions.cancel_pending()
         for task in tuple(lifecycle_tasks):
             task.cancel()
         await asyncio.gather(*tuple(lifecycle_tasks), return_exceptions=True)
@@ -606,6 +767,8 @@ async def entrypoint(ctx: JobContext) -> None:
         room=ctx.room,
         room_input_options=room_io.RoomInputOptions(**room_options),
     )
+    if browser_actions:
+        await events.send("request_voice_state")
 
 
 if __name__ == "__main__":

@@ -84,6 +84,44 @@ def make_agent():
     return agent, events, bridge, closed
 
 
+def test_exact_request_review_bypasses_model_and_blocks_unheard_long_review_token(monkeypatch):
+    async def exercise():
+        agent, events, bridge, closed = make_agent()
+        await completed_turn(agent, "Please review my callback request")
+        request_id = "00000000-0000-4000-8000-000000000001"
+        token = "a" * 48
+        payload = {"ok":True,"data":{"request_id":request_id,"request_type":"callback","status":"draft",
+                   "confirmation_token":token,"fields":{"name":"Asha Patel","phone":"+919000000000","reason":"Wholesale enquiry"}}}
+        async def response(*args, **kwargs):
+            bridge.tools.append(kwargs)
+            return payload
+        bridge.tool = response
+        schema = {"name":"review_request","description":"Review", "parameters":{"type":"object","properties":{"request_id":{"type":"string"}},"required":["request_id"]}}
+        agent._tool_turns["review"] = agent.turn
+        result = await agent._make_tool(schema)({"request_id":request_id},SimpleNamespace(function_call=SimpleNamespace(call_id="review")))
+        assert json.loads(result)["ok"]
+        assert "Asha Patel" in agent.turn.request_speech and "nine zero" in agent.turn.request_speech
+        async def unexpected(*args):
+            raise AssertionError("Request readback must not be rewritten by the model")
+            yield
+        monkeypatch.setattr(Agent.default,"llm_node",unexpected)
+        context = llm.ChatContext()
+        context.add_message(role="user",content=agent.turn.text)
+        assert [part async for part in agent.llm_node(context,[],None)] == [agent.turn.request_speech]
+        await completed_turn(agent, "Here is a much longer request")
+        payload["data"]["fields"]["reason"] = "long message " * 100
+        agent._tool_turns["long-review"] = agent.turn
+        result = json.loads(await agent._make_tool(schema)({"request_id":request_id},SimpleNamespace(function_call=SimpleNamespace(call_id="long-review"))))
+        assert "confirmation_token" not in result["data"]
+        assert "briefer message" in agent.turn.request_speech
+        submit = {"name":"submit_request","description":"Submit", "parameters":{"type":"object","properties":{"request_id":{"type":"string"},"confirmation_token":{"type":"string"}},"required":["request_id","confirmation_token"]}}
+        agent._tool_turns["blocked-submit"] = agent.turn
+        calls = len(bridge.tools)
+        result = await agent._make_tool(submit)({"request_id":request_id,"confirmation_token":token},SimpleNamespace(function_call=SimpleNamespace(call_id="blocked-submit")))
+        assert result["ok"] is False and len(bridge.tools)==calls
+    asyncio.run(exercise())
+
+
 async def completed_turn(agent, text="What is the price?"):
     await asyncio.wait_for(agent.on_user_turn_completed(None, SimpleNamespace(text_content=text)), timeout=0.3)
 

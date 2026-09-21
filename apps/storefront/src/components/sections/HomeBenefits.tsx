@@ -10,7 +10,7 @@ const PILL_LABEL = "BENEFITS";
  */
 export function HomeBenefits() {
   return (
-    <section className="bg-[#FAF9F5] py-24 lg:py-32 relative overflow-hidden">
+    <section id="benefits" className="bg-[#FAF9F5] py-24 lg:py-32 relative overflow-hidden">
       <div className="container mx-auto max-w-[1400px] px-6 sm:px-10">
         {/* Section heading */}
         <div className="flex flex-col items-center text-center mb-14 lg:mb-20">

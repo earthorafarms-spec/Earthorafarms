@@ -120,8 +120,8 @@ def turn_guidance(text: str, language: str, catalog: list[dict]) -> str:
     This supplies behavior, never product facts. Knowledge remains in the
     authoritative context and tool results. Narrow cues do not execute actions.
     """
-    base = (f"CURRENT TURN LANGUAGE: {language}. Answer only the latest customer question, using the current Earthora facts and successful tools. "
-            "Give one brief direct answer and stop. Ask a follow-up only for information needed for the requested action. "
+    base = (f"CURRENT TURN LANGUAGE: {language}. Address the latest customer intent using current Earthora facts and successful tools. "
+            "Answer directly; guide an exploration, purchase or enquiry with ONE relevant next question or tool action. For a simple factual question, no automatic sales pitch. "
             "Use natural everyday words. Keep Moringa in Latin or spell it मोरिंगा / મોરિંગા as appropriate; never split one word across scripts. ")
     if re.search(r"\b(?:what is|who is|tell me about)\s+(?:earthora|orthora)(?:\s+farms)?[?.!\s]*$|कंपनी|કંપની", text, re.I):
         base += "This is a COMPANY IDENTITY question, not a product lookup. If the heard name is Orthora, ask briefly 'Do you mean Earthora Farms?' and describe the company using only the supplied company facts. Do not say a product is unavailable. "

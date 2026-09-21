@@ -7,6 +7,7 @@ vi.mock('./config.js', () => ({ getChannelByKey: vi.fn(), publishedConfig: (ch: 
 vi.mock('../engine/conversation.js', () => ({ loadConversation: vi.fn(), appendMessage: vi.fn(), saveState: vi.fn() }));
 vi.mock('../../modules/commerce/pricing.js', () => ({ listProducts: vi.fn() }));
 vi.mock('../kb/retrieve.js', () => ({ retrieve: vi.fn() }));
+vi.mock('./voiceConcierge.js', () => ({ requestDrafts: vi.fn(async () => []), requestToolNames: ['start_request', 'set_request_field', 'review_request', 'submit_request'], requestTools: [{ name: 'start_request' }], runRequestTool: vi.fn(async () => ({ ok: true, data: { request_id: 'synthetic' } })) }));
 const run = vi.hoisted(() => vi.fn());
 vi.mock('../engine/functions.js', () => ({
   BUILTIN_MAP: new Map([
@@ -85,12 +86,12 @@ describe('SunPath-style worker data boundary', () => {
     const unknown = await app.inject({ ...request, payload: { ...request.payload, call_id: 'search2', arguments: { query: 'ingredients', productId: 'powder-not-in-current-catalog' } } });
     expect(unknown.json().ok).toBe(false); expect(retrieve).toHaveBeenCalledTimes(1);
   });
-  it('executes tools in local-only voice scope and deduplicates callbacks', async () => {
+  it('executes tools in local-only voice scope and deduplicates cart mutation', async () => {
     const app = await server();
-    const req = { method: 'POST' as const, url: '/platform/voice/internal/tool', headers, payload: { ...common, call_id: 'call1', name: 'capture_callback', arguments: { reason: 'Customer requested callback' } } };
+    const req = { method: 'POST' as const, url: '/platform/voice/internal/tool', headers, payload: { ...common, call_id: 'call1', name: 'add_to_cart', arguments: { productId: 'product1', quantity: 1 } } };
     const responses = await Promise.all([app.inject(req), app.inject(req)]);
     expect(responses.map(r => r.statusCode)).toEqual([200, 200]); expect(run).toHaveBeenCalledTimes(1); expect(saveState).toHaveBeenCalledTimes(1);
-    expect((await app.inject({ ...req, payload: { ...req.payload, arguments: { reason: 'changed' } } })).statusCode).toBe(409);
+    expect((await app.inject({ ...req, payload: { ...req.payload, arguments: { productId: 'product1', quantity: 2 } } })).statusCode).toBe(409);
   });
   it('rejects unknown tools and oversized arguments', async () => {
     const app = await server();
@@ -111,7 +112,7 @@ describe('SunPath-style worker data boundary', () => {
     const record = { method: 'POST' as const, url: '/platform/voice/internal/record', headers, payload: { ...common, message_id: 'msg1', role: 'user', text: 'Hello', language: 'en' } };
     expect((await app.inject(record)).statusCode).toBe(200); expect((await app.inject(record)).statusCode).toBe(200); expect(appendMessage).toHaveBeenCalledTimes(1);
     vi.mocked(saveState).mockRejectedValue(new Error('storage unavailable'));
-    const tool = { method: 'POST' as const, url: '/platform/voice/internal/tool', headers, payload: { ...common, call_id: 'call2', name: 'capture_callback', arguments: { reason: 'callback' } } };
+    const tool = { method: 'POST' as const, url: '/platform/voice/internal/tool', headers, payload: { ...common, call_id: 'call2', name: 'add_to_cart', arguments: { productId: 'product1', quantity: 1 } } };
     expect((await app.inject(tool)).statusCode).toBe(500); expect((await app.inject(tool)).statusCode).toBe(500); expect(run).toHaveBeenCalledTimes(1);
   });
   it('isolates the same external session ID across two channels', async () => {
@@ -141,58 +142,26 @@ describe('SunPath-style worker data boundary', () => {
   });
 });
 
-describe('SunPath native callback and multilingual search boundary', () => {
-  function conversation(checkout: Record<string, string> = {}, contact: { name?: string; phone?: string } = {}) {
-    vi.mocked(loadConversation).mockResolvedValue({ id: 'conv1', history: [], contact, state: { slots: {}, cart: [], checkout, summary: '', language: 'en' } });
-  }
-  async function callback(arguments_: Record<string, unknown>) {
+describe('SunPath native request, navigation and multilingual search boundary', () => {
+  it('blocks stale callback clients from bypassing the durable review flow', async () => {
     const app = await server();
-    return app.inject({ method: 'POST', url: '/platform/voice/internal/tool', headers, payload: { ...common, call_id: 'callback-validation', name: 'capture_callback', arguments: arguments_ } });
-  }
-
-  it('asks for a callback number without invoking a side effect when none is available', async () => {
-    conversation();
-    const res = await callback({ reason: 'Customer requested a callback' });
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ ok: false, message: expect.stringContaining('callback phone') });
+    const res = await app.inject({ method: 'POST', url: '/platform/voice/internal/tool', headers, payload: { ...common, call_id: 'legacy', name: 'capture_callback', arguments: { reason: 'callback', name: 'Synthetic', phone: '9876543210' } } });
+    expect(res.statusCode).toBe(200); expect(res.json()).toMatchObject({ ok: false, message: expect.stringContaining('start_request') });
     expect(run).not.toHaveBeenCalled(); expect(saveState).not.toHaveBeenCalled();
   });
-
-  it.each(['', 'abc', '123', '0000000000', '+91 123456789', '+91 12345678901', '9876543210 extension 2', '+0 9876543210'])('rejects invalid explicit phone %j instead of using a previously saved number', async phone => {
-    conversation({ name: 'Saved Customer', phone: '9876543210' });
-    const res = await callback({ reason: 'Customer requested a callback', phone });
-    expect(res.statusCode).toBe(200); expect(res.json().ok).toBe(false);
-    expect(run).not.toHaveBeenCalled(); expect(saveState).not.toHaveBeenCalled();
+  it('exposes finite navigation only for browser contexts and denies phone navigation', async () => {
+    const app = await server();
+    const web = await app.inject({ method: 'POST', url: '/platform/voice/internal/context', headers, payload: common });
+    expect(web.json().tools.some((t: any) => t.name === 'navigate_site')).toBe(true);
+    expect(web.json().tools.some((t: any) => t.name === 'capture_callback')).toBe(false);
+    expect(web.json().request_drafts).toEqual([]);
+    const phone = await app.inject({ method: 'POST', url: '/platform/voice/internal/context', headers, payload: { ...common, channel: 'phone' } });
+    expect(phone.json().tools.some((t: any) => t.name === 'navigate_site')).toBe(false);
+    const denied = await app.inject({ method: 'POST', url: '/platform/voice/internal/tool', headers, payload: { ...common, channel: 'phone', call_id: 'phone-nav', name: 'navigate_site', arguments: { destination_id: 'contact' } } });
+    expect(denied.json().ok).toBe(false);
+    const guide = await app.inject({ method: 'GET', url: '/platform/voice/site-guide' });
+    expect(guide.statusCode).toBe(200); expect(guide.json().destinations.some((d: any) => d.id === 'contact_form')).toBe(true);
   });
-
-  it.each(['98765 43210', '+91 (98765) 43210', '919876543210', '09876543210', '0091 9876543210', '९८७६५४३२१०', '૯૮૭૬૫૪૩૨૧૦'])('normalizes confirmed callback number %j before the tool runs', async phone => {
-    conversation();
-    const res = await callback({ reason: '  Product question  ', phone, name: '  Test Customer  ' });
-    expect(res.statusCode).toBe(200);
-    expect(run).toHaveBeenCalledWith({ reason: 'Product question', phone: '+919876543210', name: 'Test Customer' }, expect.anything());
-    expect(saveState).toHaveBeenCalledTimes(1);
-  });
-
-  it('reuses saved checkout contact details without overwriting them', async () => {
-    conversation({ name: 'Saved Customer', phone: '+91 98765 43210' });
-    const res = await callback({ reason: 'Delivery question' });
-    expect(res.statusCode).toBe(200);
-    expect(run).toHaveBeenCalledWith({ reason: 'Delivery question', name: 'Saved Customer', phone: '+919876543210' }, expect.objectContaining({ state: expect.objectContaining({ checkout: { name: 'Saved Customer', phone: '+91 98765 43210' } }) }));
-  });
-
-  it('uses existing conversation contact when checkout has no phone, while explicit details win', async () => {
-    conversation({}, { name: 'Existing Customer', phone: '+44 20 7946 0000' });
-    const res = await callback({ reason: 'Product question', name: 'Current Customer' });
-    expect(res.statusCode).toBe(200);
-    expect(run).toHaveBeenCalledWith({ reason: 'Product question', name: 'Current Customer', phone: '+442079460000' }, expect.anything());
-  });
-
-  it('requires a substantive callback reason before invoking the tool', async () => {
-    const res = await callback({ reason: '   ', phone: '9876543210' });
-    expect(res.statusCode).toBe(200); expect(res.json().ok).toBe(false);
-    expect(run).not.toHaveBeenCalled(); expect(saveState).not.toHaveBeenCalled();
-  });
-
   it('gives the native LLM English semantic search guidance without changing the response language', async () => {
     const app = await server();
     const res = await app.inject({ method: 'POST', url: '/platform/voice/internal/context', headers, payload: common });

@@ -383,7 +383,7 @@ def test_examples_teach_short_local_dialogue_without_business_facts(language, ex
     prompt = instructions({"catalog": [], "knowledge": []}, language)
     assert example in prompt
     assert "patterns only; they supply no business facts" in prompt
-    assert "Answer the question directly, then stop" in prompt
+    assert "Answer the immediate question first" in prompt
 
 
 @pytest.mark.parametrize("draft", ["These natural tablets cost ₹1.", "Our organic tablets cost ₹1.", "The current price is ₹1."])
@@ -423,7 +423,41 @@ def test_prompt_handles_brand_mishearing_and_language_changes_without_product_pi
     assert "What is orthora?" in prompt and "Do you mean Earthora Farms?" in prompt
     assert "language-change request, acknowledge briefly" in prompt
     assert "never guess that an unfamiliar word means Moringa" in prompt
-    assert "Do not automatically add a purchase invitation" in prompt
+    assert "For a simple factual question, answer without an automatic sales pitch" in prompt
+
+
+def test_submission_receipt_requires_durable_success_not_a_failed_or_reviewed_tool():
+    state = turn()
+    answer = "Your request has been recorded for the team."
+    assert validate_reply(answer, state) == "unconfirmed-request"
+    state.accept_tool("review_request", {"ok": True, "data": {"recorded": True}})
+    assert validate_reply(answer, state) == "unconfirmed-request"
+    state.accept_tool("submit_request", {"ok": False, "data": {"recorded": True}})
+    assert validate_reply(answer, state) == "unconfirmed-request"
+    state.accept_tool("submit_request", {"ok": True, "data": {"recorded": True, "notification_queued": True}})
+    assert validate_reply(answer, state) is None
+    assert validate_reply("Your WhatsApp message was delivered.", state) == "unsupported-delivery"
+
+
+def test_navigation_receipt_requires_browser_ack_not_only_server_resolution():
+    state = turn()
+    answer = "I've opened the products section."
+    assert validate_reply(answer, state) == "unconfirmed-navigation"
+    state.accept_tool("navigate_site", {"ok": True, "data": {"navigation": {"destination_id": "products"}}})
+    assert validate_reply(answer, state) == "unconfirmed-navigation"
+    state.accept_tool("navigate_site", {"ok": True, "data": {"navigation": {"destination_id": "products", "acknowledged": True}}})
+    assert validate_reply(answer, state) is None
+
+
+def test_review_keeps_details_and_final_confirmation_question():
+    answer = "I have your name as Asha. The callback number is 9000000000. Your request is about wholesale quantities. Shall I submit this to the team?"
+    assert bounded_reply(answer, request_review=True) == answer
+
+
+def test_phone_context_omits_browser_destination_data():
+    prompt = instructions({"channel": "phone", "site_guide": [{"id": "private-test-destination", "label": "Unused"}]}, "en")
+    assert "private-test-destination" not in prompt
+    assert '"channel":"phone"' in prompt
 
 
 CANONICAL_PRODUCT_ID = "86e093ab-e50e-4ef8-b1b6-5c20873771f0"

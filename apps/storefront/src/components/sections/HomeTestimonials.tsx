@@ -112,7 +112,7 @@ const ACCENTS = {
 
 export function HomeTestimonials() {
   return (
-    <section className="bg-[#FAF9F5] py-24 lg:py-32 relative overflow-hidden">
+    <section id="testimonials" className="bg-[#FAF9F5] py-24 lg:py-32 relative overflow-hidden">
       <div className="container mx-auto max-w-[1400px] px-6 sm:px-10">
         {/* Section header */}
         <div className="flex flex-col items-center text-center mb-14 lg:mb-20">

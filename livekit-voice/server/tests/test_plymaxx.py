@@ -23,6 +23,7 @@ def configuration(monkeypatch):
     monkeypatch.setenv("VOICE_STT_TIMEOUT_MS", "20000")
     monkeypatch.setenv("AI_TTS_COMPLETED_TIMEOUT_MS", "90000")
     monkeypatch.setenv("VOICE_TTS_SPEED", "1")
+    monkeypatch.delenv("VOICE_TTS_PROFILE", raising=False)
     monkeypatch.delenv("AI_STT_REDECODE_GUJARATI", raising=False)
 
 
@@ -359,6 +360,25 @@ async def test_tts_same_neha_voice_all_languages_and_correct_audio(language):
     payload = session.calls[0][1]["json"]
     assert payload == {"model": "indic-parler-tts", "voice": "Neha", "language": language,
                        "input": "A short answer.", "response_format": "wav"}
+
+
+@pytest.mark.parametrize("language", ["en", "hi", "gu"])
+@pytest.mark.asyncio
+async def test_conversational_profile_is_opt_in_and_keeps_voice_language(language, monkeypatch):
+    monkeypatch.setenv("VOICE_TTS_PROFILE", "conversational")
+    session = Session(Response(wav_bytes()))
+    provider = p.PlymaxxTTS(language=language, http_session=session)
+    async with provider.synthesize("A short answer.") as stream:
+        assert [event.frame async for event in stream]
+    assert session.calls[0][1]["json"] == {"model": "indic-parler-tts", "voice": "Neha", "language": language,
+        "input": "A short answer.", "response_format": "wav", "profile": "conversational"}
+
+
+@pytest.mark.parametrize("profile", ["", "fast", "CONVERSATIONAL"])
+def test_invalid_profile_configuration_fails_before_any_speech_request(profile, monkeypatch):
+    monkeypatch.setenv("VOICE_TTS_PROFILE", profile)
+    with pytest.raises(ValueError, match="VOICE_TTS_PROFILE"):
+        p.PlymaxxTTS(http_session=Session())
 
 
 @pytest.mark.asyncio
