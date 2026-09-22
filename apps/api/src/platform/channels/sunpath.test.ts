@@ -1,11 +1,11 @@
 import Fastify from 'fastify';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../config.js', () => ({ config: { EARTHORA_VOICE_INTERNAL_KEY: 'test-key', VOICE_PHONE_CHANNEL_KEY: 'pk_voice' } }));
+vi.mock('../../config.js', () => ({ config: { EARTHORA_VOICE_INTERNAL_KEY: 'test-key', VOICE_PHONE_CHANNEL_KEY: 'pk_voice', PII_ENCRYPTION_KEY: 'a'.repeat(64) } }));
 vi.mock('../../db/client.js', () => ({ sql: vi.fn() }));
 vi.mock('./config.js', () => ({ getChannelByKey: vi.fn(), publishedConfig: (ch: any) => ch.published_config }));
 vi.mock('../engine/conversation.js', () => ({ loadConversation: vi.fn(), appendMessage: vi.fn(), saveState: vi.fn() }));
-vi.mock('../../modules/commerce/pricing.js', () => ({ listProducts: vi.fn() }));
+vi.mock('../../modules/commerce/pricing.js', () => ({ listProducts: vi.fn(), priceCart: vi.fn() }));
 vi.mock('../kb/retrieve.js', () => ({ retrieve: vi.fn() }));
 vi.mock('./voiceConcierge.js', () => ({ requestDrafts: vi.fn(async () => []), requestToolNames: ['start_request', 'set_request_field', 'review_request', 'submit_request'], requestTools: [{ name: 'start_request' }], runRequestTool: vi.fn(async () => ({ ok: true, data: { request_id: 'synthetic' } })) }));
 vi.mock('./studioRequests.js', async original => ({ ...(await original<any>()), receiveStudioRequest: vi.fn() }));
@@ -25,7 +25,8 @@ import { sql } from '../../db/client.js';
 import { getChannelByKey } from './config.js';
 import { appendMessage, loadConversation, saveState } from '../engine/conversation.js';
 import { inVoiceScope } from '../providers/voiceScope.js';
-import { listProducts } from '../../modules/commerce/pricing.js';
+import { listProducts, priceCart } from '../../modules/commerce/pricing.js';
+import { createCheckoutSnapshot } from './voiceCheckout.js';
 import { retrieve } from '../kb/retrieve.js';
 import { receiveStudioRequest } from './studioRequests.js';
 
@@ -45,6 +46,20 @@ beforeEach(() => {
 afterEach(async () => { await Promise.all(servers.splice(0).map(app => app.close())); });
 
 describe('SunPath-style worker data boundary', () => {
+  it('serves encrypted checkout tokens longer than the router named-parameter limit', async () => {
+    const app = await server();
+    const customer = {name:'Synthetic Visitor',email:'test@example.invalid',phone:'+12025550100',address:'Synthetic Road 12',city:'Ahmedabad',state:'Gujarat',zip:'380015',country:'India'};
+    const token = createCheckoutSnapshot('test-review','en',customer,[{productId:'product1',quantity:1}]);
+    expect(token.length).toBeGreaterThan(100);
+    vi.mocked(priceCart).mockResolvedValue({lines:[{productId:'product1',quantity:1}],subtotal:10,total:10,unavailable:[],outOfStock:[]} as any);
+    const response = await app.inject({url:'/platform/voice/checkout/'+token});
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.headers['referrer-policy']).toBe('no-referrer');
+    expect(response.json().customer).toEqual(customer);
+    expect(sql).not.toHaveBeenCalled();expect(saveState).not.toHaveBeenCalled();
+    expect((await app.inject({url:'/platform/voice/checkout/'+token+'/extra'})).statusCode).toBe(404);
+  });
   it('rejects unauthenticated access before any data load', async () => {
     const app = await server();
     for (const path of ['context', 'tool', 'record', 'flow-request']) expect((await app.inject({ method: 'POST', url: `/platform/voice/internal/${path}`, payload: common })).statusCode).toBe(401);

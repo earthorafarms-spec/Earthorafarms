@@ -8,9 +8,9 @@ import time
 import urllib.request
 
 ROOT = Path('/opt/earthora')
-OLD_IMAGE = 'earthora-api:studio-flows20260921a'
-NEW_IMAGE = 'earthora-api:voice-actions20260922a'
-OLD_STORE = ROOT / 'releases/concierge-store-9380d85ef822'
+OLD_IMAGE = 'earthora-api:voice-actions20260922a'
+NEW_IMAGE = 'earthora-api:voice-actions20260922c'
+OLD_STORE = ROOT / 'releases/voice-actions-store20260922b'
 NEW_STORE = ROOT / 'releases/voice-actions-store20260922b'
 COMPOSE = ['docker', 'compose', '--project-directory', str(ROOT / 'infra'), '-f', str(ROOT / 'infra/compose.yml'), '-f', str(ROOT / 'infra/compose.override.yml')]
 CHECKOUT_LOCATIONS = '''    # Short-lived checkout capabilities never enter access/referrer logs.
@@ -73,12 +73,6 @@ def main():
         override.write_text(original_override.replace('image: ' + OLD_IMAGE, 'image: ' + NEW_IMAGE))
         run(COMPOSE + ['up', '-d', '--no-build', '--no-deps', 'api'])
         healthy()
-        assert 'location ^~ /ai-checkout/' not in original_site
-        updated_site = original_site.replace('root ' + str(OLD_STORE) + ';', 'root ' + str(NEW_STORE) + ';')
-        updated_site = updated_site.replace('    location / { try_files $uri $uri/ /index.html; }', CHECKOUT_LOCATIONS + '    location / { try_files $uri $uri/ /index.html; }')
-        assert CHECKOUT_LOCATIONS in updated_site
-        site.write_text(updated_site)
-        run(['nginx', '-t']); run(['systemctl', 'reload', 'nginx'])
         assert json.loads(run(['docker', 'inspect', 'earthora-worker']))[0]['Id'] == worker_before
     except Exception:
         override.write_text(original_override); site.write_text(original_site)

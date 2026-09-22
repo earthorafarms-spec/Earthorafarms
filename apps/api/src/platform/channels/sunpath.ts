@@ -51,9 +51,11 @@ function nativeToolDefinitions(channel: 'web' | 'phone') {
 
 export async function sunpathRoutes(app: FastifyInstance): Promise<void> {
   const queue = new VoiceTurnQueue();
-  app.get('/platform/voice/checkout/:token', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req, reply) => {
+  // The encrypted snapshot exceeds Fastify's 100-character named-parameter limit.
+  // The wildcard is still strictly bounded and authenticated by readCheckoutSnapshot.
+  app.get('/platform/voice/checkout/*', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req, reply) => {
     reply.header('Cache-Control', 'no-store').header('Referrer-Policy', 'no-referrer');
-    const view = await checkoutSnapshotView(String((req.params as { token: string }).token));
+    const view = await checkoutSnapshotView(String((req.params as { '*': string })['*']));
     if (!view) throw notFound('This checkout link is invalid or expired. Ask Eva for a new one.');
     return view;
   });

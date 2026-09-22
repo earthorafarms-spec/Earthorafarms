@@ -37,6 +37,13 @@ describe('acknowledged storefront actions',()=>{
     expect(await execute('scroll_page',{direction:'down'})).toMatchObject({ok:false});
     expect(fixtures.catalog).not.toHaveBeenCalled();
   });
+  it('does not acknowledge an interrupted cart update after React commits it',async()=>{
+    const abort=new AbortController();
+    fixtures.apply.mockImplementationOnce(()=>abort.abort());
+    expect(await execute('sync_cart',{items:[{product_id:'p1',quantity:2}],scope_product_ids:['p1']},abort.signal))
+      .toEqual({ok:false,reason:'action_cancelled'});
+    expect(fixtures.apply).toHaveBeenCalledTimes(1);
+  });
   it('scrolls a bounded viewport amount and verifies movement',async()=>{
     Object.defineProperty(document.documentElement,'scrollHeight',{configurable:true,value:3000});
     Object.defineProperty(window,'innerHeight',{configurable:true,value:800});

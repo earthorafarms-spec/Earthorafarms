@@ -49,7 +49,7 @@ export function VoiceStorefrontActions() {
           }
           applyVoiceItems(next, scope as string[]);
           await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
-          return {ok: true};
+          return signal.aborted ? {ok: false, reason: 'action_cancelled'} : {ok: true};
         } catch { return {ok: false, reason: 'catalogue_unavailable'}; }
       }
       if (action === 'open_checkout') {

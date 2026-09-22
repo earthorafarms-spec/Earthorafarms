@@ -21,11 +21,16 @@ actions. It does not restore the historical Render media or checkout service.
 
 ## Verification before activation
 
-All workspaces typecheck and build. API: 144 passing tests. Storefront: eight passing
+All workspaces typecheck and build. API: 145 passing tests. Storefront: 11 passing
 tests. Desktop and 390px mobile browser renders show no JavaScript errors or horizontal
 overflow; delivery prefill is present, and there are no payment credential fields.
 These review-page checks use an intercepted synthetic snapshot and make no payment call.
 Live conversational acceptance is coordinated by the Studio operator after activation.
+An actual HTTP request against the staged API image and production read-only catalogue
+also verifies long encrypted-token routing, customer prefill, live pricing and a 404
+for malformed tokens. Checkout tokens are excluded from page analytics, Nginx access
+logs and Referrer headers. Cancelling during a cart update cannot produce a success
+acknowledgement for the interrupted action.
 
 The repository's legacy `test:whatsapp-integration` command currently reports three
 passing schema tests and three existing `knowledge-admin.test.mjs` harness failures
@@ -34,16 +39,21 @@ passing schema tests and three existing `knowledge-admin.test.mjs` harness failu
 ## Staged deployment
 
 - Earthora host: `187.52.121.146`
-- Release: `/opt/earthora/releases/voice-actions20260922a`
-- API image: `earthora-api:voice-actions20260922a`
-- Image ID: `sha256:ba010712c333538dd4026d73773b3af50de4643a9b741b91cbdbe3f29249073c`
-- Storefront: `/opt/earthora/releases/voice-actions-store20260922a`
+- Storefront activation release: `/opt/earthora/releases/voice-actions20260922b`
+- API follow-up release: `/opt/earthora/releases/voice-actions20260922c`
+- API image: `earthora-api:voice-actions20260922c`
+- Image ID: `sha256:be96313e4c57bcaed7dd05ccd69989049e539ba10b08facd2a41ff0c02d65bb5`
+- Storefront: `/opt/earthora/releases/voice-actions-store20260922b`
 
 `infra/vps/activate_voice_actions.py --studio-calls-drained` activates only the API
 image and storefront root after the operator has drained Studio sessions. It backs
 up the previous compose override and Nginx site and restores both automatically on
 failure. The worker, typed chat, site widget alias, database schema, other routes and
 other applications are unchanged. Previous hashed storefront assets are retained.
+`infra/vps/activate_voice_actions_api.py` is the API-only C follow-up, preserving the
+B storefront and checkout privacy locations. It corrects Fastify's default 100-byte
+named-parameter limitation by using a wildcard route; the authenticated snapshot
+parser still restricts the token format and maximum length to 8192 characters.
 The separate Studio runtime/SDK/widget must be deployed in the same coordinated
 window to handle `storefront_action` and its acknowledgement protocol.
 
