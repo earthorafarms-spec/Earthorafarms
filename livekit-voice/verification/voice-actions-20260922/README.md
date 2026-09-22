@@ -32,6 +32,14 @@ for malformed tokens. Checkout tokens are excluded from page analytics, Nginx ac
 logs and Referrer headers. Cancelling during a cart update cannot produce a success
 acknowledgement for the interrupted action.
 
+After coordinated activation, the real HTTPS host returned 200 for both the snapshot
+API and review page, with all synthetic customer fields intact and the current
+catalogue. Privacy headers and the absence of the token from Nginx access logs were
+verified. Web and phone contact/callback receivers each passed transaction-rollback
+validation; unauthorized and invalid-field probes were rejected. Business request,
+notification, email and callback counts stayed unchanged. Only four exact empty QA
+conversation records were cleaned afterward. See `live-verification.json`.
+
 The repository's legacy `test:whatsapp-integration` command currently reports three
 passing schema tests and three existing `knowledge-admin.test.mjs` harness failures
 (`exports is not defined` in its isolated VM), before application logic executes.
