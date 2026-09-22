@@ -11,13 +11,14 @@ import { withVoiceScope } from '../providers/voiceScope.js';
 import { VoiceTurnQueue } from './voiceTurns.js';
 import { listProducts } from '../../modules/commerce/pricing.js';
 import { approvedVoiceProductKnowledge, indexedVoiceKnowledge, searchVoiceKnowledge, voiceCatalogIds } from './sunpathKnowledge.js';
-import { navigationResult, navigationTool, siteGuide } from './siteGuide.js';
+import { navigationResult, navigationTool, scrollTool, siteGuide } from './siteGuide.js';
+import { checkoutSnapshotView } from './voiceCheckout.js';
 import { requestDrafts, requestToolNames, requestTools, runRequestTool } from './voiceConcierge.js';
 import { receiveStudioRequest, studioRequestInput } from './studioRequests.js';
 
 const identifier = z.string().min(1).max(180).regex(/^[a-zA-Z0-9:_-]+$/);
 const common = z.object({ session_id: identifier, channel_key: z.string().min(1).max(180), channel: z.enum(['web', 'phone']) });
-const tools = ['list_products', 'get_product_details', 'search_knowledge', 'add_to_cart', 'update_cart', 'get_cart', 'set_customer_detail', 'create_checkout_link', 'get_order_status', 'capture_callback', 'navigate_site', ...requestToolNames];
+const tools = ['list_products', 'get_product_details', 'search_knowledge', 'add_to_cart', 'update_cart', 'get_cart', 'set_customer_detail', 'create_checkout_link', 'get_order_status', 'capture_callback', 'navigate_site', 'scroll_page', ...requestToolNames];
 const toolInput = common.extend({ call_id: identifier, name: z.enum(tools as [string, ...string[]]), arguments: z.record(z.unknown()) });
 const recordInput = common.extend({ message_id: identifier, role: z.enum(['user', 'assistant']), text: z.string().trim().min(1).max(8000), language: z.enum(['en', 'hi', 'gu']) });
 
@@ -41,15 +42,21 @@ function validateArguments(schema: Record<string, unknown>, values: Record<strin
 }
 
 function nativeToolDefinitions(channel: 'web' | 'phone') {
-  const builtinNames = tools.filter(name => !requestToolNames.includes(name) && name !== 'navigate_site' && name !== 'capture_callback');
+  const builtinNames = tools.filter(name => !requestToolNames.includes(name) && !['navigate_site', 'scroll_page', 'capture_callback'].includes(name));
   return [...toolDefsFor(builtinNames).map(tool => tool.name === 'search_knowledge' ? {
     ...tool,
     description: 'Search approved Earthora knowledge for product facts, ingredients, benefits, directions and policies. Submit concise English semantic keywords in query, translating Hindi or Gujarati search intent into English keywords. Keep canonical product names unchanged. Answer the customer in their current language; only the search query uses English.',
-  } : tool), ...requestTools, ...(channel === 'web' ? [navigationTool] : [])];
+  } : tool), ...requestTools, ...(channel === 'web' ? [navigationTool, scrollTool] : [])];
 }
 
 export async function sunpathRoutes(app: FastifyInstance): Promise<void> {
   const queue = new VoiceTurnQueue();
+  app.get('/platform/voice/checkout/:token', { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req, reply) => {
+    reply.header('Cache-Control', 'no-store').header('Referrer-Policy', 'no-referrer');
+    const view = await checkoutSnapshotView(String((req.params as { token: string }).token));
+    if (!view) throw notFound('This checkout link is invalid or expired. Ask Eva for a new one.');
+    return view;
+  });
   app.get('/platform/voice/site-guide', async (_req, reply) => {
     reply.header('Cache-Control', 'public, max-age=30');
     return { destinations: siteGuide(await listProducts()) };
@@ -107,6 +114,11 @@ export async function sunpathRoutes(app: FastifyInstance): Promise<void> {
         validateArguments(navigationTool.parameters, data.arguments);
         return navigationResult(data.channel, data.arguments.destination_id, data.channel === 'web' ? await listProducts() : []);
       }
+      if (data.name === 'scroll_page') {
+        validateArguments(scrollTool.parameters, data.arguments);
+        if (data.channel !== 'web') return { ok: false, message: 'Page scrolling is available only on the website.' };
+        return { ok: true, data: { browser_action: { action: 'scroll_page', payload: { direction: data.arguments.direction } } } };
+      }
       const fn = BUILTIN_MAP.get(data.name);
       if (!fn) throw badRequest('Unsupported voice tool');
       validateArguments(fn.parameters, data.arguments);
@@ -136,6 +148,13 @@ export async function sunpathRoutes(app: FastifyInstance): Promise<void> {
       // Only these named tools are exposed; no arbitrary URLs, SQL or functions.
       const result = await withVoiceScope(ch.tenant_id, () => fn.run(data.arguments, { conversationId: conv.id, channelType, state: conv.state, contact: conv.contact }));
       await saveState(conv.id, conv.state);
+      if (result.ok && data.channel === 'web' && ['add_to_cart', 'update_cart'].includes(data.name)) {
+        const id = String(data.arguments.productId);
+        const item = conv.state.cart.find(item => item.productId === id);
+        result.data = { ...(result.data as Record<string, unknown>), browser_action: { action: 'sync_cart', payload: {
+          items: [{ product_id: id, quantity: item?.quantity ?? 0 }], scope_product_ids: [id],
+        } } };
+      }
       return result;
     });
   });

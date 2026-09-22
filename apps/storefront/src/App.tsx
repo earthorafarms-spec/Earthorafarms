@@ -9,6 +9,7 @@ import { Gate } from '@/components/Gate';
 import ScrollToTop from '@/components/ScrollToTop';
 import { AssistantWidget } from '@/components/AssistantWidget';
 import { VoiceNavigationBridge, withVoicePage } from '@/components/VoiceNavigationBridge';
+import { VoiceStorefrontActions } from '@/components/VoiceStorefrontActions';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
 // Home is eager — it's the LCP page for most visitors
 import Home from './pages/home';
@@ -50,6 +51,7 @@ const ProductDetail  = withVoicePage(lazyWithRetry(() => import('./pages/product
 const Cart           = withVoicePage(lazyWithRetry(() => import('./pages/cart')));
 const Favorites      = lazyWithRetry(() => import('./pages/favorites'));
 const VoiceCheckout  = lazyWithRetry(() => import('./pages/voice-checkout'));
+const AiCheckout = lazyWithRetry(() => import('./pages/ai-checkout'));
 const ReviewOrder    = lazyWithRetry(() => import('./pages/review-order'));
 const ShippingPolicy = withVoicePage(lazyWithRetry(() => import('./pages/shipping-policy')));
 const FAQ            = withVoicePage(lazyWithRetry(() => import('./pages/faq')));
@@ -112,6 +114,7 @@ export default function App() {
               <ScrollToTop />
               <AssistantWidget />
               <VoiceNavigationBridge />
+              <VoiceStorefrontActions />
               <Suspense fallback={<PageLoader />}>
                 <Switch>
                   <Route path="/" component={PublicHome} />
@@ -128,6 +131,7 @@ export default function App() {
                     <Redirect to="/cart" />
                   </Route>
                   <Route path="/voice-checkout/:token" component={VoiceCheckout} />
+                  <Route path="/ai-checkout/:token" component={AiCheckout} />
                   <Route path="/review-order" component={ReviewOrder} />
                   <Route path="/shipping-policy" component={ShippingPolicy} />
                   <Route path="/faq" component={FAQ} />

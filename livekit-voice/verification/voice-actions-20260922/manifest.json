@@ -1,0 +1,10 @@
+{
+  "sha256": "c547e453dcc71ffce2f18d55d8248e7d2c8e4c8787729ddcaa7fdbb9a6482d34",
+  "compiled": {
+    "modules/store/routes.js": "1c5f080a927b035d8a70e26c61bf86c712b9bdc65567f16f500ef546d1c9099c",
+    "platform/channels/siteGuide.js": "593a0f084c3a9d419cab45caa795db3700774ed69ba3c726555e70734497fb8d",
+    "platform/channels/sunpath.js": "e84d9710eae455d35c0d6d3be418bb1de553800f9a2ae4c213743a22502e5e87",
+    "platform/channels/voiceCheckout.js": "83fc7f4734bd799bff23746a9dbcda0ca05f32c9befeafe083ca6cad037f44fc",
+    "platform/engine/functions.js": "a5168e7cac9a7979eeee35daaf1059fa1889993340e225ddfae84dd434f1e793"
+  }
+}

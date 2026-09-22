@@ -1,12 +1,12 @@
 /** Builtin function registry — the tools the AI can call. Operate on the conversation's in-memory cart/state. */
 import { sql } from '../../db/client.js';
-import { signPayload } from '../../lib/crypto.js';
 import { enqueueJob } from '../../modules/jobs/queue.js';
 import { config } from '../../config.js';
 import { listProducts, priceCart } from '../../modules/commerce/pricing.js';
 import { retrieve } from '../kb/retrieve.js';
 import { tenantId } from '../kb/ingest.js';
 import type { ToolDef } from '../providers/types.js';
+import { checkoutCustomerSchema, createCheckoutSnapshot } from '../channels/voiceCheckout.js';
 
 export interface FunctionContext {
   conversationId: string; channelType: string;
@@ -70,8 +70,9 @@ export const BUILTINS: BuiltinFunction[] = [
       const p = resolveProduct(products, str(args.productId));
       if (!p || p.status !== 'active') return { ok: false, message: 'That product is not available' };
       const qty = Math.max(1, Math.min(50, Math.round(Number(args.quantity) || 1)));
-      if (p.stockQty < qty) return { ok: false, message: `Only ${p.stockQty} in stock` };
       const existing = ctx.state.cart.find((c) => c.productId === p.id);
+      const totalQuantity = (existing?.quantity ?? 0) + qty;
+      if (totalQuantity > 50 || p.stockQty < totalQuantity) return { ok: false, message: `Maximum available quantity is ${Math.min(50, p.stockQty)}` };
       if (existing) existing.quantity += qty; else ctx.state.cart.push({ productId: p.id, slug: p.slug, name: p.name, quantity: qty, unitPrice: p.price });
       return { ok: true, data: { cart: ctx.state.cart, added: { name: p.name, quantity: qty } }, sideEffect: 'cart' };
     },
@@ -82,6 +83,12 @@ export const BUILTINS: BuiltinFunction[] = [
     parameters: { type: 'object', properties: { productId: { type: 'string' }, quantity: { type: 'integer', minimum: 0 } }, required: ['productId', 'quantity'] },
     run: async (args, ctx) => {
       const qty = Math.max(0, Math.round(Number(args.quantity) || 0));
+      const item = ctx.state.cart.find(c => c.productId === args.productId);
+      if (!item) return { ok: false, message: 'That product is not in your cart.' };
+      if (qty > 0) {
+        const product = (await listProducts()).find(p => p.id === item.productId && p.status === 'active');
+        if (!product || qty > 50 || qty > product.stockQty) return { ok: false, message: 'That quantity is not available. Please choose a smaller quantity.' };
+      }
       ctx.state.cart = ctx.state.cart.flatMap((c) => (c.productId === args.productId ? (qty === 0 ? [] : [{ ...c, quantity: qty }]) : [c]));
       return { ok: true, data: { cart: ctx.state.cart }, sideEffect: 'cart' };
     },
@@ -104,11 +111,14 @@ export const BUILTINS: BuiltinFunction[] = [
       if (!ctx.state.cart.length) return { ok: false, message: 'Cart is empty' };
       const need = ['name', 'phone', 'email', 'address', 'city', 'state', 'zip'].filter((f) => !str(ctx.state.checkout[f]).trim());
       if (need.length) return { ok: false, message: `Missing: ${need.join(', ')}` };
+      const customer = checkoutCustomerSchema.safeParse({ ...ctx.state.checkout, country: ctx.state.checkout.country || 'India' });
+      if (!customer.success) return { ok: false, message: 'Please correct these delivery details: ' + [...new Set(customer.error.issues.map(issue => issue.path[0]))].join(', ') };
       const priced = await priceCart(ctx.state.cart.map((c) => ({ productId: c.productId, quantity: c.quantity })), { state: ctx.state.checkout.state, country: ctx.state.checkout.country || 'India' });
-      const token = signPayload(JSON.stringify({ c: ctx.conversationId, t: Date.now() }));
+      if (priced.unavailable.length || priced.outOfStock.length) return { ok: false, message: 'Some cart items are no longer available in that quantity. Please update the cart.' };
+      const token = createCheckoutSnapshot(ctx.conversationId, ctx.state.language, customer.data, ctx.state.cart.map(c => ({ productId: c.productId, quantity: c.quantity })));
       const url = `${config.PUBLIC_STORE_URL}/ai-checkout/${encodeURIComponent(token)}`;
-      await sql`INSERT INTO escalations (tenant_id, conversation_id, kind, contact, payload, status) VALUES (${await tenantId()}, ${ctx.conversationId}, 'checkout', ${sql.json(ctx.state.checkout)}, ${sql.json({ cart: ctx.state.cart, total: priced.total, url } as any)}, 'open')`;
-      return { ok: true, data: { url, total: priced.total }, sideEffect: 'checkout' };
+      return { ok: true, data: { url, total: priced.total, order_placed: false, payment_required: true,
+        ...(ctx.channelType === 'voice' ? { browser_action: { action: 'open_checkout', payload: { path: '/ai-checkout/' + encodeURIComponent(token) } } } : {}) }, sideEffect: 'checkout' };
     },
   },
   {
@@ -141,7 +151,13 @@ export const BUILTINS: BuiltinFunction[] = [
     name: 'set_customer_detail',
     description: 'Record a customer checkout detail (name, phone, email, address, city, state, zip, country).',
     parameters: { type: 'object', properties: { field: { type: 'string', enum: ['name', 'phone', 'email', 'address', 'city', 'state', 'zip', 'country'] }, value: { type: 'string' } }, required: ['field', 'value'] },
-    run: async (args, ctx) => { ctx.state.checkout[str(args.field)] = str(args.value); return { ok: true, data: { checkout: ctx.state.checkout }, sideEffect: 'checkout' }; },
+    run: async (args, ctx) => {
+      const field = str(args.field), value = str(args.value).trim();
+      if (!['name', 'phone', 'email', 'address', 'city', 'state', 'zip', 'country'].includes(field) || !value || value.length > 500)
+        return { ok: false, message: 'Provide a valid delivery field and value. Payment credentials are never collected.' };
+      ctx.state.checkout[field] = value;
+      return { ok: true, data: { checkout: ctx.state.checkout }, sideEffect: 'checkout' };
+    },
   },
 ];
 

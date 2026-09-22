@@ -10,6 +10,7 @@ import { listActiveFestivalDeals, listProducts, priceCart } from '../commerce/pr
 import { finalizeOrder, getOrderBundle } from '../commerce/orders.js';
 import { renderInvoiceForOrder } from '../notifications/invoice.js';
 import { enqueueJob } from '../jobs/queue.js';
+import { checkoutCustomerSchema } from '../../platform/channels/voiceCheckout.js';
 
 const cartSchema = z.object({
   cartItems: z.array(z.object({ productId: z.string().min(1), quantity: z.number().int().min(1).max(50) })).min(1).max(30),
@@ -95,9 +96,9 @@ export async function storeRoutes(app: FastifyInstance): Promise<void> {
   /** Creates the Razorpay order from server-side prices (Magic Checkout collects the address). */
   app.post('/store/checkout/order', { config: { rateLimit: { max: 20, timeWindow: '10 minutes' } } }, async (req) => {
     if (!razorpayConfigured()) throw upstream('Payments are not configured');
-    const body = cartSchema.safeParse(req.body);
+    const body = cartSchema.extend({ customer: checkoutCustomerSchema.optional() }).safeParse(req.body);
     if (!body.success) throw badRequest('Invalid cart');
-    const cart = await priceCart(body.data.cartItems, { couponCode: body.data.couponCode });
+    const cart = await priceCart(body.data.cartItems, { couponCode: body.data.couponCode, country: body.data.customer?.country, state: body.data.customer?.state });
     if (cart.unavailable.length) throw badRequest('Some products are no longer available');
     if (cart.outOfStock.length) throw badRequest('Some products are out of stock', cart.outOfStock);
     const amountPaise = Math.round(cart.total * 100);
@@ -107,7 +108,7 @@ export async function storeRoutes(app: FastifyInstance): Promise<void> {
       name: l.name, description: l.name, weight: 0, dimensions: {}, image_url: '', product_url: `${config.PUBLIC_STORE_URL}/our-product?open=${l.productId}`, notes: {},
     }));
     const order = await createOrder({ amountPaise, currency: 'INR', receipt: `rcpt_${Date.now()}`, lineItems, notes: { source: 'website', coupon: cart.couponCode ?? '' } });
-    await sql`INSERT INTO payment_webhook_events (provider, provider_event_id, event_type, signature_valid, payload, processing_status) VALUES ('razorpay', ${`order-created:${order.id}`}, 'order.created.local', true, ${sql.json({ cart: cart as any, razorpay_order_id: order.id })}, 'processed')`;
+    await sql`INSERT INTO payment_webhook_events (provider, provider_event_id, event_type, signature_valid, payload, processing_status) VALUES ('razorpay', ${`order-created:${order.id}`}, 'order.created.local', true, ${sql.json({ cart: cart as any, razorpay_order_id: order.id, customer: body.data.customer ?? null })}, 'processed')`;
     return { order_id: order.id, amount: order.amount, currency: order.currency, key_id: config.RAZORPAY_KEY_ID };
   });
 
@@ -124,12 +125,14 @@ export async function storeRoutes(app: FastifyInstance): Promise<void> {
     const coupon = evt?.payload?.cart?.couponCode ?? null;
     const cd = order.customer_details ?? {};
     const ship = cd.shipping_address ?? {};
+    const saved = checkoutCustomerSchema.safeParse(evt?.payload?.customer);
+    const delivery = saved.success ? saved.data : null;
     const customer = {
-      name: cd.name || ship.name || (payment.email ?? '').split('@')[0] || 'Guest',
-      email: cd.email || payment.email || '',
-      phone: cd.contact || ship.contact || payment.contact || '',
-      address: [ship.line1, ship.line2].filter(Boolean).join(', '),
-      city: ship.city ?? '', state: ship.state ?? '', zip: ship.zipcode ?? '', country: ship.country ?? 'India',
+      name: cd.name || ship.name || delivery?.name || (payment.email ?? '').split('@')[0] || 'Guest',
+      email: cd.email || payment.email || delivery?.email || '',
+      phone: cd.contact || ship.contact || payment.contact || delivery?.phone || '',
+      address: [ship.line1, ship.line2].filter(Boolean).join(', ') || delivery?.address || '',
+      city: ship.city || delivery?.city || '', state: ship.state || delivery?.state || '', zip: ship.zipcode || delivery?.zip || '', country: ship.country || delivery?.country || 'India',
     };
     const cart = await priceCart(cartLines.map((l) => ({ productId: l.productId, quantity: l.quantity })), { couponCode: coupon, country: customer.country, state: customer.state });
     if (Math.round(cart.total * 100) !== payment.amount) {

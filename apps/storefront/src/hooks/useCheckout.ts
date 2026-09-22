@@ -12,6 +12,7 @@ export interface CheckoutResult {
   orderNumber: string;
   total: number;
 }
+export interface CheckoutCustomer { name: string; email: string; phone: string; address: string; city: string; state: string; zip: string; country: string }
 
 /**
  * Razorpay 1-click checkout.
@@ -27,14 +28,14 @@ export function useCheckout() {
   useEffect(() => { loadRazorpayScript().catch(() => {}); }, []);
 
   const runCheckout = useCallback(
-    async (items: CartItem[], couponCode?: string | null): Promise<CheckoutResult | null> => {
+    async (items: CartItem[], couponCode?: string | null, customer?: CheckoutCustomer): Promise<CheckoutResult | null> => {
       if (items.length === 0 || isPaying) return null;
       setIsPaying(true);
       try {
         await loadRazorpayScript();
         const orderData = await api<{ order_id: string; amount: number; currency: string; key_id: string }>("/api/store/checkout/order", {
           method: "POST",
-          json: { cartItems: items.map((i) => ({ productId: i.id, quantity: i.quantity })), couponCode: couponCode || null, currency: "INR" },
+          json: { cartItems: items.map((i) => ({ productId: i.id, quantity: i.quantity })), couponCode: couponCode || null, currency: "INR", ...(customer ? {customer} : {}) },
         });
 
         const result = await new Promise<CheckoutResult>((resolve, reject) => {
@@ -44,6 +45,7 @@ export function useCheckout() {
             currency: "INR",
             keyId: orderData.key_id || RAZORPAY_KEY_ID,
             oneClickCheckout: true,
+            prefill: customer ? {name: customer.name, email: customer.email, contact: customer.phone} : undefined,
             onDismiss: () => reject(new Error("Payment cancelled by user.")),
             onFailure: (reason) => reject(new Error(reason || "Payment failed.")),
             onSuccess: async (response: RazorpaySuccessResponse) => {

@@ -10,6 +10,7 @@ interface CartContextType {
   removeFromCart: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
   clearCart: () => void;
+  applyVoiceItems: (items: CartItem[], scope: string[]) => void;
   cartCount: number;
 }
 
@@ -161,10 +162,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setItems([]);
   }, []);
 
+  const applyVoiceItems = useCallback((next: CartItem[], scope: string[]) => {
+    const selected = new Set(scope);
+    setItems(previous => consolidateCartItems([...previous.filter(item => !selected.has(item.id)), ...next]));
+  }, []);
+
   const cartCount = useMemo(() => items.reduce((sum, i) => sum + i.quantity, 0), [items]);
 
   return (
-    <CartContext.Provider value={{ items, addToCart, removeFromCart, updateQuantity, clearCart, cartCount }}>
+    <CartContext.Provider value={{ items, addToCart, removeFromCart, updateQuantity, clearCart, applyVoiceItems, cartCount }}>
       {children}
     </CartContext.Provider>
   );

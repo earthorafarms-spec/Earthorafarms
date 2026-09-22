@@ -7,7 +7,7 @@ describe('finite public website guide', () => {
     const destinations = siteGuide(products);
     expect(destinations.find(d => d.id === 'contact_form')).toMatchObject({ path: '/contact', anchor: 'contact-form' });
     expect(destinations.find(d => d.id === 'products')).toMatchObject({ path: '/', anchor: 'products' });
-    expect(destinations.some(d => d.id === 'cart')).toBe(false);
+    expect(destinations.some(d => d.id === 'cart' && d.path === '/cart')).toBe(true);
     expect(destinations.find(d => d.id === 'product:p1')?.path).toBe('/product/p1');
     expect(destinations.some(d => d.id === 'product:p2')).toBe(false);
     expect(destinations.every(d => d.path.startsWith('/') && !d.path.startsWith('//'))).toBe(true);
