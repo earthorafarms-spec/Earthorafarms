@@ -6,14 +6,12 @@ import { ShoppingBag, Loader2, Zap, CheckCircle2, Star, ArrowUpRight } from "luc
 import { useCart } from "@/contexts/cart-context";
 import { useCheckout } from "@/hooks/useCheckout";
 import { useToast } from "@/hooks/use-toast";
-import { fetchPublicProducts } from "@/lib/api";
+import { publicProductsQuery } from "@/lib/catalogQuery";
 import type { Product } from "@/types";
 
 export function HomeProducts() {
   const { data: products = [], isLoading } = useQuery<Product[]>({
-    queryKey: ["public-products"],
-    queryFn: fetchPublicProducts,
-    staleTime: 1000 * 60 * 5,
+    ...publicProductsQuery,
   });
 
   const [, setLocation] = useLocation();

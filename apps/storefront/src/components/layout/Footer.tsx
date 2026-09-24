@@ -4,7 +4,7 @@ import { Instagram, Facebook, Leaf, Loader2 } from "lucide-react";
 import { Link } from "wouter";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
-import { fetchPublicProducts } from "@/lib/api";
+import { publicProductsQuery } from "@/lib/catalogQuery";
 import type { Product } from "@/types";
 
 /** Strip brand prefix tokens so long product names are short in the footer */
@@ -38,9 +38,7 @@ export function Footer() {
   const { toast } = useToast();
 
   const { data: products = [] } = useQuery<Product[]>({
-    queryKey: ["public-products"],
-    queryFn: fetchPublicProducts,
-    staleTime: 5 * 60 * 1000,
+    ...publicProductsQuery,
   });
 
   const handleNewsletter = async () => {

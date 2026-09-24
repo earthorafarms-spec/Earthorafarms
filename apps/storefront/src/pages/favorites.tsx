@@ -6,7 +6,7 @@ import { Heart, ShoppingBag, Trash2, ArrowUpRight } from 'lucide-react';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { useCart } from '@/contexts/cart-context';
-import { fetchPublicProducts } from '@/lib/api';
+import { publicProductsQuery } from '@/lib/catalogQuery';
 import type { Product } from '@/types';
 
 const WISHLIST_KEY = 'earthora-wishlist';
@@ -35,9 +35,7 @@ export default function Favorites() {
   }, []);
 
   const { data: allProducts = [], isLoading } = useQuery<Product[]>({
-    queryKey: ['public-products'],
-    queryFn: fetchPublicProducts,
-    staleTime: 1000 * 60 * 5,
+    ...publicProductsQuery,
   });
 
   const favorites = useMemo(() => allProducts.filter((p) => favoriteIds.has(p.id)), [allProducts, favoriteIds]);

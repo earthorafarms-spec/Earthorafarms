@@ -17,17 +17,22 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     const { id } = req.params as { id: string };
     const file = await req.file({ limits: { fileSize: 10 * 1024 * 1024 } });
     if (!file) throw badRequest('No file uploaded');
+    if (!/^image\/(jpeg|png|webp|gif|avif)$/.test(file.mimetype)) throw badRequest('Only JPG, PNG, WEBP, GIF or AVIF images are allowed');
+    const bytes = await file.toBuffer();
+    // Consume the file first so metadata sent after it is also available.
     const fields = Object.fromEntries(Object.entries(file.fields).map(([k, v]) => [k, (v as any)?.value]));
     const isPrimary = String(fields.is_primary ?? 'false') === 'true';
     const [product] = await sql<{ id: string; slug: string; images: any }[]>`SELECT id, slug, images FROM products WHERE id = ${id}`;
     if (!product) throw notFound('Product not found');
-    if (!/^image\/(jpeg|png|webp|gif|avif)$/.test(file.mimetype)) throw badRequest('Only JPG, PNG, WEBP, GIF or AVIF images are allowed');
-    const bytes = await file.toBuffer();
     const asset = await storeAsset({ kind: 'product-images', folder: product.slug, filename: file.filename || 'image', mime: file.mimetype, bytes, refTable: 'products', refId: id, createdBy: req.staff!.id });
     const images: { url: string; is_primary: boolean; alt?: string }[] = Array.isArray(product.images) ? product.images : [];
     const next = images.map((i) => ({ ...i, is_primary: isPrimary ? false : i.is_primary }));
     next.push({ url: asset.url, is_primary: isPrimary || next.length === 0, alt: String(fields.alt ?? '') });
-    await sql`UPDATE products SET images = ${sql.json(next)} WHERE id = ${id}`;
+    // Staged uploads are durable assets; the admin save publishes the complete
+    // image list only after every upload succeeds. Existing consumers still append.
+    if (String(fields.persist ?? 'true') !== 'false') {
+      await sql`UPDATE products SET images = ${sql.json(next)} WHERE id = ${id}`;
+    }
     return { success: true, url: asset.url, images: next };
   });
 

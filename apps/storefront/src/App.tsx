@@ -10,6 +10,7 @@ import ScrollToTop from '@/components/ScrollToTop';
 import { AssistantWidget } from '@/components/AssistantWidget';
 import { VoiceNavigationBridge, withVoicePage } from '@/components/VoiceNavigationBridge';
 import { VoiceStorefrontActions } from '@/components/VoiceStorefrontActions';
+import { CatalogFreshnessBridge } from '@/components/CatalogFreshnessBridge';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
 // Home is eager — it's the LCP page for most visitors
 import Home from './pages/home';
@@ -107,6 +108,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
+        <CatalogFreshnessBridge />
         <AuthProvider>
           <CartProvider>
             <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>

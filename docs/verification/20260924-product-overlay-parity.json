@@ -1,0 +1,240 @@
+{
+  "at_utc": "2026-09-24T06:21:51.297359+00:00",
+  "local_head": "474aa66592963195ffc6920090ebd75bd25c4a2a",
+  "scope": "Read-only production schema, image/source parity and static storefront feature audit; no mutations or calls",
+  "production_api_image": "earthora-api:voice-actions20260922c",
+  "production_api_image_id": "sha256:be96313e4c57bcaed7dd05ccd69989049e539ba10b08facd2a41ff0c02d65bb5",
+  "gateway_live_matches_compiled_HEAD": true,
+  "gateway_live_sha256": "6dae23176b623704769e211979330d210f0fe8f05bca9b60202a9c604829da1d",
+  "additional_overlay_paths": [
+    "/app/apps/api/dist/modules/admin/gateway.js",
+    "/app/apps/api/dist/modules/admin/gateway.js.map"
+  ],
+  "schema": {
+    "products_text_arrays": [
+      "highlights",
+      "health_benefits",
+      "certifications"
+    ],
+    "products_jsonb": [
+      "images",
+      "faqs",
+      "seo"
+    ],
+    "inventory_unique_conflict_column": "product_id",
+    "inventory_required_insert_fields": [
+      "product_id"
+    ],
+    "inventory_defaults": {
+      "id": "gen_random_uuid()",
+      "total_stock": 0,
+      "reserved_stock": 0,
+      "low_stock_threshold": 15
+    },
+    "inventory_checks": [
+      "total_stock >= 0",
+      "reserved_stock >= 0"
+    ],
+    "inventory_product_fk": "products(id) ON DELETE CASCADE"
+  },
+  "live_storefront": {
+    "entrypoints": [
+      "/assets/index-Q10XVkAm.js"
+    ],
+    "index_sha256": "4af04389ad86763081800e5c27c1e35bff0e3931f3307dae2876048534688a45",
+    "reachable_js_count": 39,
+    "reachable_asset_hashes": {
+      "assets/index-Q10XVkAm.js": "8d63398264452ac5e4ea33ccc2bcd1519666af90b4647549d23a297a587cac5d",
+      "assets/products-DR8HhcEu.js": "96519c6bd3f2fde86558d9f97bcc888ced858311cdb24c19fb26239adda14aff",
+      "assets/query-2OgYNqgP.js": "b2630ba6ee1a95a7fd18644a3f14ea7d6a253efd6048a90d0538d95b93ecb774",
+      "assets/react-D-7o2eDW.js": "a4da4abf72a45cf69c93ad611b6f45f9fd38f3d98a00087040abe4f2f11c1dda",
+      "assets/framer-yDUkwpPI.js": "7a7d69ebb2ecefbfdd4968e7f0202eff5ec65e80de3b5d44d2794ea8ff2caf3d",
+      "assets/ui-DBD7cYAo.js": "c80d3c928873ac7e12154e40b12892fa0e7ec6274f5111a7ca71613f37b1cbda",
+      "assets/b2c-nongst-BX1xx_6G.js": "de4a680b6bf31f9f3dcd89958d3c243130295a881db3d150fc248aadbbca395a",
+      "assets/excel-export-BH5ovoJe.js": "5a45e2812ae26165bb5c8e505efcb8bdd888b574ef2966b34b88ef1b128a3849",
+      "assets/b2b-gst-Bh023Ts7.js": "a7dfdf914fb0b02a7be98ac47161400ba4838dbb805d2fc212c7df5342a26c1a",
+      "assets/dashboard-BO25Us7L.js": "9a2d27f562a93684df4f2c2ce49763746383a41866e763156083c685f3004737",
+      "assets/layout-kxTs_OzV.js": "0dd8ab46ddfef3e6d7ad6d8496e5098fc40473627912876814fb7df10e06e3c1",
+      "assets/passwords-DHE-CrNh.js": "f6143ee9b813054756ff91ebdd1cae725d651e1660269c43d06063c6641e244e",
+      "assets/website-DjRn_pUs.js": "9240dd265c76ef1c3d90bbbdb979c45e6364c9cf19897644d40ec6c05f9353c3",
+      "assets/dashboard-llen8zHi.js": "c49c4bdc545bdded7479a421c8ef8eb79eba64c487e84a6269bf3e10c3aa1903",
+      "assets/layout-B_bPFzlR.js": "c3f7d65ff4726a6c822f1743e9ef023dafe305d937d01b7c8e55e43be8594654",
+      "assets/settings-DE2aawsR.js": "8264c05f0fd9a227c83a644b2f2c375923235f8049ca68b7da6214711cf661a9",
+      "assets/voice-knowledge-CA_UydKg.js": "ae71e9689cb6ecec079f4b1da8a5c8091beee5f85e43ad0adb9a1f0cd8e20897",
+      "assets/button-BN906OCV.js": "c374aa2005904ea27aed636e18ed2379768161ecd2d5e2191b67eb24a5e6ec3b",
+      "assets/festive-CMdHJE3S.js": "b906621cbe7baaf492ad41cbf508575d546330337fb5ddd10d47ce3df296d07a",
+      "assets/coupons-4ca898mH.js": "fcd6dedf4aeda97af047a42e81dd6e4f07987cae9a2c2dcb202122b535841ff7",
+      "assets/analytics-Dh_zpPNj.js": "69cd82ceff15e9806df66891ed8e9489d1aabf83dbe6ac12f5c5d07dd8cd1cff",
+      "assets/orders-eQwDCWec.js": "7152afee134efcb58791f7e7089f853b2d6164767c0f0d3b6afd4b4e5edd4565",
+      "assets/products-l_MkGfQP.js": "21fece127ace5c1b6fbb24007eacdbaf1d8d1ce75a79653d1d9f4a44cac45398",
+      "assets/dashboard-DdGyflso.js": "6b78fb898737d1e3bc63e0c117105354ef0712c1fd0e0f96a1a0679a2c77b2a3",
+      "assets/layout-BrTCa4Vx.js": "9cb9626071b35de09556955e065de547f5d22d6a49b575da8adc8b0d7f85b50c",
+      "assets/cookie-settings-BajOuns2.js": "92dcde367a154aa677032a9eb660ae11d798d06052ce55d075a3524e0360d095",
+      "assets/terms-of-use-DuacaBVs.js": "2320a3caa27d59598e813c6a67bf2d13b94f822934795bab39d1101f7356c904",
+      "assets/privacy-policy-DMZWuC_6.js": "e935fef3508be90e813cc2e74b6b1280f64be04ef9beb668f19d107f349dfb96",
+      "assets/faq-DtSPZrFM.js": "ca35f0364cc320489f4ab86d46858ecc686b0bb95683994901852f346c7dff33",
+      "assets/shipping-policy-CpGjtSZM.js": "cab613b23b18588db8171da1ad2135282ec9bbcb724b4c92ffa8e896e0415c60",
+      "assets/review-order-DHZlvD1j.js": "c90184aec14e29c11a31f7d5272de2f78de5fba74779e736c486613250b0768d",
+      "assets/ai-checkout-DgEFfDMA.js": "4b404e081dd9a397ff7e3202968682e05d3d0f0150e762b34880a32e99185fe0",
+      "assets/voice-checkout-DG-riXGm.js": "656e016f05bf7d1d928b0e8f2deedf9d53ae5b0243d6e126416222712d9b72ea",
+      "assets/favorites-DaDfawRh.js": "cf8f4522df010467ac05e5d50f03bf99e8b2f74a69c7e7f30a4068abc739cdb7",
+      "assets/cart-CFnxpVlj.js": "c2e9cab62e498bd34522bc4411a2d035d96ef387b41083991182e7d4cfe390ee",
+      "assets/product-detail-BpXIakSR.js": "f61e7aafd9a6839478104293697a77122db7a2e0f5b41944913339265982a96e",
+      "assets/health-benefits-CjGv50np.js": "9cc5432678604115159b7dd8323ac3c93f85da7f7763f06954cd813f10e7e482",
+      "assets/contact-Boke86Yl.js": "ee69f2884cf6e4b60a91d956f60389e25219b7a844dd09d024456db35fdde22a",
+      "assets/our-story-BWkpdmgl.js": "b7738d7523b530e0f17bf9ef3ebe6c57a555d37393d48ca341edd50f34110152"
+    },
+    "feature_groups": {
+      "widget_loader": {
+        "complete": true,
+        "missing": []
+      },
+      "navigation": {
+        "complete": true,
+        "missing": []
+      },
+      "voice_actions": {
+        "complete": true,
+        "missing": []
+      },
+      "compact_voice_layout": {
+        "complete": true,
+        "missing": []
+      },
+      "voice_checkout": {
+        "complete": true,
+        "missing": []
+      },
+      "legacy_checkout_route": {
+        "complete": true,
+        "missing": []
+      }
+    }
+  },
+  "candidate_storefront": {
+    "entrypoints": [
+      "/assets/index-CxCJplW2.js"
+    ],
+    "index_sha256": "0538f38b7b50d4275ee3c6d38224a1561597c948d72518530b757b41d293333c",
+    "reachable_js_count": 39,
+    "reachable_asset_hashes": {
+      "assets/index-CxCJplW2.js": "869994bdb77ce9755a7fe73212a3777a1ddc445d32fed872449c6df4c69089a8",
+      "assets/products-Dqh2gZuu.js": "8cbe3f03de6799c4630656be4a3d5846dc2b5634a2a211fea65128e42732838a",
+      "assets/query-CDPQ153_.js": "746c00c3c1b624292cff7f9b40e85d13f691f239b0581ae0ed0a935b22cd5690",
+      "assets/react-D-7o2eDW.js": "a4da4abf72a45cf69c93ad611b6f45f9fd38f3d98a00087040abe4f2f11c1dda",
+      "assets/framer-yDUkwpPI.js": "7a7d69ebb2ecefbfdd4968e7f0202eff5ec65e80de3b5d44d2794ea8ff2caf3d",
+      "assets/ui-DBD7cYAo.js": "c80d3c928873ac7e12154e40b12892fa0e7ec6274f5111a7ca71613f37b1cbda",
+      "assets/b2c-nongst-D4jDwM-C.js": "e340e53b7a24436fb2904be77b39b9cb47487bd48f759652997dc6832b90a119",
+      "assets/excel-export-BH5ovoJe.js": "5a45e2812ae26165bb5c8e505efcb8bdd888b574ef2966b34b88ef1b128a3849",
+      "assets/b2b-gst-BJp-C09E.js": "8b9389907583906b377d2666a158147600ad0adb239a9fa05ddce92fcef5fdca",
+      "assets/dashboard-DsveP74J.js": "dc87e02a06e187944cc11996aaa277cc5a0d8a83aa1c041e69a7fab92df98e5f",
+      "assets/layout-DezdiL1o.js": "94ca87a198ca8017e6a81486f2acd9ba2048c9edfc33c2f713ba8a6c0a8fae49",
+      "assets/passwords-B22qbrwR.js": "d94d97234e2cfc496f77039d15c3e5d55c1b2ce39e1f818d1deea559414a79cf",
+      "assets/website-wtwR5eX4.js": "34bf85e75696395ada84d84bfdeb20b2fbeb3d79072744dde9fad62dbde1bd7c",
+      "assets/dashboard-GHHj8Itn.js": "3a4905c636b02560b3d3ac32ea1f971919ba586a7127d1455aea74ffac291640",
+      "assets/layout-BnC8QlPZ.js": "2823491d48a8f46e092ba99970f6cac88f5af478034491f0995598b09f86b402",
+      "assets/settings-B5nUTlkI.js": "069d4a5170e3ca8396c70fc4de14c5b58d143429d10c5b2e469538d9b0f49f00",
+      "assets/voice-knowledge-Xgrffuwb.js": "229f23c6a705d78c4e21de471d5c1cdae7606aaaa56934966173c64bc121563a",
+      "assets/button-hbuImr8b.js": "f0bf9805520d601dba2b7fa29e21a225878ee7e5425a5ec5542aa3d0a09718f7",
+      "assets/festive-DyZrDaU_.js": "afe9327097a7e815310bafa6d4ccb12813f1b40e8c41bc6e1727625155fdfa92",
+      "assets/coupons-Ck7pVAgw.js": "d26ca0f24a2c784bf51cc54f4f4a45691b439f6008f2f869dc8796d1fc93248e",
+      "assets/analytics-B7LpCRey.js": "5501ae80f70db4137dfc6369283765378c2a3cb27027a9ff9f4e07da0bd872f0",
+      "assets/orders-CB_Tm2Lk.js": "f3dba7f11bb41385dea3bd571f33929a01a132bf5504dabf4fac61f319cea8ac",
+      "assets/products-BxM0ffqV.js": "0c355c94ca8b8cd2acbb70a0edcce8ad9db0117c8c21ab1266e5ad80097ce860",
+      "assets/dashboard-C7dxcrt2.js": "f3a1179b26c0a6b9525ba6b93162bef700f3fd2dd01716c1fe9747164f623366",
+      "assets/layout-CeFQRas5.js": "55a6f8654a5b9062a3857f356ac1405aeaf1ae3e6ef6677dca98171ab08d0772",
+      "assets/cookie-settings-D6UU2bVx.js": "27847648ec895c20578275458f01a3eb2481d59d93acac4ce55e922a4d64edd1",
+      "assets/terms-of-use-rd0Ii9do.js": "10ce079dc37a31a8a9fba8b729fd15cb37b170749adbaa55ee69b78927c477c3",
+      "assets/privacy-policy-B3akkdoH.js": "6bdef8f8929abd9be1786b410b368eeffdfc83e2bffcda01117e71fbd19fa1a8",
+      "assets/faq-S5HiYdK4.js": "1ddb0c180537cf0bcb9301c49b4c9d5b89a94d3e665750be19d5df0f327ce49f",
+      "assets/shipping-policy-B5E9dNnp.js": "69f374a269a9a67efb1d28e25ac42501369d340a818c578a2b3ddd2d565b0d6a",
+      "assets/review-order-Dmwvlnbr.js": "8b881370e34c4ebb97f379011c13e7c05cb4da283ebffac4d7a895a152433efe",
+      "assets/ai-checkout-BPALmdwS.js": "082b334b46aa699c78c1375b50e07203b52d1526758b742d5b76bc1b532d7e74",
+      "assets/voice-checkout-CSCOkC6z.js": "9e4d026d33bf0e52225e8a4f7cd36b3acede2d223d7caff623afe9c6258186b6",
+      "assets/favorites-B251ZsZb.js": "164dbfb868b662d4d72c8a49c89d9b0c9c658a14975c3dead564fa5b0536cb1b",
+      "assets/cart-BQsdwfOf.js": "82a6ced36d3d8cc79a6ab2f6b557ccabe289681205d8b7f2fd84fcd42f4fb9f2",
+      "assets/product-detail-Dw_N2OIh.js": "bdac4675d918800a23c9f3e02105bc0035f1c321a3fc9989c427476f7ee22654",
+      "assets/health-benefits-D4Pfya3F.js": "d97d3a816108309469a41d87786eeeafcfc23a098b94e545f21ef236fd9bdeb0",
+      "assets/contact-BXAbmj1F.js": "5cb39ee6fa68e2b2610015a0e436abc17461f565da5b120c80ba04c254a05d98",
+      "assets/our-story-Q9MZkCj_.js": "da99c66eb8afa29728b7a353be989d10356196680832434bb3d4aefd390895ad"
+    },
+    "feature_groups": {
+      "widget_loader": {
+        "complete": true,
+        "missing": []
+      },
+      "navigation": {
+        "complete": true,
+        "missing": []
+      },
+      "voice_actions": {
+        "complete": true,
+        "missing": []
+      },
+      "compact_voice_layout": {
+        "complete": true,
+        "missing": []
+      },
+      "voice_checkout": {
+        "complete": true,
+        "missing": []
+      },
+      "legacy_checkout_route": {
+        "complete": true,
+        "missing": []
+      }
+    }
+  },
+  "critical_source_parity": [
+    {
+      "path": "apps/storefront/src/components/AssistantWidget.tsx",
+      "unchanged_from_HEAD": true,
+      "normalized_sha256": "e0c9f7560e0cdf8580796cc7f85ba4b2f6d02670f9b7634cda1147faba1e4867"
+    },
+    {
+      "path": "apps/storefront/src/components/VoiceNavigationBridge.tsx",
+      "unchanged_from_HEAD": true,
+      "normalized_sha256": "71cec044b4a45ad8f4ed4eeb4994b6b6d2b69bb0b33d233293aecfb2cff104d9"
+    },
+    {
+      "path": "apps/storefront/src/components/VoiceStorefrontActions.tsx",
+      "unchanged_from_HEAD": true,
+      "normalized_sha256": "2f8d32bd27bb3a5d7f80c086d5c0f1f71fe6b70e70b534ef6d31f1a8f1cdb0e6"
+    },
+    {
+      "path": "apps/storefront/src/contexts/cart-context.tsx",
+      "unchanged_from_HEAD": true,
+      "normalized_sha256": "9bf5d3cd75e281cd0ddaf2a17f822337c04427107f09357abde9251e3da84923"
+    },
+    {
+      "path": "apps/storefront/src/pages/ai-checkout.tsx",
+      "unchanged_from_HEAD": true,
+      "normalized_sha256": "a5d779c50a2be9f05f55837f998e84a0133a44eedeab146698c2e525d95d54cd"
+    },
+    {
+      "path": "apps/storefront/src/pages/voice-checkout.tsx",
+      "unchanged_from_HEAD": true,
+      "normalized_sha256": "25d0ec0feab9eae2dd3571c6635bc10e280f0245ff520d805927de75dce153c0"
+    },
+    {
+      "path": "apps/storefront/src/lib/voiceCheckoutApi.ts",
+      "unchanged_from_HEAD": true,
+      "normalized_sha256": "2adb181886291d4dd5bd9f29b70c9e3dd99968909ae94cb678ebdf3a49579050"
+    },
+    {
+      "path": "apps/api/public/widget.js",
+      "unchanged_from_HEAD": true,
+      "normalized_sha256": "1df3c5ce585c075ed158e12b5901454cc87d818c488336ec1341ae7320b860c7"
+    },
+    {
+      "path": "apps/api/public/voice-client.js",
+      "unchanged_from_HEAD": true,
+      "normalized_sha256": "92cb540ed468384bb843a2ed7dde562d8ff2398d143af971addad7cd40c8203e"
+    }
+  ],
+  "limitations": [
+    "Compiled entrypoint/contract-marker inspection and unchanged local source are static evidence, not a live browser call or checkout test.",
+    "No source maps or build commit manifest exists in the old storefront release; exact full-source provenance cannot be reconstructed.",
+    "The image gateway text-array serialization remains faulty until the separate gateway fix is built and deployed."
+  ]
+}

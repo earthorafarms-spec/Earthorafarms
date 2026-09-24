@@ -25,7 +25,8 @@ import { Footer } from "@/components/layout/Footer";
 import { useCart } from "@/contexts/cart-context";
 import { useCheckout } from "@/hooks/useCheckout";
 import { useToast } from "@/hooks/use-toast";
-import { fetchPublicProducts, fetchReviews } from "@/lib/api";
+import { fetchReviews } from "@/lib/api";
+import { publicProductsQuery } from "@/lib/catalogQuery";
 import type { Product } from "@/types";
 import powderImg from "@assets/generated_images/product_powder.jpg";
 
@@ -37,9 +38,7 @@ export default function ProductDetail() {
   const productId = params?.id;
 
   const { data: products = [], isLoading } = useQuery<Product[]>({
-    queryKey: ["public-products"],
-    queryFn: fetchPublicProducts,
-    staleTime: 1000 * 60 * 5,
+    ...publicProductsQuery,
   });
 
   const { data: dbReviews = [] } = useQuery<any[]>({

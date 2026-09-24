@@ -1,4 +1,7 @@
 import { api } from './apiClient';
+import { fetchCatalog, invalidateCatalog } from './catalog';
+export { fetchCatalog } from './catalog';
+export type { Catalog } from './catalog';
 import type { DbProduct, DbReview, FestiveDeal, Product } from '@/types';
 import powderImg from '@assets/generated_images/product_powder.jpg';
 import powderImg2 from '@assets/generated_images/product_powder_2.jpg';
@@ -11,19 +14,6 @@ const staticImageMap: Record<string, { main: string; hover: string }> = {
   tablets: { main: tabletsImg, hover: tabletsImg2 },
   amla: { main: heroLeavesImg, hover: heroLeavesImg },
 };
-
-export interface Catalog { products: DbProduct[]; deals: FestiveDeal[]; reviews: DbReview[] }
-
-let catalogCache: { at: number; promise: Promise<Catalog> } | null = null;
-const CATALOG_TTL = 30_000;
-
-/** One request for everything the storefront needs; deduped + cached for 30s so sections don't refetch in parallel. */
-export function fetchCatalog(force = false): Promise<Catalog> {
-  if (!force && catalogCache && Date.now() - catalogCache.at < CATALOG_TTL) return catalogCache.promise;
-  const promise = api<Catalog>('/api/store/catalog', { signal: AbortSignal.timeout(10_000) }).catch((err) => { catalogCache = null; throw err; });
-  catalogCache = { at: Date.now(), promise };
-  return promise;
-}
 
 function mapProduct(p: DbProduct, dbDeals: FestiveDeal[], dbReviews: DbReview[], now: Date): Product {
   const inv = Array.isArray(p.inventory) ? p.inventory[0] : p.inventory;
@@ -59,8 +49,8 @@ function mapProduct(p: DbProduct, dbDeals: FestiveDeal[], dbReviews: DbReview[],
   };
 }
 
-export async function fetchPublicProducts(): Promise<Product[]> {
-  const { products, deals, reviews } = await fetchCatalog();
+export async function fetchPublicProducts(force = false): Promise<Product[]> {
+  const { products, deals, reviews } = await fetchCatalog(force);
   const now = new Date();
   return products.filter((p) => p.status !== 'archived').map((p) => mapProduct(p, deals, reviews, now));
 }
@@ -87,7 +77,7 @@ export function getDiscountedPrice(productId: string, originalPrice: number, dea
 
 export async function submitReview(input: { productId: string; name: string; rating: number; comment: string }): Promise<void> {
   await api('/api/store/reviews', { method: 'POST', json: input });
-  catalogCache = null;
+  invalidateCatalog();
 }
 
 export async function submitContact(input: { name: string; email: string; phone: string; topic: string; message: string; marketingConsent: boolean }): Promise<void> {

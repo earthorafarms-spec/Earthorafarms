@@ -13,6 +13,7 @@ interface TableRule { read: Role[]; write: Role[]; pk: string; hidden?: string[]
 
 const ADMIN: Role[] = ['owner', 'admin']; const DEV: Role[] = ['owner', 'developer']; const KACC: Role[] = ['owner', 'kacc'];
 const ADMIN_DEV: Role[] = ['owner', 'admin', 'developer']; const ALL_STAFF: Role[] = ['owner', 'admin', 'developer', 'kacc', 'editor', 'viewer'];
+const PRODUCT_TEXT_ARRAY_COLUMNS = new Set(['highlights', 'health_benefits', 'certifications']);
 
 const RULES: Record<string, TableRule> = {
   products: { read: ALL_STAFF, write: ADMIN, pk: 'id' },
@@ -152,7 +153,19 @@ export async function runGatewayQuery(raw: unknown, roles: Role[]): Promise<{ da
   }
   const sanitize = (v: Record<string, unknown>) => {
     const out: Record<string, unknown> = {};
-    for (const [k, val] of Object.entries(v)) { if (!cols.has(k)) throw badRequest(`Unknown column ${table}.${k}`); if (rule.hidden?.includes(k)) throw forbidden(`Column ${table}.${k} is not writable`); out[k] = val !== null && typeof val === 'object' ? sql.json(val as any) : val; }
+    for (const [k, val] of Object.entries(v)) {
+      if (!cols.has(k)) throw badRequest(`Unknown column ${table}.${k}`);
+      if (rule.hidden?.includes(k)) throw forbidden(`Column ${table}.${k} is not writable`);
+      // These schema-defined columns are text[], unlike images/faqs/seo (jsonb).
+      // Use text[] OID 1009 explicitly: element OID 25 depends on the driver's
+      // warmed type-array map and can be encoded as scalar text on a cold pool.
+      if (table === 'products' && PRODUCT_TEXT_ARRAY_COLUMNS.has(k) && val !== null) {
+        if (!Array.isArray(val) || val.some(item => typeof item !== 'string')) throw badRequest(`Product ${k} must be an array of strings`);
+        out[k] = sql.array(val, 1009);
+      } else {
+        out[k] = val !== null && typeof val === 'object' ? sql.json(val as any) : val;
+      }
+    }
     return out;
   };
   if (op === 'insert' || op === 'upsert') {

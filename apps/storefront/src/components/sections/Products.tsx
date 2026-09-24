@@ -1,15 +1,13 @@
 import { motion } from "framer-motion";
 import { ArrowUpRight, Grid2X2, Star } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchPublicProducts } from "@/lib/api";
+import { publicProductsQuery } from "@/lib/catalogQuery";
 import type { Product } from "@/types";
 import powderImg from "@assets/generated_images/product_powder.jpg";
 
 export function Products() {
   const { data: products = [], isLoading } = useQuery<Product[]>({
-    queryKey: ["public-products"],
-    queryFn: fetchPublicProducts,
-    staleTime: 1000 * 60 * 5,
+    ...publicProductsQuery,
   });
 
   const tagColors = [

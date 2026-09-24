@@ -4,7 +4,8 @@ import { Search, Filter, Plus, Package, Eye, Trash2, X, Leaf, UploadCloud, Users
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
-import { API_BASE } from "@/lib/apiClient";
+import { saveAdminProduct } from "@/lib/adminProducts";
+import { invalidateCatalog } from "@/lib/catalog";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 
 import powderImg from "@assets/generated_images/product_powder.jpg";
@@ -49,6 +50,7 @@ export default function AdminProducts() {
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editId, setEditId] = useState<string | null>(null);
+  const [pendingProductId, setPendingProductId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const [form, setForm] = useState({
@@ -160,6 +162,7 @@ export default function AdminProducts() {
         .eq("id", id);
         
       if (error) throw error;
+      invalidateCatalog();
       toast({ title: "Product archived", description: "Product soft deleted successfully." });
       fetchProducts();
     } catch (err: any) {
@@ -206,6 +209,7 @@ export default function AdminProducts() {
         p_notes: restockModal.notes || "Restocked via admin portal",
       });
       if (error) throw error;
+      invalidateCatalog();
       toast({ title: "Product restocked", description: `Added ${qty} units to inventory.` });
       setRestockModal(m => ({ ...m, open: false }));
       fetchProducts();
@@ -217,6 +221,7 @@ export default function AdminProducts() {
 
   const openForm = () => {
     setEditId(null);
+    setPendingProductId(null);
     setForm({ name: "", mrp: "", price: "", tag: "", badge: "", stockText: "In Stock", stock: "", description: "", highlights: [""], rating: "4.5", category: "moringa", hsn_code: "12119029" });
     setImages([]);
     setSelectedFiles([]);
@@ -225,6 +230,7 @@ export default function AdminProducts() {
 
   const openEditForm = (p: AdminProduct) => {
     setEditId(p.id);
+    setPendingProductId(null);
     setForm({
       name: p.name,
       mrp: String(p.mrp),
@@ -255,179 +261,44 @@ export default function AdminProducts() {
   });
 
   const handleSubmit = async () => {
-    if (!form.name || !form.mrp || !form.price) {
+    if (!form.name.trim() || !form.mrp || !form.price) {
       toast({ title: "Missing fields", description: "Name, MRP, and Price are required." });
       return;
     }
-
     setUploading(true);
-    const mrp = parseFloat(form.mrp);
-    const price = parseFloat(form.price);
-    const baseSlug = form.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "product";
-    let id = baseSlug;
-
-    if (!editId) {
-      try {
-        const { data: existingSlug } = await (supabase.from("products") as any)
-          .select("slug")
-          .eq("slug", baseSlug)
-          .maybeSingle();
-
-        if (existingSlug) {
-          id = `${baseSlug}-${Math.random().toString(36).substring(2, 6)}`;
-        }
-      } catch (_) {
-        // fallback if check fails
-      }
-    }
-
-    let finalImages: ProductImage[] = [];
-
-    if (selectedFiles.length > 0) {
-      toast({ title: "Uploading images", description: "Please wait while we upload and compress product images..." });
-      try {
-        for (let i = 0; i < selectedFiles.length; i++) {
-          const file = selectedFiles[i];
-          const isPrimary = i === 0;
-          
-          const formData = new FormData();
-          formData.append("file", file);
-          formData.append("is_primary", String(isPrimary));
-          formData.append("alt", `${form.name} view ${i + 1}`);
-
-          const response = await fetch(`${API_BASE}/api/admin/products/${id}/images`, {
-            method: "POST",
-            credentials: "include",
-            body: formData
-          });
-
-          if (!response.ok) {
-            const errBody = await response.json().catch(() => ({}));
-            throw new Error(errBody.error || "Failed to upload image");
-          }
-
-          const resData = await response.json();
-          finalImages.push({
-            url: resData.url,
-            alt: `${form.name} view ${i + 1}`,
-            is_primary: isPrimary
-          });
-        }
-      } catch (err: any) {
-        console.error("Image upload failed:", err);
-        toast({ title: "Upload failed", description: err.message || "Failed to upload images, falling back to local previews.", variant: "destructive" });
-        finalImages = images.map((url, i) => ({
-          url,
-          alt: `${form.name} view ${i + 1}`,
-          is_primary: i === 0
-        }));
-      }
-    } else {
-      finalImages = images.map((url, i) => ({
-        url,
-        alt: `${form.name} view ${i + 1}`,
-        is_primary: i === 0
-      }));
-    }
-
-    const newProduct: AdminProduct = {
-      id,
-      name: form.name,
-      mrp,
-      price,
-      stock: parseInt(form.stock) || 0,
-      sold: 0,
-      status: "Active",
-      tag: form.tag,
-      badge: form.badge,
-      stockText: form.stockText || "In Stock",
-      description: form.description,
-      highlights: form.highlights.filter((h) => h.trim()),
-      rating: parseFloat(form.rating) || 4.5,
-      images: finalImages,
-    };
-
     try {
-      if (editId) {
-        // ── UPDATE existing product ──────────────────────────────────────────
-        const { error: updErr } = await (supabase
-          .from("products") as any)
-          .update({
-            name: form.name,
-            mrp,
-            price,
-            tag: form.tag,
-            badge: form.badge,
-            description: form.description,
-            highlights: form.highlights.filter((h) => h.trim()),
-            rating: parseFloat(form.rating) || 4.5,
-            category: form.category || "moringa",
-            hsn_code: form.hsn_code,
-            ...(finalImages.length > 0 ? { images: finalImages as any } : {}),
-          })
-          .eq("id", editId);
-
-        if (updErr) throw updErr;
-
-        // Update stock in inventory
-        await (supabase
-          .from("inventory") as any)
-          .update({ total_stock: parseInt(form.stock) || 0 })
-          .eq("product_id", editId);
-
-        toast({ title: "Product updated", description: `${form.name} has been updated.` });
-        setImages([]);
-        setSelectedFiles([]);
-        setUploading(false);
-        setShowForm(false);
-        setEditId(null);
-        fetchProducts();
-        return;
+      const baseSlug = form.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "product";
+      let slug = baseSlug;
+      if (!editId && !pendingProductId) {
+        const { data: existing, error } = await supabase.from("products").select("slug").eq("slug", baseSlug).maybeSingle();
+        if (error) throw error;
+        if (existing) slug = `${baseSlug}-${crypto.randomUUID().slice(0, 8)}`;
       }
-
-      const { data: newProd, error: prodErr } = await (supabase.from("products") as any)
-        .insert({
-          slug: id,
-          name: form.name,
-          mrp,
-          price,
-          tag: form.tag,
-          badge: form.badge,
-          status: "active",
-          description: form.description,
-          highlights: form.highlights.filter((h) => h.trim()),
-          rating: parseFloat(form.rating) || 4.5,
-          images: finalImages as any,
-          category: form.category || "moringa",
-          hsn_code: form.hsn_code,
-        })
-        .select()
-        .single();
-
-      if (prodErr) throw prodErr;
-
-      const { error: invErr } = await supabase
-        .from("inventory")
-        .insert({
-          product_id: (newProd as any).id,
-          total_stock: parseInt(form.stock) || 0,
-          reserved_stock: 0,
-          low_stock_threshold: 15,
-        } as any);
-
-      if (invErr) throw invErr;
-
-      toast({ title: "Product added", description: `${form.name} has been created in database.` });
-      fetchProducts();
+      await saveAdminProduct({
+        id: editId || pendingProductId,
+        publishNew: !editId,
+        slug,
+        fields: {
+          name: form.name.trim(), mrp: Number(form.mrp), price: Number(form.price),
+          tag: form.tag, badge: form.badge, description: form.description,
+          highlights: form.highlights.filter(h => h.trim()), rating: Number(form.rating) || 4.5,
+          category: form.category || "moringa", hsn_code: form.hsn_code,
+        },
+        stock: form.stock.trim() ? Number(form.stock) : 0,
+        files: selectedFiles, images, onCreated: setPendingProductId,
+      });
+      toast({ title: editId ? "Product updated" : "Product published", description: editId ? `${form.name} is saved. The catalogue refreshes automatically.` : `${form.name} is now available on the website.` });
+      setImages([]);
+      setSelectedFiles([]);
+      setShowForm(false);
+      setEditId(null);
+      setPendingProductId(null);
+      await fetchProducts();
     } catch (err: any) {
-      console.error("Insert failed:", err);
-      toast({ title: "Failed to add product", description: err.message, variant: "destructive" });
+      toast({ title: "Product not saved", description: `${err.message || "Please try again."} Your details are kept here so you can retry.`, variant: "destructive" });
+    } finally {
+      setUploading(false);
     }
-
-    setImages([]);
-    setSelectedFiles([]);
-    setUploading(false);
-    setShowForm(false);
   };
 
   const discount = form.mrp && form.price ? Math.round((1 - parseFloat(form.price) / parseFloat(form.mrp)) * 100) : 0;

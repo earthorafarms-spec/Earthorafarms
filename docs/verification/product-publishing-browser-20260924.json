@@ -1,0 +1,22 @@
+{
+  "scope": "Post-deployment browser smoke and read-only database encoding checks",
+  "browser": "Codex in-app browser, agent-created tab",
+  "origin": "https://www.earthorafarms.com",
+  "checks": {
+    "live_product_card_rendered": true,
+    "navbar_product_entry_rendered": true,
+    "footer_product_link_rendered": true,
+    "eva_dialog_opens_and_closes": true,
+    "voice_start_control_present": true,
+    "staff_admin_route_reaches_login": true,
+    "browser_console_warnings_or_errors": [],
+    "native_text_array_cold_connection_empty_and_gujarati_round_trip": true,
+    "native_text_array_warm_connection_quotes_backslash_round_trip": true
+  },
+  "limitations": [
+    "Product create/edit/image failure scenarios were regression-tested; no public test product was created.",
+    "The browser smoke did not sign in or submit a staff product form.",
+    "No customer record, cart, order, microphone, camera, screen capture or PSTN call was created by these checks.",
+    "The catalogue's existing INR 1 price was left unchanged pending the owner's approved selling price."
+  ]
+}

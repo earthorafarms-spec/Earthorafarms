@@ -30,7 +30,7 @@ export async function storeRoutes(app: FastifyInstance): Promise<void> {
       listActiveFestivalDeals(),
       sql<any[]>`SELECT review_product_id, review_user_id, review_rating, review_comment, review_created_at FROM review_details ORDER BY review_created_at DESC LIMIT 500`,
     ]);
-    reply.header('Cache-Control', 'public, max-age=30, stale-while-revalidate=120');
+    reply.header('Cache-Control', 'no-store');
     return {
       products: products.map((p) => ({ id: p.id, name: p.name, slug: p.slug, price: p.price, mrp: p.mrp, status: p.status, tag: p.tag, badge: p.badge, description: p.description, highlights: p.highlights, images: p.images, rating: p.rating, created_at: p.created_at, inventory: [{ total_stock: p.stockQty }] })),
       deals: deals.map((d) => ({ id: String(d.id), festival_name: d.name, festival_status: 'active', discount_type: d.discountType, discount_value: d.discountValue, festival_deal_products: d.productIds.map((product_id) => ({ product_id })), festival_start_date: new Date(0).toISOString(), festival_end_date: new Date(8640000000000000).toISOString() })),

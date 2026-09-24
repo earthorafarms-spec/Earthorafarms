@@ -6,7 +6,7 @@ import { ShoppingBag, Menu, X, Heart, ChevronDown } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useCart } from "@/contexts/cart-context";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
-import { fetchPublicProducts } from "@/lib/api";
+import { publicProductsQuery } from "@/lib/catalogQuery";
 import type { Product } from "@/types";
 import earthoraTextSvg from "@assets/generated_images/Earthora Text.svg";
 
@@ -42,9 +42,7 @@ export function Navbar() {
   const isHomePage = location === "/";
 
   const { data: products = [] } = useQuery<Product[]>({
-    queryKey: ["public-products"],
-    queryFn: fetchPublicProducts,
-    staleTime: 1000 * 60 * 5,
+    ...publicProductsQuery,
   });
 
   useEscapeKey(() => {
