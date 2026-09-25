@@ -33,3 +33,24 @@ describe('voice purchase preparation',()=>{
     expect(ctx.state.checkout).not.toHaveProperty('card_number');
   });
 });
+describe('bulk quantities are wholesale enquiries, never a stock refusal',()=>{
+  it('explains the retail cart ceiling and points to an enquiry instead of quoting stock',async()=>{
+    const ctx=context();
+    vi.mocked(listProducts).mockResolvedValue([{id:'p1',slug:'product',name:'Product',status:'active',stockQty:119,price:10}] as any);
+    const bulk=await BUILTIN_MAP.get('add_to_cart')!.run({productId:'p1',quantity:5000},ctx);
+    expect(bulk.ok).toBe(false);expect(bulk.message).toContain('at most 50 units');expect(bulk.message).toContain('wholesale');expect(bulk.message).not.toContain('119');
+    expect(ctx.state.cart).toEqual([]);
+    expect((await BUILTIN_MAP.get('add_to_cart')!.run({productId:'p1',quantity:30},ctx)).ok).toBe(true);
+    const over=await BUILTIN_MAP.get('add_to_cart')!.run({productId:'p1',quantity:30},ctx);
+    expect(over.ok).toBe(false);expect(over.message).toContain('at most 50 units');expect(ctx.state.cart[0].quantity).toBe(30);
+    const update=await BUILTIN_MAP.get('update_cart')!.run({productId:'p1',quantity:60},ctx);
+    expect(update.ok).toBe(false);expect(update.message).toContain('wholesale');expect(ctx.state.cart[0].quantity).toBe(30);
+  });
+  it('still reports real retail stock limits below the ceiling',async()=>{
+    const ctx=context();
+    const result=await BUILTIN_MAP.get('add_to_cart')!.run({productId:'p1',quantity:4},ctx);
+    expect(result).toEqual({ok:false,message:'Maximum available quantity is 3'});
+    expect((await BUILTIN_MAP.get('add_to_cart')!.run({productId:'p1',quantity:3},ctx)).ok).toBe(true);
+    expect((await BUILTIN_MAP.get('update_cart')!.run({productId:'p1',quantity:4},ctx)).message).toContain('smaller quantity');
+  });
+});

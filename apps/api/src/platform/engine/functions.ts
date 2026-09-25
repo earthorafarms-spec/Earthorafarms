@@ -19,6 +19,9 @@ export interface BuiltinFunction { name: string; description: string; parameters
 
 const str = (v: unknown) => (v === undefined || v === null ? '' : String(v));
 
+/** Retail cart ceiling per product. Larger quantities are wholesale enquiries for the team, never a stock refusal. */
+export const RETAIL_CART_LIMIT = 50;
+
 function resolveProduct<T extends { id: string; slug: string; name: string; status: string }>(products: T[], ref: string): T | undefined {
   const r = str(ref).toLowerCase().trim();
   return products.find((x) => x.id === ref || x.slug === ref)
@@ -69,10 +72,14 @@ export const BUILTINS: BuiltinFunction[] = [
       const products = await listProducts();
       const p = resolveProduct(products, str(args.productId));
       if (!p || p.status !== 'active') return { ok: false, message: 'That product is not available' };
-      const qty = Math.max(1, Math.min(50, Math.round(Number(args.quantity) || 1)));
+      const requested = Math.round(Number(args.quantity) || 1);
+      const qty = Math.max(1, Math.min(RETAIL_CART_LIMIT, requested));
       const existing = ctx.state.cart.find((c) => c.productId === p.id);
       const totalQuantity = (existing?.quantity ?? 0) + qty;
-      if (totalQuantity > 50 || p.stockQty < totalQuantity) return { ok: false, message: `Maximum available quantity is ${Math.min(50, p.stockQty)}` };
+      if (requested > RETAIL_CART_LIMIT || totalQuantity > RETAIL_CART_LIMIT) {
+        return { ok: false, message: `The retail cart holds at most ${RETAIL_CART_LIMIT} units of a product. Larger quantities are wholesale supply enquiries for the Earthora team, not limited by shop stock; offer to record an enquiry instead.` };
+      }
+      if (p.stockQty < totalQuantity) return { ok: false, message: `Maximum available quantity is ${Math.min(RETAIL_CART_LIMIT, p.stockQty)}` };
       if (existing) existing.quantity += qty; else ctx.state.cart.push({ productId: p.id, slug: p.slug, name: p.name, quantity: qty, unitPrice: p.price });
       return { ok: true, data: { cart: ctx.state.cart, added: { name: p.name, quantity: qty } }, sideEffect: 'cart' };
     },
@@ -87,7 +94,9 @@ export const BUILTINS: BuiltinFunction[] = [
       if (!item) return { ok: false, message: 'That product is not in your cart.' };
       if (qty > 0) {
         const product = (await listProducts()).find(p => p.id === item.productId && p.status === 'active');
-        if (!product || qty > 50 || qty > product.stockQty) return { ok: false, message: 'That quantity is not available. Please choose a smaller quantity.' };
+        if (!product) return { ok: false, message: 'That product is not available' };
+        if (qty > RETAIL_CART_LIMIT) return { ok: false, message: `The retail cart holds at most ${RETAIL_CART_LIMIT} units of a product. Larger quantities are wholesale supply enquiries for the Earthora team; offer to record an enquiry instead.` };
+        if (qty > product.stockQty) return { ok: false, message: 'That quantity is not available. Please choose a smaller quantity.' };
       }
       ctx.state.cart = ctx.state.cart.flatMap((c) => (c.productId === args.productId ? (qty === 0 ? [] : [{ ...c, quantity: qty }]) : [c]));
       return { ok: true, data: { cart: ctx.state.cart }, sideEffect: 'cart' };

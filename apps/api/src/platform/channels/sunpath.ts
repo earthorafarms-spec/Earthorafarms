@@ -6,7 +6,7 @@ import { config } from '../../config.js';
 import { badRequest, notFound, unauthorized } from '../../lib/errors.js';
 import { getChannelByKey, publishedConfig } from './config.js';
 import { appendMessage, loadConversation, saveState } from '../engine/conversation.js';
-import { BUILTIN_MAP, toolDefsFor } from '../engine/functions.js';
+import { BUILTIN_MAP, RETAIL_CART_LIMIT, toolDefsFor } from '../engine/functions.js';
 import { withVoiceScope } from '../providers/voiceScope.js';
 import { VoiceTurnQueue } from './voiceTurns.js';
 import { listProducts } from '../../modules/commerce/pricing.js';
@@ -15,6 +15,13 @@ import { navigationResult, navigationTool, scrollTool, siteGuide } from './siteG
 import { checkoutSnapshotView } from './voiceCheckout.js';
 import { requestDrafts, requestToolNames, requestTools, runRequestTool } from './voiceConcierge.js';
 import { receiveStudioRequest, studioRequestInput } from './studioRequests.js';
+
+/**
+ * Earthora's own fulfilment policy for the voice runtime. Earthora manufactures its
+ * products: quantities beyond the retail cart are supply enquiries for the team, not
+ * a refusal against live shop stock. The runtime never invents minimums or prices.
+ */
+const BUSINESS_POLICY = Object.freeze({ manufacturer: true, retail_cart_limit: RETAIL_CART_LIMIT, bulk_enquiries: true, bulk_enquiry_flow: 'contact' });
 
 const identifier = z.string().min(1).max(180).regex(/^[a-zA-Z0-9:_-]+$/);
 const common = z.object({ session_id: identifier, channel_key: z.string().min(1).max(180), channel: z.enum(['web', 'phone']) });
@@ -100,6 +107,7 @@ export async function sunpathRoutes(app: FastifyInstance): Promise<void> {
     const knowledge = [...canonical, ...indexed];
     const requests = await requestDrafts({ tenantId: ch.tenant_id, conversationId: conv.id });
     return { persona: { ...(cfg.persona || {}), name: cfg.name || 'Eva' }, language: conv.state.language, history: conv.history.slice(-8),
+      business: BUSINESS_POLICY,
       catalog: catalog.ok ? catalog.data : [], knowledge, tools: nativeToolDefinitions(parsed.data.channel), cart: conv.state.cart, checkout: conv.state.checkout,
       site_guide: parsed.data.channel === 'web' ? siteGuide((catalog.ok ? catalog.data : []) as { id: string; name: string }[]) : [],
       request_drafts: requests, request_draft: requests.find(request => request.status === 'draft') ?? null };

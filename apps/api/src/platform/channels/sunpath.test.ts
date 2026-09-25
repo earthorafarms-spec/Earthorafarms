@@ -18,6 +18,7 @@ vi.mock('../engine/functions.js', () => ({
     ...['add_to_cart', 'update_cart'].map(name => [name, { name, run, parameters: { type: 'object', properties: { productId: { type: 'string' }, quantity: { type: 'integer', minimum: name === 'add_to_cart' ? 1 : 0 } }, required: ['productId', 'quantity'] } }] as const),
   ]),
   toolDefsFor: (names: string[]) => names.map(name => ({ name })),
+  RETAIL_CART_LIMIT: 50,
 }));
 
 import { sunpathRoutes } from './sunpath.js';
@@ -83,6 +84,7 @@ describe('SunPath-style worker data boundary', () => {
     const app = await server();
     const res = await app.inject({ method: 'POST', url: '/platform/voice/internal/context', headers, payload: common });
     expect(res.statusCode).toBe(200); expect(res.json()).toMatchObject({ persona: { name: 'Eva' }, catalog: [{ price: 10 }], knowledge: [{ title: 'Approved info' }] });
+    expect(res.json().business).toEqual({ manufacturer: true, retail_cart_limit: 50, bulk_enquiries: true, bulk_enquiry_flow: 'contact' });
     const query = vi.mocked(sql).mock.calls.find(([strings]) => strings.join('').includes('FROM kb_chunks'))![0].join(' ');
     expect(query).toContain("c.visibility = 'public'"); expect(query).toContain("d.status = 'indexed'"); expect(query).toContain('effective_until'); expect(query).toContain('c.tenant_id');
     expect(res.body).not.toContain('test-key');
