@@ -17,8 +17,13 @@ export async function indexDocument(input: {
 }): Promise<{ documentId: string; chunks: number; skipped: boolean }> {
   const tid = await tenantId();
   const hash = sha(input.text);
-  const [existing] = await sql<{ id: string; content_hash: string }[]>`SELECT id, content_hash FROM kb_documents WHERE tenant_id = ${tid} AND uri = ${input.uri ?? null} AND title = ${input.title} LIMIT 1`;
-  if (existing && existing.content_hash === hash) return { documentId: existing.id, chunks: 0, skipped: true };
+  const [existing] = await sql<{ id: string; content_hash: string; status: string }[]>`SELECT id, content_hash, status FROM kb_documents WHERE tenant_id = ${tid} AND uri = ${input.uri ?? null} AND title = ${input.title} LIMIT 1`;
+  if (existing && existing.content_hash === hash) {
+    // Unchanged text, but a product document archived while its product was
+    // inactive must become searchable again when the product is re-activated.
+    if (existing.status !== 'indexed') await sql`UPDATE kb_documents SET status = 'indexed', updated_at = now() WHERE id = ${existing.id}`;
+    return { documentId: existing.id, chunks: 0, skipped: true };
+  }
 
   const chunks = chunkText(input.text, { docTitle: input.title, docSummary: input.summary });
   const embed = getEmbedding();
@@ -81,6 +86,24 @@ export async function crawlWebsite(sourceId: string | null, collectionId: string
 }
 
 /** DB-sync: one document per active product from its DB fields + approved knowledge. */
+/** The collection that holds one synced document per active product. */
+export async function productsCollectionId(): Promise<string> {
+  const tid = await tenantId();
+  const [row] = await sql<{ id: string }[]>`INSERT INTO kb_collections (tenant_id, slug, name, description, authority)
+    VALUES (${tid}, 'products', 'Product information', 'Synced from the live catalogue + approved facts', 2)
+    ON CONFLICT (tenant_id, slug) DO UPDATE SET name = EXCLUDED.name RETURNING id`;
+  return row.id;
+}
+
+/** Product documents whose product is no longer active stop being searchable; re-activation restores them. */
+export async function archiveStaleProductDocuments(): Promise<number> {
+  const tid = await tenantId();
+  const rows = await sql<{ id: string }[]>`UPDATE kb_documents SET status = 'archived', updated_at = now()
+    WHERE tenant_id = ${tid} AND uri LIKE 'product:%' AND status = 'indexed'
+      AND uri NOT IN (SELECT 'product:' || slug FROM products WHERE status = 'active') RETURNING id`;
+  return rows.length;
+}
+
 export async function syncProductDocuments(collectionId: string | null): Promise<{ documents: number; chunks: number }> {
   const products = await sql<any[]>`SELECT p.id, p.name, p.slug, p.description, p.highlights, p.price, p.mrp, p.category,
     COALESCE(i.total_stock,0) AS stock FROM products p LEFT JOIN inventory i ON i.product_id = p.id WHERE p.status = 'active'`;

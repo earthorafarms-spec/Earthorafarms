@@ -5,6 +5,7 @@ import { storeAsset } from '../../lib/assets.js';
 import { badRequest, notFound } from '../../lib/errors.js';
 import { getOrderBundle, setOrderStatus } from '../commerce/orders.js';
 import { enqueueJob, retryJob } from '../jobs/queue.js';
+import { enqueueKbSync } from '../../platform/kb/sync.js';
 import { runGatewayQuery } from './gateway.js';
 
 const KNOWLEDGE_CATEGORIES = ['description', 'benefits', 'dosage', 'directions', 'ingredients', 'warnings', 'contraindications', 'storage', 'faq'] as const;
@@ -84,6 +85,7 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       const d = z.object({ product_id: z.string().uuid(), category: z.enum(KNOWLEDGE_CATEGORIES), question: z.string().max(500).optional().nullable(), content: z.string().min(1).max(8000), locale: z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/).optional().default('en-IN') }).safeParse(body);
       if (!d.success) throw badRequest('Invalid knowledge entry', d.error.flatten());
       const [row] = await sql<any[]>`INSERT INTO product_knowledge (product_id, category, question, content, locale, status) VALUES (${d.data.product_id}, ${d.data.category}, ${d.data.question ?? null}, ${d.data.content}, ${d.data.locale}, 'draft') RETURNING *`;
+      void enqueueKbSync('knowledge-create');
       return { ok: true, row };
     }
     const id = z.string().uuid().safeParse(body.id); if (!id.success) throw badRequest('id required');
@@ -91,14 +93,17 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       const d = z.object({ question: z.string().max(500).optional().nullable(), content: z.string().min(1).max(8000).optional(), category: z.enum(KNOWLEDGE_CATEGORIES).optional(), locale: z.string().optional() }).safeParse(body);
       if (!d.success) throw badRequest('Invalid patch');
       const [row] = await sql<any[]>`UPDATE product_knowledge SET question = COALESCE(${d.data.question ?? null}, question), content = COALESCE(${d.data.content ?? null}, content), category = COALESCE(${d.data.category ?? null}, category), locale = COALESCE(${d.data.locale ?? null}, locale), status = 'draft', approved_by = NULL, approved_at = NULL, version = version + 1 WHERE id = ${id.data} RETURNING *`;
+      void enqueueKbSync('knowledge-update');
       return { ok: true, row };
     }
     if (head.data.action === 'status') {
       const d = z.object({ status: z.enum(['draft', 'approved', 'archived']) }).safeParse(body); if (!d.success) throw badRequest('status required');
       const [row] = await sql<any[]>`UPDATE product_knowledge SET status = ${d.data.status}, approved_by = ${d.data.status === 'approved' ? actor : null}, approved_at = ${d.data.status === 'approved' ? sql`now()` : null} WHERE id = ${id.data} RETURNING *`;
+      void enqueueKbSync('knowledge-status');
       return { ok: true, row };
     }
     await sql`DELETE FROM product_knowledge WHERE id = ${id.data}`;
+    void enqueueKbSync('knowledge-delete');
     return { ok: true };
   });
 

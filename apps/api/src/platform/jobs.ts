@@ -4,9 +4,10 @@ import { sql } from '../db/client.js';
 import { localAssetPath } from '../lib/assets.js';
 import { brandedEmail, escapeHtml, sendEmail } from '../lib/email.js';
 import { isStudioNotification, sendStudioEmail } from '../lib/studioEmail.js';
-import { registerJobHandler } from '../modules/jobs/worker.js';
+import { registerJobHandler, registerSchedule } from '../modules/jobs/worker.js';
 import { getEmbedding } from './providers/index.js';
-import { crawlWebsite, ingestFile, syncProductDocuments, tenantId } from './kb/ingest.js';
+import { archiveStaleProductDocuments, crawlWebsite, ingestFile, productsCollectionId, syncProductDocuments, tenantId } from './kb/ingest.js';
+import { KB_SYNC_EVERY_MS, KB_SYNC_JOB, enqueueKbSync } from './kb/sync.js';
 
 export function registerPlatformJobs(): void {
   registerJobHandler('kb_ingest_file', async (job) => {
@@ -20,13 +21,24 @@ export function registerPlatformJobs(): void {
     const p = job.payload as { url?: string; maxPages?: number };
     const tid = await tenantId();
     const [coll] = await sql<any[]>`INSERT INTO kb_collections (tenant_id, slug, name, description, authority) VALUES (${tid}, 'website', 'Website content', 'Auto-indexed pages from the storefront', 3) ON CONFLICT (tenant_id, slug) DO UPDATE SET name = EXCLUDED.name RETURNING id`;
-    const [prodColl] = await sql<any[]>`INSERT INTO kb_collections (tenant_id, slug, name, description, authority) VALUES (${tid}, 'products', 'Product information', 'Synced from the live catalogue + approved facts', 2) ON CONFLICT (tenant_id, slug) DO UPDATE SET name = EXCLUDED.name RETURNING id`;
     const url = p.url || config.PUBLIC_STORE_URL;
     log.info({ url }, 'crawling website');
     const web = await crawlWebsite(null, coll.id, { startUrl: url, maxPages: p.maxPages ?? 40, tags: ['website'] });
-    const prod = await syncProductDocuments(prodColl.id);
+    const prod = await syncProductDocuments(await productsCollectionId());
     return { website: web, products: prod };
   });
+
+  // Product documents follow the live catalogue: every admin product, stock or
+  // knowledge change enqueues this (see kb/sync.ts), and it also runs on a
+  // schedule. Unchanged documents are skipped by content hash, so an idle
+  // run costs a few catalogue queries and no embedding calls.
+  registerJobHandler(KB_SYNC_JOB, async (job, log) => {
+    const products = await syncProductDocuments(await productsCollectionId());
+    const archived = await archiveStaleProductDocuments();
+    log.info({ ...products, archived, reason: (job.payload as { reason?: string }).reason }, 'product documents synced');
+    return { ...products, archived };
+  });
+  registerSchedule({ name: 'kb_products_sync', everyMs: KB_SYNC_EVERY_MS, run: async () => { await enqueueKbSync('schedule'); } });
 
   registerJobHandler('kb_reindex_source', async (job) => {
     const [s] = await sql<any[]>`SELECT * FROM kb_sources WHERE id = ${job.payload.sourceId as string}`;

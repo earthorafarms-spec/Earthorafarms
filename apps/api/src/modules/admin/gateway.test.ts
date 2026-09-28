@@ -1,8 +1,9 @@
 import postgres from 'postgres';
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mock = vi.hoisted(() => ({ sql: vi.fn(), json: vi.fn(), array: vi.fn() }));
+const mock = vi.hoisted(() => ({ sql: vi.fn(), json: vi.fn(), array: vi.fn(), sync: vi.fn() }));
 vi.mock('../../db/client.js', () => ({ sql: Object.assign(mock.sql, { json: mock.json, array: mock.array }) }));
+vi.mock('../../platform/kb/sync.js', () => ({ enqueueKbSync: mock.sync }));
 import { invalidateColumnCache, runGatewayQuery } from './gateway.js';
 
 // Keep the driver's real parameter objects/typing without opening any socket.
@@ -67,5 +68,15 @@ describe('admin gateway PostgreSQL column encoding', () => {
   it('does not relax staff write permissions', async () => {
     await expect(runGatewayQuery({ table: 'products', op: 'insert', values: { highlights: [] } }, ['viewer'])).rejects.toMatchObject({ statusCode: 403 });
     expect(mock.array).not.toHaveBeenCalled(); expect(records).toHaveLength(0);
+  });
+});
+
+describe('knowledge base follows catalogue writes', () => {
+  it('enqueues a product sync after a products write but not after a read', async () => {
+    await runGatewayQuery({ table: 'products', op: 'update', columns: 'id', filters: [{ op: 'eq', col: 'id', value: 'product-id' }], values: { name: 'Renamed' } }, ['admin']);
+    expect(mock.sync).toHaveBeenCalledExactlyOnceWith('gateway-products-update');
+    mock.sync.mockClear();
+    await runGatewayQuery({ table: 'products', op: 'select', columns: 'id', filters: [] }, ['admin']);
+    expect(mock.sync).not.toHaveBeenCalled();
   });
 });

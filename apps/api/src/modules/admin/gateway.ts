@@ -6,6 +6,7 @@
 import { z } from 'zod';
 import { sql } from '../../db/client.js';
 import { badRequest, forbidden } from '../../lib/errors.js';
+import { enqueueKbSync } from '../../platform/kb/sync.js';
 import type { Role } from '../auth/service.js';
 
 type Op = 'select' | 'insert' | 'update' | 'upsert' | 'delete';
@@ -69,6 +70,13 @@ async function columnsOf(table: string): Promise<Set<string>> {
   return cols;
 }
 export function invalidateColumnCache(): void { columnCache = null; }
+
+// Writes to these tables change what the voice assistant can say about the
+// catalogue; the knowledge base's product documents follow them.
+const KB_SYNC_TABLES = new Set(['products', 'inventory']);
+function afterWrite(table: string, op: string): void {
+  if (KB_SYNC_TABLES.has(table)) void enqueueKbSync(`gateway-${table}-${op}`);
+}
 
 interface ParsedSelect { columns: string[] | '*'; embeds: { name: string; select: ParsedSelect }[] }
 function parseSelect(s: string | undefined): ParsedSelect {
@@ -179,9 +187,11 @@ export async function runGatewayQuery(raw: unknown, roles: Role[]): Promise<{ da
       const rows = updates.length
         ? await sql<Record<string, unknown>[]>`INSERT INTO ${sql(table)} ${sql(normalized as any, keys as any)} ON CONFLICT (${sql(conflict)}) DO UPDATE SET ${updates.map((k) => sql`${sql(k)} = EXCLUDED.${sql(k)}`).reduce((a, b, i) => (i === 0 ? b : sql`${a}, ${b}`))} RETURNING ${sql(selectCols)}`
         : await sql<Record<string, unknown>[]>`INSERT INTO ${sql(table)} ${sql(normalized as any, keys as any)} ON CONFLICT (${sql(conflict)}) DO NOTHING RETURNING ${sql(selectCols)}`;
+      afterWrite(table, op);
       return { data: rows, count: null };
     }
     const rows = await sql<Record<string, unknown>[]>`INSERT INTO ${sql(table)} ${sql(normalized as any, keys as any)} RETURNING ${sql(selectCols)}`;
+    afterWrite(table, op);
     return { data: rows, count: null };
   }
   if (!q.data.filters.length) throw badRequest(`${op} requires at least one filter`);
@@ -189,8 +199,10 @@ export async function runGatewayQuery(raw: unknown, roles: Role[]): Promise<{ da
     const v = sanitize((Array.isArray(q.data.values) ? q.data.values[0] : q.data.values) ?? {});
     if (!Object.keys(v).length) throw badRequest('No values');
     const rows = await sql<Record<string, unknown>[]>`UPDATE ${sql(table)} SET ${sql(v as any, Object.keys(v) as any)} ${where} RETURNING ${sql(selectCols)}`;
+    afterWrite(table, op);
     return { data: rows, count: null };
   }
   const rows = await sql<Record<string, unknown>[]>`DELETE FROM ${sql(table)} ${where} RETURNING ${sql(selectCols)}`;
+  afterWrite(table, op);
   return { data: rows, count: null };
 }

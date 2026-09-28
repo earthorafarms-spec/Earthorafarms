@@ -23,6 +23,45 @@ The voice assistant's catalogue and product tools already read this same live
 database. Publishing a product does not require restarting the GPU models or
 Voice Studio, and does not automatically approve medical/product knowledge.
 
+## Voice knowledge audit, 28 September 2026
+
+The owner reported that the voice assistant's knowledge base looked static and
+that it did not pick up newly added products. The audit found:
+
+- **There is no WooCommerce integration anywhere.** `earthorafarms.com` is this
+  repository's storefront; products live only in the owned PostgreSQL `products`
+  table and are administered at `/sun-earthora/products`. The voice assistant's
+  catalogue (`list_products`, `get_product_details`) and its approved product
+  facts (`product_knowledge`, status `approved`) are read live from that database
+  on every turn, so a product published in the admin is visible to the assistant
+  immediately and its approved facts are usable as soon as they are approved.
+- **The indexed knowledge documents were static.** The product document used by
+  keyword search (`kb_documents`, one per active product, built from the
+  description, highlights and approved facts) was only rebuilt by the manual
+  "index website" job, last run on 15 September. Product, stock and knowledge
+  changes never refreshed it. The worker now runs a `kb_sync_products` job:
+  every admin write to `products` or `inventory` and every knowledge
+  create/update/status/delete enqueues one (at most one per minute), and a
+  schedule runs it every ten minutes as a safety net. Unchanged documents are
+  skipped by content hash; documents of products that are no longer active are
+  archived and restored when the product is re-activated. Deployed as
+  `earthora-api:kb-sync20260928a` for both the API and the worker
+  (`infra/vps/activate_kb_sync.py`; evidence in `docs/verification/kb-sync-*.json`).
+- **Why "what products do you have?" failed in a real call.** The runtime's
+  exact-match catalogue answer only understood a few phrasings; the model's
+  attempt was then rejected by the grounding guard. The Voice Studio runtime
+  (release `voice-studio-flows-20260928f`) now answers the common phrasings
+  ("may I know what all products are there", "which products are available",
+  Hindi and Gujarati equivalents) directly from the live catalogue.
+- **Data to correct in the admin (not code):** the one active product is listed
+  at ₹1.00 against an MRP of ₹999 and the assistant quotes that price; its slug
+  is `cheese`, which is also its storefront URL and knowledge document id; one
+  knowledge entry (dosage) is still a draft. Five archived test products
+  (Alpha, beta, gamma, Product X, Moringa Capsules) are ignored by the assistant.
+- **Embedding cost.** Knowledge indexing embeds changed documents with the
+  configured OpenAI embedding model; the voice search path itself uses keyword
+  matching only. A sync of unchanged documents makes no embedding calls.
+
 ## Running the received code locally
 
 The Vite frontend and API are separate development processes. A copied source
