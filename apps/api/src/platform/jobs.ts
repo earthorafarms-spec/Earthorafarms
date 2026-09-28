@@ -1,4 +1,6 @@
 import { readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { config } from '../config.js';
 import { sql } from '../db/client.js';
 import { localAssetPath } from '../lib/assets.js';
@@ -6,8 +8,10 @@ import { brandedEmail, escapeHtml, sendEmail } from '../lib/email.js';
 import { isStudioNotification, sendStudioEmail } from '../lib/studioEmail.js';
 import { registerJobHandler, registerSchedule } from '../modules/jobs/worker.js';
 import { getEmbedding } from './providers/index.js';
-import { archiveStaleProductDocuments, crawlWebsite, ingestFile, productsCollectionId, syncProductDocuments, tenantId } from './kb/ingest.js';
-import { KB_SYNC_EVERY_MS, KB_SYNC_JOB, enqueueKbSync } from './kb/sync.js';
+import { crawlWebsite, ingestFile, pagesCollectionId, productsCollectionId, removeStaleProductDocuments, syncPageDocuments, syncProductDocuments, tenantId } from './kb/ingest.js';
+import { KB_PAGES_JOB, KB_SYNC_JOB, runAutoSyncTick } from './kb/sync.js';
+
+const PAGES_FILE = join(dirname(fileURLToPath(import.meta.url)), '..', 'kb', 'pages.json');
 
 export function registerPlatformJobs(): void {
   registerJobHandler('kb_ingest_file', async (job) => {
@@ -34,11 +38,22 @@ export function registerPlatformJobs(): void {
   // run costs a few catalogue queries and no embedding calls.
   registerJobHandler(KB_SYNC_JOB, async (job, log) => {
     const products = await syncProductDocuments(await productsCollectionId());
-    const archived = await archiveStaleProductDocuments();
-    log.info({ ...products, archived, reason: (job.payload as { reason?: string }).reason }, 'product documents synced');
-    return { ...products, archived };
+    const removed = await removeStaleProductDocuments();
+    log.info({ ...products, removed, reason: (job.payload as { reason?: string }).reason }, 'product documents synced');
+    return { ...products, removed };
   });
-  registerSchedule({ name: 'kb_products_sync', everyMs: KB_SYNC_EVERY_MS, run: async () => { await enqueueKbSync('schedule'); } });
+  // Page copy is extracted from the storefront source at API build time, so the
+  // assistant's view of the FAQ, policies and story follows every deployment.
+  registerJobHandler(KB_PAGES_JOB, async (job, log) => {
+    const bundle = JSON.parse(await readFile(PAGES_FILE, 'utf8')) as { generated_at: string; pages: { path: string; title: string; text: string }[] };
+    const result = await syncPageDocuments(await pagesCollectionId(), bundle.pages);
+    log.info({ ...result, generated_at: bundle.generated_at, reason: (job.payload as { reason?: string }).reason }, 'page documents synced');
+    return { ...result, generated_at: bundle.generated_at };
+  });
+  registerSchedule({ name: 'kb_auto_sync', everyMs: 60_000, run: async (log) => {
+    const due = await runAutoSyncTick();
+    if (due.length) log.info({ due }, 'knowledge base syncs queued');
+  } });
 
   registerJobHandler('kb_reindex_source', async (job) => {
     const [s] = await sql<any[]>`SELECT * FROM kb_sources WHERE id = ${job.payload.sourceId as string}`;

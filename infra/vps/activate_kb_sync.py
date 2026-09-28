@@ -14,11 +14,12 @@ import subprocess
 import time
 import urllib.request
 
+import os
 ROOT = Path('/opt/earthora')
-OLD_API = 'earthora-api:bulk-policy20260925a'
-OLD_WORKER = 'earthora-worker:studio-flows20260921a'
-NEW_IMAGE = 'earthora-api:kb-sync20260928a'
-RELEASE = ROOT / 'releases/kb-sync20260928a'
+OLD_API = os.environ.get('KB_SYNC_OLD_API', 'earthora-api:bulk-policy20260925a')
+OLD_WORKER = os.environ.get('KB_SYNC_OLD_WORKER', 'earthora-worker:studio-flows20260921a')
+NEW_IMAGE = os.environ.get('KB_SYNC_NEW_IMAGE', 'earthora-api:kb-sync20260928a')
+RELEASE = ROOT / 'releases' / os.environ.get('KB_SYNC_RELEASE', 'kb-sync20260928a')
 COMPOSE = ['docker', 'compose', '--project-directory', str(ROOT / 'infra'),
            '-f', str(ROOT / 'infra/compose.yml'), '-f', str(ROOT / 'infra/compose.override.yml')]
 
@@ -64,14 +65,17 @@ def psql(query):
 
 def first_sync():
     """The schedule enqueues a sync on the worker's first loop; wait for it to finish."""
-    for _ in range(90):
-        rows = psql("SELECT status, coalesce(result::text,''), coalesce(last_error,'') FROM jobs WHERE kind='kb_sync_products' ORDER BY created_at DESC LIMIT 1")
-        if rows and rows[0].startswith('succeeded'):
-            return rows[0]
-        if rows and rows[0].startswith('failed'):
-            raise RuntimeError('First product sync failed: ' + rows[0][-200:])
+    started = time.time()
+    for _ in range(120):
+        rows = psql("SELECT kind, status, coalesce(result::text,''), coalesce(last_error,'') FROM jobs WHERE kind IN ('kb_sync_products','kb_sync_pages') AND created_at > now() - interval '5 minutes' ORDER BY created_at DESC LIMIT 4")
+        done = {row.split('|')[0]: row for row in rows if row.split('|')[1] == 'succeeded'}
+        failed = [row for row in rows if row.split('|')[1] == 'failed']
+        if failed:
+            raise RuntimeError('A sync failed after activation: ' + failed[0][-240:])
+        if {'kb_sync_products', 'kb_sync_pages'} <= set(done):
+            return {'products': done['kb_sync_products'], 'pages': done['kb_sync_pages'], 'seconds': round(time.time() - started, 1)}
         time.sleep(2)
-    raise RuntimeError('No product sync completed after activation')
+    raise RuntimeError('Syncs did not complete after activation')
 
 
 def verify():
@@ -84,6 +88,7 @@ def verify():
         checks[domain] = {'product_count': len(catalogue['products']), 'site_guide_destinations': len(guide['destinations'])}
     checks['first_sync'] = first_sync()
     checks['product_documents'] = psql("SELECT title, status, updated_at::timestamp(0) FROM kb_documents WHERE uri LIKE 'product:%' ORDER BY title")
+    checks['page_documents'] = psql("SELECT uri, status, tokens FROM kb_documents WHERE uri LIKE 'page:%' ORDER BY uri")
     return checks
 
 
@@ -104,13 +109,18 @@ def main():
     override = ROOT / 'infra/compose.override.yml'
     original = override.read_bytes()
     text = original.decode()
-    assert text.count('image: ' + OLD_API) == 1 and text.count('image: ' + OLD_WORKER) == 1
+    # The API and worker may already share one image tag; every old image line is replaced.
+    old_images = {OLD_API, OLD_WORKER}
+    assert sum(text.count('image: ' + image) for image in old_images) == 2, 'Override does not match the expected live images'
     backup = ROOT / 'backups' / ('kb-sync-' + str(int(time.time())))
     backup.mkdir(mode=0o700)
     (backup / override.name).write_bytes(original)
     (backup / override.name).chmod(0o600)
     try:
-        override.write_text(text.replace('image: ' + OLD_API, 'image: ' + NEW_IMAGE).replace('image: ' + OLD_WORKER, 'image: ' + NEW_IMAGE))
+        updated = text
+        for image in old_images:
+            updated = updated.replace('image: ' + image, 'image: ' + NEW_IMAGE)
+        override.write_text(updated)
         run(COMPOSE + ['up', '-d', '--no-build', '--no-deps', 'api', 'worker'], timeout=180)
         health()
         worker_ready()

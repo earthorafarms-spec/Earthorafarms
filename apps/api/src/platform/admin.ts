@@ -8,6 +8,7 @@ import { enqueueJob } from '../modules/jobs/queue.js';
 import { providerStatus } from './providers/index.js';
 import { retrieve } from './kb/retrieve.js';
 import { tenantId } from './kb/ingest.js';
+import { KB_PAGES_JOB, KB_SYNC_JOB, KB_WEBSITE_JOB, dueSyncs, enqueueKbSync, enqueuePagesSync, enqueueWebsiteIndex, readAutoSync, syncActivity, writeAutoSync } from './kb/sync.js';
 import { publishChannel } from './channels/config.js';
 import { getLlm, getEmbedding } from './providers/index.js';
 
@@ -77,6 +78,26 @@ export async function platformAdminRoutes(app: FastifyInstance): Promise<void> {
     if (!s) throw notFound('Source not found');
     const job = await enqueueJob('kb_reindex_source', { sourceId: s.id }, { dedupeKey: `kb-reindex:${s.id}:${Date.now()}` });
     return { ok: true, jobId: job };
+  });
+  /** Automatic sync: what the worker keeps current on its own, and a way to run everything now. */
+  app.get('/platform/kb/auto-sync', staff, async () => {
+    const settings = await readAutoSync();
+    const { lastRuns, pending } = await syncActivity();
+    const iso = (kind: string) => (lastRuns[kind] ? new Date(lastRuns[kind] as number).toISOString() : null);
+    return { settings, last_runs: { products: iso(KB_SYNC_JOB), pages: iso(KB_PAGES_JOB), website: iso(KB_WEBSITE_JOB) },
+             due_now: dueSyncs(settings, lastRuns), pending };
+  });
+  app.put('/platform/kb/auto-sync', staff, async (req) => {
+    const b = z.object({ enabled: z.boolean().optional(), products_every_minutes: z.number().optional(), pages_every_hours: z.number().optional(),
+      website_crawl_enabled: z.boolean().optional(), website_crawl_every_hours: z.number().optional() }).parse(req.body ?? {});
+    const current = await readAutoSync();
+    return { settings: await writeAutoSync({ ...current, ...b }) };
+  });
+  app.post('/platform/kb/sync-now', staff, async (req) => {
+    const b = z.object({ website: z.boolean().optional() }).parse(req.body ?? {});
+    const jobs: Record<string, string | null> = { products: await enqueueKbSync('console'), pages: await enqueuePagesSync('console') };
+    if (b.website) jobs.website = await enqueueWebsiteIndex('console');
+    return { ok: true, jobs };
   });
   /** One-click: index the whole website + sync product docs (works even with no uploaded files). */
   app.post('/platform/kb/index-website', staff, async (req) => {

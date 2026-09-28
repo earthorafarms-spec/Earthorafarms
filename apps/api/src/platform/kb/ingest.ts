@@ -17,13 +17,8 @@ export async function indexDocument(input: {
 }): Promise<{ documentId: string; chunks: number; skipped: boolean }> {
   const tid = await tenantId();
   const hash = sha(input.text);
-  const [existing] = await sql<{ id: string; content_hash: string; status: string }[]>`SELECT id, content_hash, status FROM kb_documents WHERE tenant_id = ${tid} AND uri = ${input.uri ?? null} AND title = ${input.title} LIMIT 1`;
-  if (existing && existing.content_hash === hash) {
-    // Unchanged text, but a product document archived while its product was
-    // inactive must become searchable again when the product is re-activated.
-    if (existing.status !== 'indexed') await sql`UPDATE kb_documents SET status = 'indexed', updated_at = now() WHERE id = ${existing.id}`;
-    return { documentId: existing.id, chunks: 0, skipped: true };
-  }
+  const [existing] = await sql<{ id: string; content_hash: string }[]>`SELECT id, content_hash FROM kb_documents WHERE tenant_id = ${tid} AND uri = ${input.uri ?? null} AND title = ${input.title} LIMIT 1`;
+  if (existing && existing.content_hash === hash) return { documentId: existing.id, chunks: 0, skipped: true };
 
   const chunks = chunkText(input.text, { docTitle: input.title, docSummary: input.summary });
   const embed = getEmbedding();
@@ -95,13 +90,37 @@ export async function productsCollectionId(): Promise<string> {
   return row.id;
 }
 
-/** Product documents whose product is no longer active stop being searchable; re-activation restores them. */
-export async function archiveStaleProductDocuments(): Promise<number> {
+/** Product documents whose product is no longer active (or whose slug changed) are removed with their
+ *  chunks; the next sync re-creates a document when the product is active again. */
+export async function removeStaleProductDocuments(): Promise<number> {
   const tid = await tenantId();
-  const rows = await sql<{ id: string }[]>`UPDATE kb_documents SET status = 'archived', updated_at = now()
-    WHERE tenant_id = ${tid} AND uri LIKE 'product:%' AND status = 'indexed'
+  const rows = await sql<{ id: string }[]>`DELETE FROM kb_documents
+    WHERE tenant_id = ${tid} AND uri LIKE 'product:%'
       AND uri NOT IN (SELECT 'product:' || slug FROM products WHERE status = 'active') RETURNING id`;
   return rows.length;
+}
+
+/** One document per public storefront page, from the copy extracted at build time (dist/kb/pages.json). */
+export async function syncPageDocuments(collectionId: string | null, pages: { path: string; title: string; text: string }[]): Promise<{ documents: number; chunks: number; removed: number }> {
+  const tid = await tenantId();
+  let docs = 0; let chunks = 0;
+  for (const page of pages) {
+    const r = await indexDocument({ sourceId: null, collectionId, title: page.title, uri: `page:${page.path}`, mime: 'text/markdown', text: page.text,
+      tags: ['website', 'page'], authority: 3, summary: `Website page ${page.path}` });
+    docs++; chunks += r.chunks;
+  }
+  const removed = await sql<{ id: string }[]>`DELETE FROM kb_documents WHERE tenant_id = ${tid} AND uri LIKE 'page:%'
+    AND uri <> ALL(${pages.map((page) => 'page:' + page.path)}::text[]) RETURNING id`;
+  return { documents: docs, chunks, removed: removed.length };
+}
+
+/** The collection that holds the storefront page documents. */
+export async function pagesCollectionId(): Promise<string> {
+  const tid = await tenantId();
+  const [row] = await sql<{ id: string }[]>`INSERT INTO kb_collections (tenant_id, slug, name, description, authority)
+    VALUES (${tid}, 'website', 'Website content', 'Auto-indexed pages from the storefront', 3)
+    ON CONFLICT (tenant_id, slug) DO UPDATE SET name = EXCLUDED.name RETURNING id`;
+  return row.id;
 }
 
 export async function syncProductDocuments(collectionId: string | null): Promise<{ documents: number; chunks: number }> {

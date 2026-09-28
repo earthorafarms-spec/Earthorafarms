@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
-import { Globe, Upload, RefreshCw, Search, Trash2, FileText } from 'lucide-react';
+import { Globe, Upload, RefreshCw, Search, Trash2, FileText, Zap } from 'lucide-react';
 import { api } from '../api';
-import { Section, useAsync, Spinner, Empty, Modal } from '../ui';
+import { Section, useAsync, Spinner, Empty, Modal, Toggle } from '../ui';
 
 export function Knowledgebase() {
   const docs = useAsync<any>(() => api('/platform/kb/documents'), []);
@@ -33,6 +33,7 @@ export function Knowledgebase() {
           <RefreshCw className="w-5 h-5 text-[#9fd0b4] mb-2" /><div className="text-sm font-semibold">Refresh</div><div className="text-xs text-[#7d8f83] mt-0.5">Reload document list</div>
         </button>
       </div>
+      <AutoSyncPanel onSynced={() => setTimeout(() => docs.reload(), 4000)} />
       <Section title={`Documents ${docs.data ? `(${docs.data.documents.length})` : ''}`}>
         {docs.loading ? <div className="text-[#7d8f83]"><Spinner /></div> : !docs.data?.documents.length ? <Empty>No documents yet. Index the website to start.</Empty> : (
           <div className="divide-y divide-[#1c2822]">
@@ -49,6 +50,53 @@ export function Knowledgebase() {
       </Section>
       {testOpen && <TestRetrieval onClose={() => setTestOpen(false)} />}
     </div>
+  );
+}
+
+function AutoSyncPanel({ onSynced }: { onSynced: () => void }) {
+  const state = useAsync<any>(() => api('/platform/kb/auto-sync'), []);
+  const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const settings = state.data?.settings;
+  const save = async (patch: Record<string, unknown>) => {
+    setSaving(true);
+    try { await api('/platform/kb/auto-sync', { method: 'PUT', json: patch }); } finally { setSaving(false); state.reload(); }
+  };
+  const syncNow = async () => {
+    setSyncing(true);
+    try { await api('/platform/kb/sync-now', { method: 'POST', json: { website: !!settings?.website_crawl_enabled } }); onSynced(); } finally { setSyncing(false); setTimeout(() => state.reload(), 3000); }
+  };
+  const when = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : 'never');
+  const number = (key: string, label: string, min: number, max: number, unit: string) => (
+    <label className="flex items-center justify-between gap-3 text-sm">
+      <span className="text-[#a9b7ad]">{label}</span>
+      <span className="flex items-center gap-2"><input className="input w-24" type="number" min={min} max={max} defaultValue={settings?.[key]} disabled={saving}
+        onBlur={(e) => { const v = Number(e.target.value); if (Number.isFinite(v) && v !== settings?.[key]) save({ [key]: v }); }} /><span className="text-xs text-[#7d8f83]">{unit}</span></span>
+    </label>
+  );
+  return (
+    <Section title="Automatic sync" actions={<button className="btn btn-primary" onClick={syncNow} disabled={syncing || !settings}>{syncing ? <Spinner /> : <><Zap className="w-4 h-4 mr-1 inline" />Sync now</>}</button>}>
+      {state.loading || !settings ? <div className="text-[#7d8f83]"><Spinner /></div> : (
+        <div className="grid md:grid-cols-2 gap-6">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-sm"><span className="text-[#cdd8d0] font-semibold">Keep the knowledge base in sync automatically</span><Toggle on={settings.enabled} onChange={(v) => save({ enabled: v })} /></div>
+            <p className="text-xs text-[#7d8f83]">Every product, stock or knowledge change in this console also queues a sync immediately. The assistant reads prices, stock and approved facts live on every turn; these syncs keep the searchable documents current.</p>
+            {number('products_every_minutes', 'Products and approved facts', 1, 1440, 'minutes')}
+            {number('pages_every_hours', 'Website pages (FAQ, policies, story)', 1, 336, 'hours')}
+            <div className="flex items-center justify-between text-sm"><span className="text-[#a9b7ad]">Also crawl the live site (usually finds nothing on this app)</span><Toggle on={settings.website_crawl_enabled} onChange={(v) => save({ website_crawl_enabled: v })} /></div>
+            {settings.website_crawl_enabled && number('website_crawl_every_hours', 'Crawl interval', 1, 720, 'hours')}
+          </div>
+          <div className="text-xs text-[#7d8f83] space-y-1">
+            <div className="text-[#cdd8d0] text-sm font-semibold mb-2">Last successful sync</div>
+            <div>Products and facts: <span className="text-[#a9b7ad]">{when(state.data.last_runs.products)}</span></div>
+            <div>Website pages: <span className="text-[#a9b7ad]">{when(state.data.last_runs.pages)}</span></div>
+            <div>Site crawl: <span className="text-[#a9b7ad]">{when(state.data.last_runs.website)}</span></div>
+            {state.data.pending?.length ? <div className="text-[#e0a050]">Running now: {state.data.pending.join(', ')}</div> : null}
+            {state.data.due_now?.length ? <div>Due at the next check: {state.data.due_now.join(', ')}</div> : null}
+          </div>
+        </div>
+      )}
+    </Section>
   );
 }
 

@@ -62,6 +62,43 @@ that it did not pick up newly added products. The audit found:
   configured OpenAI embedding model; the voice search path itself uses keyword
   matching only. A sync of unchanged documents makes no embedding calls.
 
+### Follow-up the same day: automatic sync, page copy and the data corrections
+
+- **Data corrected (owner's request).** Price set to ₹999.00 (equal to the MRP;
+  lower it in the admin if a selling price below MRP is intended), slug changed
+  from `cheese` to `morilife-moringa-leaf-tablets` (storefront links use the
+  product UUID and keep working; the old knowledge document was removed by the
+  next sync and a new one created), and the draft dosage entry approved. Row
+  backup before the change: `/opt/earthora/backups/data-fix-1790595659`.
+- **Automatic sync is now a console option.** The Knowledgebase page has an
+  "Automatic sync" panel: on/off, the product-and-facts interval (default 10
+  minutes), the website-page interval (default 6 hours), an optional live-site
+  crawl (off by default, because this app renders in the browser and a crawl
+  finds almost nothing), a "Sync now" button and the last successful run of each
+  sync. Settings live in `admin_settings` under `kb_auto_sync`; the worker checks
+  them every minute (`kb_auto_sync` schedule) and queues only what is due and not
+  already queued. Every product, stock or knowledge change in the console still
+  queues a product sync immediately.
+- **Website pages follow every deployment.** The API build extracts the readable
+  copy of the FAQ, Our Story, Health Benefits, Shipping, Privacy, Terms and
+  Contact pages from the storefront source (`apps/api/src/platform/kb/pageCopy.ts`,
+  `dist/kb/pages.json`) and the worker indexes it as `page:/faq` and so on; pages
+  that disappear from the list are removed. The five manually pasted copies of
+  those pages (15 September) were backed up to
+  `/opt/earthora/backups/kb-manual-docs-*` and removed as duplicates; the
+  manual "Payments and Orders" note was kept.
+- **Content conflict to resolve (website vs approved label).** The website FAQ
+  and the "Payments and Orders" note say "2 tablets before or after lunch and 2
+  before or after dinner daily"; the approved product label says "1–2 tablets
+  once or twice daily, before breakfast or dinner". The voice assistant keeps
+  such disagreements visible and answers dosage questions with "the product
+  information conflicts" until one of them is corrected. The FAQ also still
+  describes a moringa powder that is not in the catalogue.
+- Deployed as `earthora-api:kb-sync20260928b` (API and worker,
+  `docs/verification/kb-sync20260928b-*.json`) and the rebuilt console
+  (`docs/verification/console-deploy-kbsync20260928.json`; previous build kept
+  at `/opt/earthora/www/console-backup-*`).
+
 ## Running the received code locally
 
 The Vite frontend and API are separate development processes. A copied source
