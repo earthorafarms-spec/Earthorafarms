@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-vi.mock('../../config.js', () => ({ config: { AI_BASE_URL: 'https://ai.example.test/v1', AI_API_KEY: 'voice-test-key', AI_LLM_MODEL: 'qwen3.5:9b' } }));
+vi.mock('../../config.js', () => ({ config: { AI_BASE_URL: 'https://ai.example.test/v1', AI_API_KEY: 'voice-test-key', AI_LLM_MODEL: 'gemma4:12b-qat' } }));
 import { fitVoiceContext, plymaxxVoiceLlm } from './plymaxx.js';
 import { getLlm } from './index.js';
 import { inVoiceScope, withVoiceScope } from './voiceScope.js';
@@ -8,7 +8,7 @@ import type { ChatMessage } from './types.js';
 afterEach(() => vi.unstubAllGlobals());
 const tool = { name: 'add_to_cart', description: 'Add a selected item', parameters: { type: 'object', properties: { productId: { type: 'string' }, quantity: { type: 'integer' } }, required: ['productId', 'quantity'] } };
 
-describe('voice-scoped Qwen', () => {
+describe('voice-scoped managed Gemma', () => {
   it('keeps parallel web chat on its configured provider', async () => {
     const defaultProvider = getLlm();
     await withVoiceScope('tenant', async () => { expect(getLlm()).toBe(plymaxxVoiceLlm); await Promise.resolve(); expect(inVoiceScope()).toBe(true); });
@@ -20,7 +20,7 @@ describe('voice-scoped Qwen', () => {
     expect((await plymaxxVoiceLlm.chat([{ role: 'user', content: 'hello' }], { maxTokens: 900 })).text).toBe('Hello.');
     const [url, options] = vi.mocked(fetch).mock.calls[0]; const request = JSON.parse(options!.body as string);
     expect(url).toBe('https://ai.example.test/v1/chat/completions');
-    expect(request).toMatchObject({ max_tokens: 256, think: false, thinking: false, chat_template_kwargs: { enable_thinking: false } });
+    expect(request).toMatchObject({ model: 'gemma4:12b-qat', max_tokens: 256, think: false, thinking: false, chat_template_kwargs: { enable_thinking: false } });
   });
   it.each([
     ['length', '{"productId":"tablets","quantity":2}'],

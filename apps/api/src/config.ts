@@ -62,7 +62,7 @@ const schema = z.object({
   VOICE_PHONE_CHANNEL_KEY: z.string().default(''),
   AI_BASE_URL: z.union([z.string().url(), z.literal('')]).default(''),
   AI_API_KEY: z.string().default(''),
-  AI_LLM_MODEL: z.string().default('qwen3.5:9b'),
+  AI_LLM_MODEL: z.string().default('gemma4:12b-qat'),
 
   WHATSAPP_PROVIDER: z.enum(['meta', 'tata_omni', 'none']).default('none'),
   TATA_OMNI_API_BASE_URL: z.string().default('https://wb.omni.tatatelebusiness.com'),
