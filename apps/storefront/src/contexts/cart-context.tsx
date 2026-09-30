@@ -2,7 +2,6 @@ import { createContext, useContext, useState, useEffect, useMemo, useCallback, t
 import { fetchCatalog } from '@/lib/api';
 import { getDiscountedPrice, fetchActiveDeals } from '@/lib/api';
 import type { CartItem, FestiveDeal } from '@/types';
-import powderImg from '@assets/generated_images/product_powder.jpg';
 
 interface CartContextType {
   items: CartItem[];

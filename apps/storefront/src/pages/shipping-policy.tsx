@@ -22,14 +22,14 @@ const shippingHighlights = [
   },
   {
     icon: Clock,
-    title: "Express 24-Hour Dispatch",
-    desc: "Orders placed before 2:00 PM IST are processed, quality-checked, and dispatched on the same business day.",
+    title: "Order Processing",
+    desc: "Order confirmation and dispatch updates are shared as your order is prepared for delivery.",
     accent: "bg-[#FEFDF9]",
   },
   {
     icon: ShieldCheck,
     title: "Tamper-Evident Packaging",
-    desc: "Shade-dried moringa packed in eco-friendly, UV-protective resealable pouches and reinforced recyclable cartons.",
+    desc: "Products are packed for transit, with shipping details provided when your order is dispatched.",
     accent: "bg-[#ECEDEC]",
   },
 ];
@@ -51,7 +51,7 @@ export default function ShippingPolicy() {
             className="mb-6 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/15 font-dm font-medium text-xs sm:text-sm text-white/80 tracking-[0.05em] uppercase backdrop-blur-md"
           >
             <Truck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Farm to Doorstep Logistics</span>
+            <span>Order & Delivery</span>
           </motion.div>
 
           <div className="grid lg:grid-cols-12 gap-8 items-end">
@@ -73,7 +73,7 @@ export default function ShippingPolicy() {
               transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.3 }}
               className="lg:col-span-4 font-inter font-normal text-base sm:text-lg text-white/55 leading-relaxed tracking-[-0.02em]"
             >
-              Our transparent shipping policies ensure your organic moringa powder and tablets reach you at peak botanical potency.
+              Find delivery estimates and order support information for products in our live collection.
             </motion.p>
           </div>
         </div>
@@ -92,7 +92,7 @@ export default function ShippingPolicy() {
               </h2>
             </div>
             <p className="font-inter text-sm text-black/60 max-w-sm">
-              Carefully packed directly at our Aptos farm facilities with full temperature & UV protections.
+              We prepare orders for shipping and share tracking details when they are available.
             </p>
           </div>
 
@@ -155,7 +155,7 @@ export default function ShippingPolicy() {
                   <Package className="w-5 h-5 text-emerald-800" /> Order Tracking & Dispatch
                 </h3>
                 <p className="font-inter text-sm text-black/65 leading-relaxed">
-                  Once your order is confirmed, our farm team packs your moringa and dispatches it via India Post. You will receive a WhatsApp message on your registered number within 24 hours of dispatch with your shipment details.
+                  Once your order is confirmed, our fulfilment team prepares it for dispatch via India Post. Shipping details are shared on your registered number when available.
                 </p>
               </div>
 
@@ -181,7 +181,7 @@ export default function ShippingPolicy() {
             Have questions about your order?
           </h2>
           <p className="font-inter text-sm text-black/60 leading-relaxed mb-8">
-            Our farm customer care team is available Monday through Friday to assist with tracking or logistics inquiries.
+            Our customer care team is available Monday through Friday to assist with tracking or logistics inquiries.
           </p>
           <div className="flex items-center justify-center gap-4">
             <Link href="/contact" className="px-6 py-3 rounded-xl bg-black text-white font-inter text-sm font-medium hover:bg-black/85 transition-colors">

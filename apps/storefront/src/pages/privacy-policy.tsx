@@ -80,10 +80,10 @@ export default function PrivacyPolicy() {
                 <Server className="w-6 h-6 text-emerald-800 shrink-0" /> 2. How We Use Your Data
               </h2>
               <p className="font-inter text-sm sm:text-base text-black/65 leading-relaxed">
-                Your data is strictly utilized to provide an exceptional organic shopping experience:
+                Your data is used to provide and support your shopping experience:
               </p>
               <ul className="list-disc list-inside font-inter text-sm text-black/70 space-y-2 pl-2">
-                <li>Fulfilling and delivering your moringa powder and tablet orders via courier partners.</li>
+                <li>Fulfilling and delivering orders for products listed in our live collection via courier partners.</li>
                 <li>Sending order confirmation SMS, WhatsApp payment links, and dispatch tracking alerts via Tata SmartFlow.</li>
                 <li>Preventing fraudulent transactions and ensuring network security.</li>
               </ul>

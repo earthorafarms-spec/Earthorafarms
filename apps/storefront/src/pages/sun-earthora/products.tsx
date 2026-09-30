@@ -8,17 +8,7 @@ import { saveAdminProduct } from "@/lib/adminProducts";
 import { invalidateCatalog } from "@/lib/catalog";
 import { useEscapeKey } from "@/hooks/useEscapeKey";
 
-import powderImg from "@assets/generated_images/product_powder.jpg";
-import tabletsImg from "@assets/generated_images/product_tablets.jpg";
-
-import heroLeavesImg from "@assets/generated_images/hero_leaves.jpg";
-
-const staticFallbackMap: Record<string, string> = {
-  powder: powderImg,
-  tablets: tabletsImg,
-
-  amla: heroLeavesImg,
-};
+import { productImageFallback } from '@/lib/productImageFallback';
 
 interface ProductImage {
   url: string;
@@ -368,13 +358,8 @@ export default function AdminProducts() {
                       const rawUrl = p.images?.find((img) => img.is_primary)?.url || p.images?.[0]?.url;
                       const hasValidUrl = rawUrl && !rawUrl.includes("undefined") && rawUrl.startsWith("http");
                       
-                      let displaySrc = hasValidUrl ? rawUrl : null;
-                      if (!displaySrc) {
-                        const slug = p.name.toLowerCase();
-                        if (slug.includes("amla")) displaySrc = staticFallbackMap.amla;
-                        else if (slug.includes("tablets")) displaySrc = staticFallbackMap.tablets;
-                        else displaySrc = staticFallbackMap.powder;
-                      }
+                      const fallbackSrc = productImageFallback(p.name).main;
+                      const displaySrc = hasValidUrl ? rawUrl : fallbackSrc;
 
                       return (
                         <img 
@@ -382,7 +367,7 @@ export default function AdminProducts() {
                           alt={p.name} 
                           className="object-cover w-full h-full transition-transform duration-500 group-hover/prod:scale-105" 
                           onError={(e) => {
-                            (e.currentTarget as HTMLImageElement).src = staticFallbackMap.powder;
+                            if (e.currentTarget.src !== fallbackSrc) e.currentTarget.src = fallbackSrc;
                           }}
                         />
                       );

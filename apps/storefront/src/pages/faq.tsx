@@ -25,30 +25,30 @@ const faqData: FAQItem[] = [
   // Product & Usage
   {
     category: "product",
-    question: "What makes Earthora Moringa different from ordinary green powders?",
-    answer: "Earthora Moringa is 100% single-origin, shade-dried, and stone-ground at low temperatures directly on our Aptos farm. Unlike mass-manufactured heat-processed powders, our cold-processing preserves raw enzymes, chlorophyll, and 90+ bioavailable nutrients without added fillers or anti-caking agents.",
+    question: "Which Earthora moringa products are available?",
+    answer: "Our live product collection shows the moringa products currently available, with their ingredients, prices, stock and directions. Please check the product page for the latest details before ordering.",
   },
   {
     category: "product",
-    question: "What is the recommended daily dosage for Moringa Powder and Tablets?",
-    answer: "For Earthora Moringa Tablets: Take 2 tablets before or after lunch and 2 tablets before or after dinner daily with water.",
+    question: "What is the recommended daily dosage for Morilife+ Moringa Leaf Tablets?",
+    answer: "The approved tablet label says to take 1–2 tablets once or twice daily, before breakfast or dinner. Follow the product label and ask a healthcare professional if you need individual advice.",
   },
   {
     category: "product",
     question: "Do your pressed tablets contain synthetic binders or magnesium stearate?",
-    answer: "No, absolutely not. Our tablets are high-pressure pressed using 100% pure shade-dried moringa leaf powder with zero synthetic binders, fillers, lubricants, or coatings.",
+    answer: "Please check the current product label for the complete ingredient list. If you need to avoid a particular binder or additive, contact our team to confirm before ordering.",
   },
   {
     category: "product",
     question: "How should I store Earthora Moringa products to maintain freshness?",
-    answer: "Store your resealable pouch or glass tablet jar in a cool, dry place away from direct sunlight. Ensure the zipper seal is completely pressed shut after each use. No refrigeration required.",
+    answer: "Follow the storage instructions on your product packaging. Keep the container closed and protect it from heat, moisture and direct sunlight.",
   },
 
   // Health Benefits
   {
     category: "health",
     question: "How long before I start feeling the health benefits of Moringa?",
-    answer: "Most customers report noticeable improvements in daily sustained energy, digestive clarity, and mental focus within 5 to 7 days of consistent daily use. Long-term cellular and immune benefits accumulate after 3-4 weeks.",
+    answer: "Experiences vary from person to person, so we cannot promise a time frame or specific health result. Please speak with a healthcare professional about individual health questions.",
   },
   {
     category: "health",
@@ -58,14 +58,14 @@ const faqData: FAQItem[] = [
   {
     category: "health",
     question: "Is Earthora Moringa safe during pregnancy or breastfeeding?",
-    answer: "While moringa leaf powder is a nutrient-dense food traditionally consumed by mothers, we recommend consulting your healthcare practitioner before introducing any new dietary supplement during pregnancy or lactation.",
+    answer: "Please consult your healthcare practitioner before taking a moringa supplement during pregnancy or breastfeeding.",
   },
 
   // Shipping & Delivery
   {
     category: "shipping",
     question: "Do you offer free shipping across India?",
-    answer: "Yes! We offer free shipping on all orders across Pan-India — any product, any order size, no minimum cart value required.",
+    answer: "Our Shipping Policy lists free standard shipping on prepaid orders across India. Check your checkout summary for the delivery terms on your order.",
   },
   {
     category: "shipping",
@@ -155,7 +155,7 @@ export default function FAQ() {
               transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.3 }}
               className="lg:col-span-4 font-inter font-normal text-base sm:text-lg text-white/55 leading-relaxed tracking-[-0.02em]"
             >
-              Everything you need to know about our organic moringa harvesting process, nutrition claims, order shipping, and payments.
+              Answers about current products, directions, order shipping, and payments.
             </motion.p>
           </div>
         </div>
@@ -270,7 +270,7 @@ export default function FAQ() {
             Still have questions?
           </h2>
           <p className="font-inter text-sm sm:text-base text-black/60 leading-relaxed mb-8 max-w-xl mx-auto">
-            Our farm customer care team is ready to help you with instant answers and order assistance.
+            Our customer care team is ready to help you with product questions and order assistance.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
             <Link href="/contact" className="px-6 py-3 rounded-xl bg-black text-white font-inter text-sm font-medium hover:bg-black/85 transition-colors">

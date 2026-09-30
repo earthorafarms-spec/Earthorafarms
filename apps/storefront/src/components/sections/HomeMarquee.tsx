@@ -1,14 +1,12 @@
 import { Leaf } from "lucide-react";
 
 const CLAIMS = [
-  "100% Organic",
-  "90+ Nutrients",
-  "46× Antioxidants",
-  "Zero Additives",
-  "Volcanic Soil Grown",
-  "Non-GMO",
-  "Vegan",
-  "Ayurvedic Heritage",
+  "Morilife+ Moringa Leaf Tablets",
+  "120 Tablets per Bottle",
+  "Nutrient Rich",
+  "No Added Preservatives",
+  "Moringa Leaf Wellness",
+  "Current Product Details",
 ];
 
 export function HomeMarquee() {

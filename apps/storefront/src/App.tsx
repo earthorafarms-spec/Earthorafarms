@@ -9,6 +9,7 @@ import { Gate } from '@/components/Gate';
 import ScrollToTop from '@/components/ScrollToTop';
 import { AssistantWidget } from '@/components/AssistantWidget';
 import { VoiceNavigationBridge, withVoicePage } from '@/components/VoiceNavigationBridge';
+import { ChatNavigationBridge } from '@/components/ChatNavigationBridge';
 import { VoiceStorefrontActions } from '@/components/VoiceStorefrontActions';
 import { CatalogFreshnessBridge } from '@/components/CatalogFreshnessBridge';
 import { PageSkeleton } from '@/components/ui/PageSkeleton';
@@ -116,6 +117,7 @@ export default function App() {
               <ScrollToTop />
               <AssistantWidget />
               <VoiceNavigationBridge />
+              <ChatNavigationBridge />
               <VoiceStorefrontActions />
               <Suspense fallback={<PageLoader />}>
                 <Switch>

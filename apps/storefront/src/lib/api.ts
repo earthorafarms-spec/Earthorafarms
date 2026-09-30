@@ -3,22 +3,12 @@ import { fetchCatalog, invalidateCatalog } from './catalog';
 export { fetchCatalog } from './catalog';
 export type { Catalog } from './catalog';
 import type { DbProduct, DbReview, FestiveDeal, Product } from '@/types';
-import powderImg from '@assets/generated_images/product_powder.jpg';
-import powderImg2 from '@assets/generated_images/product_powder_2.jpg';
-import tabletsImg from '@assets/generated_images/product_tablets.jpg';
-import tabletsImg2 from '@assets/generated_images/product_tablets_2.jpg';
-import heroLeavesImg from '@assets/generated_images/hero_leaves.jpg';
-
-const staticImageMap: Record<string, { main: string; hover: string }> = {
-  powder: { main: powderImg, hover: powderImg2 },
-  tablets: { main: tabletsImg, hover: tabletsImg2 },
-  amla: { main: heroLeavesImg, hover: heroLeavesImg },
-};
+import { productImageFallback } from './productImageFallback';
 
 function mapProduct(p: DbProduct, dbDeals: FestiveDeal[], dbReviews: DbReview[], now: Date): Product {
   const inv = Array.isArray(p.inventory) ? p.inventory[0] : p.inventory;
   const images = Array.isArray(p.images) ? p.images : [];
-  const fallback = staticImageMap[p.slug] || staticImageMap.powder;
+  const fallback = productImageFallback(p.name, p.slug);
   const rawPrimary = images.find((i) => i.is_primary)?.url || images[0]?.url;
   const rawSecondary = images.find((i) => !i.is_primary)?.url;
   const primaryImg = rawPrimary && !rawPrimary.includes('undefined') ? rawPrimary : fallback.main;
@@ -52,7 +42,7 @@ function mapProduct(p: DbProduct, dbDeals: FestiveDeal[], dbReviews: DbReview[],
 export async function fetchPublicProducts(force = false): Promise<Product[]> {
   const { products, deals, reviews } = await fetchCatalog(force);
   const now = new Date();
-  return products.filter((p) => p.status !== 'archived').map((p) => mapProduct(p, deals, reviews, now));
+  return products.filter((p) => p.status === 'active').map((p) => mapProduct(p, deals, reviews, now));
 }
 
 export async function fetchReviews(): Promise<DbReview[]> {

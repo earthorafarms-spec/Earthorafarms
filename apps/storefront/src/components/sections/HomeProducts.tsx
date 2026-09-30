@@ -154,13 +154,15 @@ function ProductCard({
           )}
         </div>
 
-        {/* Rating badge (top right) */}
-        <div className="absolute top-3.5 right-3.5 z-10 flex items-center gap-1.5">
-          <span className="inline-flex items-center gap-1 text-[10px] font-inter font-medium text-black/70 bg-white/85 backdrop-blur-sm px-2 py-1 rounded-full">
-            <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-            {product.rating ? Number(product.rating).toFixed(1) : "4.9"}
-          </span>
-        </div>
+        {/* Show a rating only when it comes from actual customer reviews. */}
+        {product.reviewCount > 0 && (
+          <div className="absolute top-3.5 right-3.5 z-10 flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 text-[10px] font-inter font-medium text-black/70 bg-white/85 backdrop-blur-sm px-2 py-1 rounded-full">
+              <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+              {Number(product.rating).toFixed(1)}
+            </span>
+          </div>
+        )}
 
         <img
           src={product.imageMain}

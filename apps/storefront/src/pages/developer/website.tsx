@@ -14,9 +14,9 @@ type SeoData = {
 
 export default function DeveloperWebsite() {
   const [seo, setSeo] = useState<SeoData>({
-    keywords: "moringa, organic moringa, premium moringa tablets, health powder, earthora farms",
-    title: "Earthora Farms | Premium Organic Moringa & Wellness Products",
-    description: "Discover fresh farm harvested organic moringa leaf powders, tablets and wellness capsules at Earthora Farms. Processed directly from our sustainable Indian orchards.",
+    keywords: "moringa leaf tablets, Morilife, moringa wellness, Earthora Farms",
+    title: "Earthora Farms | Moringa Leaf Wellness Products",
+    description: "Explore current Earthora Farms moringa leaf products, with live prices, ingredients and directions on each product page.",
   });
   const [isEditingSeo, setIsEditingSeo] = useState(false);
   const [savingSeo, setSavingSeo] = useState(false);

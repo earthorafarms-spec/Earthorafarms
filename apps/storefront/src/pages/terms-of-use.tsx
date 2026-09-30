@@ -86,7 +86,7 @@ export default function TermsOfUse() {
                 <Award className="w-6 h-6 text-emerald-800 shrink-0" /> 3. Health Disclaimer
               </h2>
               <p className="font-inter text-sm sm:text-base text-black/65 leading-relaxed">
-                Statements on this site regarding our shade-dried moringa powder and tablets have not been evaluated by the FSSAI or FDA to diagnose, treat, cure, or prevent any disease. Our products are organic dietary supplements intended to support daily wellness.
+                Statements on this site regarding moringa products are not medical advice and are not intended to diagnose, treat, cure, or prevent any disease. Review each product's current label and consult a healthcare professional about individual health questions.
               </p>
             </div>
 

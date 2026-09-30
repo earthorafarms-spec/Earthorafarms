@@ -9,7 +9,6 @@ import {
   Activity,
   ArrowUpRight,
   CheckCircle2,
-  Zap,
 } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
@@ -20,56 +19,53 @@ const keyBenefits = [
   {
     num: "01",
     icon: Sun,
-    title: "Sustained Energy & Vitality",
-    tagline: "Natural ATP Synthesis",
-    desc: "Unlike caffeine or sugar stimulants that cause adrenal fatigue and abrupt crashes, Moringa provides steady cellular energy by delivering bioavailable iron, magnesium, and essential B-complex vitamins directly to your mitochondria.",
-    stat: "8 Hours",
-    statLabel: "Sustained Focus",
-    highlights: ["Supports cellular respiration", "No jitters or adrenal spikes", "Rich in natural Iron & Magnesium"],
+    title: "Everyday Energy",
+    tagline: "Product Description",
+    desc: "The current Morilife+ description lists energy among the areas its moringa leaf tablets are intended to support.",
+    stat: "120",
+    statLabel: "Tablets per Bottle",
+    highlights: ["Moringa leaf tablet format", "Check the current product details", "Follow the directions on the label"],
     accentBg: "bg-[#ECEDEC]",
   },
   {
     num: "02",
     icon: Shield,
-    title: "Immune System Fortification",
-    tagline: "7x More Vitamin C than Oranges",
-    desc: "Moringa leaves are loaded with quercetin, chlorogenic acid, and high concentrations of Vitamin C and Zinc. This potent antioxidant shield neutralizes free radicals, reduces oxidative stress, and strengthens daily immunity.",
-    stat: "46+",
-    statLabel: "Active Antioxidants",
-    highlights: ["Neutralizes free radicals", "High quercetin concentration", "Natural daily defense shield"],
+    title: "Immunity & Digestion",
+    tagline: "Product Description",
+    desc: "The product description says Morilife+ tablets are rich in antioxidants, vitamins and minerals and are intended to support immunity and digestion.",
+    stat: "Leaf",
+    statLabel: "Moringa Format",
+    highlights: ["Antioxidants listed in the description", "Vitamins and minerals listed", "Check ingredients on the product label"],
     accentBg: "bg-[#FEFDF9]",
   },
   {
     num: "03",
     icon: Brain,
-    title: "Cognitive Endurance & Clarity",
-    tagline: "Neuro-Protective Compounds",
-    desc: "The unique combination of Vitamin E, Vitamin C, Zinc, and iron in moringa supports healthy neurotransmitter activity and cerebral blood flow, promoting sharp mental clarity, memory retention, and stress resilience.",
-    stat: "18",
-    statLabel: "Amino Acids Included",
-    highlights: ["Supports focus & memory", "Nourishes neural pathways", "Reduces brain fog naturally"],
+    title: "Skin & Hair",
+    tagline: "Product Description",
+    desc: "Skin and hair are among the areas of intended support listed in the current Morilife+ product description.",
+    stat: "Care",
+    statLabel: "Daily Wellness",
+    highlights: ["Moringa leaf tablets", "Review the live product listing", "Ask the team for batch-specific details"],
     accentBg: "bg-[#FEFDF9]",
   },
   {
     num: "04",
     icon: Sparkles,
-    title: "Cellular Glow & Skin Health",
-    tagline: "4x More Vitamin A than Carrots",
-    desc: "Nourishes your skin from within. High levels of Vitamin A and E promote natural collagen synthesis, fight premature cellular aging, and give skin a healthy, vibrant radiance.",
-    stat: "100% Raw",
-    statLabel: "Cold-Processed",
-    highlights: ["Promotes collagen synthesis", "Combats cellular aging", "Nourishes skin from within"],
+    title: "How to Take Morilife+",
+    tagline: "Approved Label",
+    desc: "The approved label says to take 1–2 tablets once or twice daily, before breakfast or dinner. Follow the directions on your pack and seek individual advice when needed.",
+    stat: "1–2",
+    statLabel: "Tablets per Dose",
+    highlights: ["Once or twice daily", "Before breakfast or dinner", "Follow the product label"],
     accentBg: "bg-[#ECEDEC]",
   },
 ];
 
-const comparisonData = [
-  { metric: "Vitamin C", moringa: "7x", benchmark: "vs. Fresh Oranges", icon: Zap },
-  { metric: "Vitamin A", moringa: "4x", benchmark: "vs. Organic Carrots", icon: Leaf },
-  { metric: "Calcium", moringa: "4x", benchmark: "vs. Whole Milk", icon: Activity },
-  { metric: "Iron", moringa: "3x", benchmark: "vs. Raw Spinach", icon: Sun },
-  { metric: "Potassium", moringa: "3x", benchmark: "vs. Ripe Bananas", icon: Shield },
-  { metric: "Protein", moringa: "2g / tsp", benchmark: "All 9 Essential Aminos", icon: Brain },
+const productFacts = [
+  { metric: "Product", value: "Morilife+", detail: "Moringa Leaf Tablets", icon: Leaf },
+  { metric: "Bottle", value: "120", detail: "tablets per bottle", icon: Activity },
+  { metric: "Suggested Use", value: "1–2", detail: "tablets once or twice daily", icon: Sun },
 ];
 
 const containerVars: Variants = {
@@ -109,8 +105,8 @@ export default function HealthBenefits() {
               className="lg:col-span-8"
             >
               <h1 className="font-dm font-normal tracking-[-0.05em] text-[44px] leading-[46px] sm:text-[68px] sm:leading-[64px] lg:text-[88px] lg:leading-[82px] text-white">
-                Nature's most complete <br />
-                <span className="text-white/35">nutritional matrix.</span>
+                Explore Morilife+ <br />
+                <span className="text-white/35">moringa leaf tablets.</span>
               </h1>
             </motion.div>
 
@@ -120,7 +116,7 @@ export default function HealthBenefits() {
               transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.3 }}
               className="lg:col-span-4 font-inter font-normal text-base sm:text-lg text-white/55 leading-relaxed tracking-[-0.02em]"
             >
-              Backed by ancient tradition and modern botanical science. 90+ bioavailable nutrients working in complete cellular synergy.
+              See what the current product description and approved label say about intended support and suggested use.
             </motion.p>
           </div>
         </div>
@@ -132,14 +128,14 @@ export default function HealthBenefits() {
           <div className="mb-16 lg:mb-24 flex flex-col md:flex-row md:items-end justify-between gap-6 pb-8 border-b border-black/10">
             <div>
               <span className="font-inter text-xs uppercase tracking-wider text-black/40 font-medium block mb-2">
-                Scientific Breakdown
+                Product Description
               </span>
               <h2 className="font-dm font-normal text-3xl sm:text-5xl text-black tracking-[-0.04em]">
-                Targeted Cellular Health
+                Everyday Wellness
               </h2>
             </div>
             <p className="font-inter text-sm text-black/60 max-w-sm">
-              Discover how cold-processed moringa delivers raw nutrients directly to your body's systems.
+              Explore the areas of intended support listed for Morilife+ and check the label before use.
             </p>
           </div>
 
@@ -204,24 +200,24 @@ export default function HealthBenefits() {
         </div>
       </section>
 
-      {/* ── Nutritional Comparison Grid ── */}
+      {/* ── Current Product Facts ── */}
       <section className="py-20 lg:py-32 bg-[#0E0E0E] text-white relative overflow-hidden">
         <div className="container mx-auto px-6 sm:px-10 max-w-[1400px] relative z-10">
           <div className="max-w-3xl mb-16 lg:mb-20">
             <span className="font-inter text-xs uppercase tracking-wider text-white/40 font-medium block mb-2">
-              Density Comparison
+              Current Product Facts
             </span>
             <h2 className="font-dm font-normal text-4xl sm:text-6xl text-white tracking-[-0.05em] leading-tight mb-4">
-              Gram for gram, <br />
-              <span className="text-white/40">unmatched on earth.</span>
+              Know what you're <br />
+              <span className="text-white/40">choosing today.</span>
             </h2>
             <p className="font-inter text-base text-white/60">
-              Comparing raw moringa leaf powder with traditional whole food nutritional benchmarks.
+              These details come from the current Morilife+ product listing and approved directions. Check the pack for the latest label.
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {comparisonData.map((item, i) => (
+            {productFacts.map((item, i) => (
               <motion.div
                 key={i}
                 initial={{ opacity: 0, y: 20 }}
@@ -238,11 +234,11 @@ export default function HealthBenefits() {
                     <item.icon className="w-5 h-5 text-amber-300" />
                   </div>
                   <span className="font-dm font-normal text-5xl text-white tracking-[-0.05em] block mb-2">
-                    {item.moringa}
+                    {item.value}
                   </span>
                 </div>
                 <div className="pt-4 border-t border-white/10 text-xs font-inter text-white/50">
-                  {item.benchmark}
+                  {item.detail}
                 </div>
               </motion.div>
             ))}
@@ -256,10 +252,10 @@ export default function HealthBenefits() {
           <div className="bg-[#ECEDEC] rounded-3xl p-8 sm:p-14 border border-black/8 grid lg:grid-cols-12 gap-8 items-center shadow-lg">
             <div className="lg:col-span-8">
               <h2 className="font-dm font-normal text-3xl sm:text-5xl text-black tracking-[-0.04em] leading-tight mb-4">
-                Ready to experience pure vitality?
+                Ready to explore the current product?
               </h2>
               <p className="font-inter text-base text-black/70 max-w-xl leading-relaxed">
-                Start your daily moringa ritual today with our 100% organic, shade-dried powder sourced directly from our farm.
+                Explore our current moringa products and check the product label for ingredients and directions before you order.
               </p>
             </div>
             <div className="lg:col-span-4 flex lg:justify-end">

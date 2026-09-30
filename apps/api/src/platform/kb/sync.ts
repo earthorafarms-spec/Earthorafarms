@@ -66,7 +66,15 @@ export function syncDedupeKey(kind: string, now = Date.now()): string {
 /** Best effort: an admin save must never fail because the job queue is unavailable. */
 async function enqueueSync(kind: string, reason: string, payload: Record<string, unknown> = {}): Promise<string | null> {
   try {
-    return await enqueueJob(kind, { reason, ...payload }, { dedupeKey: syncDedupeKey(kind), maxAttempts: 3 });
+    const now = Date.now();
+    // Product creation saves an unpublished row, inventory, then the active
+    // product. The bucket must not run before all of that minute's writes:
+    // generic job dedupe intentionally never rearms a completed job.
+    const productBatch = kind === KB_SYNC_JOB;
+    return await enqueueJob(kind, { reason, ...payload }, {
+      dedupeKey: syncDedupeKey(kind, now) + (productBatch ? ':deferred-v1' : ''), maxAttempts: 3,
+      ...(productBatch ? { runAt: new Date((Math.floor(now / 60_000) + 1) * 60_000) } : {}),
+    });
   } catch (err) {
     console.warn(`[kb] ${kind} enqueue failed (${reason}): ${(err as Error).message}`);
     return null;

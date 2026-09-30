@@ -3,7 +3,7 @@ import { ArrowUpRight, Grid2X2, Star } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { publicProductsQuery } from "@/lib/catalogQuery";
 import type { Product } from "@/types";
-import powderImg from "@assets/generated_images/product_powder.jpg";
+import { productImageFallback } from '@/lib/productImageFallback';
 
 export function Products() {
   const { data: products = [], isLoading } = useQuery<Product[]>({
@@ -95,7 +95,7 @@ export function Products() {
                     </span>
 
                     <img
-                      src={product.imageMain || powderImg}
+                      src={product.imageMain || productImageFallback(product.name).main}
                       alt={product.name}
                       loading="lazy"
                       decoding="async"

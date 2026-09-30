@@ -5,23 +5,23 @@ import { Plus } from "lucide-react";
 const FAQS = [
   {
     q: "What is Earthora Farms?",
-    a: "Earthora Farms is a small-batch Ayurvedic wellness brand. Everything we make starts as a whole plant grown on our single-origin farm in Gujarat — shade-dried, gently milled, and packed the same week without any synthetic fillers, binders, or preservatives.",
+    a: "Earthora Farms offers moringa leaf wellness products. Our live product collection shows what is available now, with current prices and product details.",
   },
   {
     q: "How does moringa support daily wellness?",
-    a: "Moringa is one of the most nutrient-dense plants on earth: over 90 nutrients, 46 antioxidants, and 18 amino acids in a single leaf. It supports sustained energy, immunity, cognitive clarity, and gentle alkalinity — no crash, no synthetic caffeine, no fillers.",
+    a: "The current Morilife+ product description says its moringa leaf tablets are rich in antioxidants, vitamins and minerals, and are intended to support immunity, digestion, energy, skin, hair and overall wellness. Check the product page and label for ingredients and directions.",
   },
   {
     q: "Are your products organic and third-party tested?",
-    a: "Yes. Every batch is grown on our own certified-organic land in Gujarat, and every lot is third-party tested for heavy metals, microbes, and potency before it ships. We publish the certificate of analysis on request.",
+    a: "Check each product page and label for its current ingredients and certifications. If you need a batch-specific test report or certificate, please ask our team to confirm what is available before ordering.",
   },
   {
     q: "What's the best way to take moringa?",
-    a: "Powder: stir a small spoon into water, tea, smoothies, or yogurt. Capsules & tablets: one dose with a meal, once or twice daily. There's no wrong time — most people notice the smoothest results in the morning, before breakfast.",
+    a: "For Morilife+ Moringa Leaf Tablets, the approved label says to take 1–2 tablets once or twice daily, before breakfast or dinner. Follow the product label and ask a healthcare professional if you need individual advice.",
   },
   {
     q: "Do you ship across India?",
-    a: "Yes — free shipping on every order across India. Orders typically leave our farm within 24 hours and reach most cities in 3–5 working days.",
+    a: "See our Shipping Policy for current shipping terms. The stated delivery estimate across India is 7–14 business days.",
   },
 ];
 

@@ -14,11 +14,23 @@ export async function indexDocument(input: {
   sourceId: string | null; collectionId: string | null; title: string; uri?: string; mime?: string;
   text: string; language?: string; tags?: string[]; workflowIds?: string[]; productIds?: string[];
   authority?: number; visibility?: 'public' | 'internal'; summary?: string;
+  stableProductIdentity?: boolean;
 }): Promise<{ documentId: string; chunks: number; skipped: boolean }> {
   const tid = await tenantId();
   const hash = sha(input.text);
-  const [existing] = await sql<{ id: string; content_hash: string }[]>`SELECT id, content_hash FROM kb_documents WHERE tenant_id = ${tid} AND uri = ${input.uri ?? null} AND title = ${input.title} LIMIT 1`;
-  if (existing && existing.content_hash === hash) return { documentId: existing.id, chunks: 0, skipped: true };
+  // Product UUID, unlike its editable display name/slug, survives renaming.
+  // Other document types retain their existing identity rules.
+  const productId = input.stableProductIdentity && input.productIds?.length === 1 ? input.productIds[0] : null;
+  const [existing] = productId
+    ? await sql<{ id: string; content_hash: string; title: string; uri: string }[]>`SELECT id, content_hash, title, uri FROM kb_documents
+        WHERE tenant_id = ${tid} AND uri LIKE 'product:%' AND product_ids = ARRAY[${productId}]::uuid[]
+        ORDER BY updated_at DESC, id LIMIT 1`
+    : await sql<{ id: string; content_hash: string; title: string; uri: string }[]>`SELECT id, content_hash, title, uri FROM kb_documents WHERE tenant_id = ${tid} AND uri = ${input.uri ?? null} AND title = ${input.title} LIMIT 1`;
+  if (existing && existing.content_hash === hash && existing.title === input.title && existing.uri === (input.uri ?? null)) {
+    if (productId) await sql`DELETE FROM kb_documents WHERE tenant_id = ${tid} AND uri LIKE 'product:%'
+      AND product_ids = ARRAY[${productId}]::uuid[] AND id <> ${existing.id}`;
+    return { documentId: existing.id, chunks: 0, skipped: true };
+  }
 
   const chunks = chunkText(input.text, { docTitle: input.title, docSummary: input.summary });
   const embed = getEmbedding();
@@ -28,7 +40,7 @@ export async function indexDocument(input: {
     let docId: string;
     if (existing) {
       docId = existing.id;
-      await tx`UPDATE kb_documents SET content_hash = ${hash}, mime = ${input.mime ?? 'text/plain'}, language = ${input.language ?? 'en'},
+      await tx`UPDATE kb_documents SET title = ${input.title}, uri = ${input.uri ?? null}, content_hash = ${hash}, mime = ${input.mime ?? 'text/plain'}, language = ${input.language ?? 'en'},
         tags = ${input.tags ?? []}, workflow_ids = ${(input.workflowIds ?? []) as any}, product_ids = ${(input.productIds ?? []) as any},
         authority = ${input.authority ?? 3}, visibility = ${input.visibility ?? 'public'}, summary = ${input.summary ?? ''},
         collection_id = ${input.collectionId}, status = 'indexed', version = version + 1, tokens = ${chunks.reduce((s, c) => s + c.tokens, 0)}, updated_at = now() WHERE id = ${docId}`;
@@ -43,6 +55,8 @@ export async function indexDocument(input: {
       await tx`INSERT INTO kb_chunks (tenant_id, document_id, collection_id, ordinal, content, context_header, tokens, embedding, embed_model, tags, workflow_ids, visibility)
         VALUES (${tid}, ${docId}, ${input.collectionId}, ${c.ordinal}, ${c.content}, ${c.contextHeader}, ${c.tokens}, ${toVector(vectors[i])}, ${embed.model}, ${input.tags ?? []}, ${(input.workflowIds ?? []) as any}, ${input.visibility ?? 'public'})`;
     }
+    if (productId) await tx`DELETE FROM kb_documents WHERE tenant_id = ${tid} AND uri LIKE 'product:%'
+      AND product_ids = ARRAY[${productId}]::uuid[] AND id <> ${docId}`;
     return docId;
   });
   return { documentId, chunks: chunks.length, skipped: false };
@@ -124,6 +138,16 @@ export async function pagesCollectionId(): Promise<string> {
 }
 
 export async function syncProductDocuments(collectionId: string | null): Promise<{ documents: number; chunks: number }> {
+  // Hold a dedicated transaction-scoped lock while reading and indexing. Two
+  // delayed minute batches (or a manual reindex) cannot race older snapshots.
+  // Ordinary product/admin writes remain outside this advisory lock.
+  return sql.begin(async lock => {
+    await lock`SELECT pg_advisory_xact_lock(hashtextextended('earthora-kb-products', 0))`;
+    return syncCurrentProductDocuments(collectionId);
+  });
+}
+
+async function syncCurrentProductDocuments(collectionId: string | null): Promise<{ documents: number; chunks: number }> {
   const products = await sql<any[]>`SELECT p.id, p.name, p.slug, p.description, p.highlights, p.price, p.mrp, p.category,
     COALESCE(i.total_stock,0) AS stock FROM products p LEFT JOIN inventory i ON i.product_id = p.id WHERE p.status = 'active'`;
   let docs = 0; let chunks = 0;
@@ -132,7 +156,7 @@ export async function syncProductDocuments(collectionId: string | null): Promise
     const parts = [`# ${p.name}`, p.description || '', ''];
     if (Array.isArray(p.highlights) && p.highlights.length) parts.push('## Highlights', p.highlights.map((h: string) => `- ${h}`).join('\n'), '');
     for (const f of facts) parts.push(`## ${f.category}${f.question ? ` — ${f.question}` : ''}`, f.content, '');
-    const r = await indexDocument({ sourceId: null, collectionId, title: p.name, uri: `product:${p.slug}`, mime: 'text/markdown', text: parts.join('\n'), tags: ['product', p.slug], productIds: [p.id], authority: 2, summary: `Product information for ${p.name}` });
+    const r = await indexDocument({ sourceId: null, collectionId, title: p.name, uri: `product:${p.slug}`, mime: 'text/markdown', text: parts.join('\n'), tags: ['product', p.slug], productIds: [p.id], authority: 2, summary: `Product information for ${p.name}`, stableProductIdentity: true });
     docs++; chunks += r.chunks;
   }
   return { documents: docs, chunks };

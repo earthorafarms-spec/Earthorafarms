@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mock = vi.hoisted(() => ({ enqueueJob: vi.fn(), sql: vi.fn() }));
 vi.mock('../../modules/jobs/queue.js', () => ({ enqueueJob: mock.enqueueJob }));
@@ -6,16 +6,46 @@ vi.mock('../../db/client.js', () => ({ sql: mock.sql }));
 import { DEFAULT_AUTO_SYNC, KB_PAGES_JOB, KB_SYNC_EVERY_MS, KB_SYNC_JOB, KB_WEBSITE_JOB, dueSyncs, enqueueKbSync,
          normalizeAutoSync, readAutoSync, runAutoSyncTick, syncDedupeKey, writeAutoSync } from './sync.js';
 
-beforeEach(() => { vi.resetAllMocks(); });
+beforeEach(() => { vi.resetAllMocks(); vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-30T10:00:05Z')); });
+afterEach(() => vi.useRealTimers());
 
 describe('knowledge base sync triggers', () => {
-  it('enqueues one idempotent product sync per minute with the reason recorded', async () => {
+  it('queues a product batch only after its minute of writes closes', async () => {
     mock.enqueueJob.mockResolvedValue('job-1');
     await expect(enqueueKbSync('gateway-products-update')).resolves.toBe('job-1');
     expect(mock.enqueueJob).toHaveBeenCalledExactlyOnceWith(KB_SYNC_JOB, { reason: 'gateway-products-update' },
-      { dedupeKey: syncDedupeKey(KB_SYNC_JOB), maxAttempts: 3 });
+      { dedupeKey: syncDedupeKey(KB_SYNC_JOB) + ':deferred-v1', maxAttempts: 3, runAt: new Date('2026-09-30T10:01:00Z') });
     expect(syncDedupeKey(KB_SYNC_JOB, 60_000 * 1234 + 59_999)).toBe('kb_sync_products:1234');
     expect(syncDedupeKey(KB_PAGES_JOB, 60_000 * 1235)).toBe('kb_sync_pages:1235');
+  });
+
+  it('does not lose final publication after the initial archived insert in the same minute', async () => {
+    const jobs = new Map<string, { at: number; done: boolean }>();
+    let active = false;
+    const indexed: boolean[] = [];
+    mock.enqueueJob.mockImplementation(async (_kind, _payload, options) => {
+      // Model the existing generic queue's idempotency: a duplicate key does
+      // not rearm a job, so running the first job too early would lose publish.
+      if (!jobs.has(options.dedupeKey)) jobs.set(options.dedupeKey, { at: options.runAt?.getTime() ?? Date.now(), done: false });
+      return options.dedupeKey;
+    });
+    const workerTick = () => {
+      for (const job of jobs.values()) if (!job.done && job.at <= Date.now()) { job.done = true; indexed.push(active); }
+    };
+    await enqueueKbSync('gateway-products-insert');
+    workerTick();
+    vi.setSystemTime(new Date('2026-09-30T10:00:25Z'));
+    await enqueueKbSync('gateway-inventory-upsert'); workerTick();
+    active = true;
+    await enqueueKbSync('gateway-products-update'); workerTick();
+    expect(indexed).toEqual([]); expect(jobs.size).toBe(1);
+    vi.setSystemTime(new Date('2026-09-30T10:01:00Z')); workerTick();
+    expect(indexed).toEqual([true]);
+    active = false;
+    await enqueueKbSync('gateway-products-update'); workerTick();
+    expect(jobs.size).toBe(2); expect(indexed).toEqual([true]);
+    vi.setSystemTime(new Date('2026-09-30T10:02:00Z')); workerTick();
+    expect(indexed).toEqual([true, false]);
   });
 
   it('never throws into an admin save when the queue is unavailable', async () => {

@@ -31,7 +31,7 @@ export default function OurStory() {
               className="lg:col-span-8"
             >
               <h1 className="font-dm font-normal tracking-[-0.05em] text-[42px] leading-[44px] sm:text-[66px] sm:leading-[62px] lg:text-[84px] lg:leading-[78px] text-white">
-                Nurtured by volcanic soil. <br />
+                Rooted in everyday wellness. <br />
                 <span className="text-white/35">Revitalized by Earthora.</span>
               </h1>
             </motion.div>
@@ -42,29 +42,29 @@ export default function OurStory() {
               transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.3 }}
               className="lg:col-span-4 font-inter font-normal text-base sm:text-lg text-white/55 leading-relaxed tracking-[-0.02em]"
             >
-              Born from a vision to bridge ancient botanical wisdom with modern wellness, we cultivate organic Moringa oleifera at peak vitality.
+              Earthora Farms brings moringa leaf products into everyday wellness routines, with current product details available in our live collection.
             </motion.p>
           </div>
         </div>
       </section>
 
-      {/* ── Section 1: The Ooty Farm ── */}
+      {/* ── Section 1: The product approach ── */}
       <section className="py-20 lg:py-28">
         <div className="container mx-auto px-6 sm:px-10 max-w-[1400px]">
           <div className="grid lg:grid-cols-12 gap-12 lg:gap-20 items-center">
             {/* Left Narrative */}
             <div className="lg:col-span-6 space-y-6">
               <span className="font-inter text-xs uppercase tracking-wider text-black/40 font-medium block">
-                The Terroir
+                Our Approach
               </span>
               <h2 className="font-dm font-normal text-3xl sm:text-5xl text-black tracking-[-0.04em] leading-[1.1]">
-                Nestled in the highlands of Ooty.
+                Make an informed choice.
               </h2>
               <p className="font-inter text-sm sm:text-base text-black/70 leading-relaxed">
-                Our farm sits on high-altitude, volcanic-ash enriched soil in Ooty, Tamil Nadu. The unique combination of cool mountain breeze, intense solar radiation, and mineral-rich natural spring water gives our moringa leaves an exceptionally high concentration of antioxidants, bioavailable vitamins, and active amino acids.
+                Our live product collection is the place to check what Earthora offers today. Each available product has its own description, price and directions so you can decide what suits your routine.
               </p>
               <p className="font-inter text-sm sm:text-base text-black/70 leading-relaxed">
-                Unlike mass-commercial operations, we cultivate in micro-batches. Each tree is nurtured using natural, chemical-free composts, ensuring zero heavy-metal residues or toxic synthetic trace particles in our harvests.
+                If you need more detail about sourcing, processing or batch documentation than the current label provides, contact our team and we will confirm what information is available.
               </p>
             </div>
 
@@ -74,9 +74,9 @@ export default function OurStory() {
                 <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center">
                   <Sprout className="w-5 h-5" />
                 </div>
-                <h3 className="font-dm text-lg text-black font-semibold">100% Organic Soil</h3>
+                <h3 className="font-dm text-lg text-black font-semibold">Current Product Details</h3>
                 <p className="font-inter text-xs text-black/55 leading-relaxed">
-                  Naturally fertilized soils enriched with mineral volcanic ash for supreme bioavailability.
+                  See available products, pricing and stock in the live collection.
                 </p>
               </div>
 
@@ -84,9 +84,9 @@ export default function OurStory() {
                 <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center">
                   <Award className="w-5 h-5" />
                 </div>
-                <h3 className="font-dm text-lg text-black font-semibold">Shade-Drying Mastery</h3>
+                <h3 className="font-dm text-lg text-black font-semibold">Label Information</h3>
                 <p className="font-inter text-xs text-black/55 leading-relaxed">
-                  Leaves dried in UV-protected shade chambers to preserve delicate chlorophyll and vital enzymes.
+                  Review each product label for its ingredients and directions.
                 </p>
               </div>
 
@@ -94,9 +94,9 @@ export default function OurStory() {
                 <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center">
                   <Shield className="w-5 h-5" />
                 </div>
-                <h3 className="font-dm text-lg text-black font-semibold">Zero Additives</h3>
+                <h3 className="font-dm text-lg text-black font-semibold">Questions Welcome</h3>
                 <p className="font-inter text-xs text-black/55 leading-relaxed">
-                  No binders, fillers, preservatives, or artificial flow agents. Pure botanical integrity.
+                  Ask our team if you need to verify an ingredient or batch detail.
                 </p>
               </div>
 
@@ -104,9 +104,9 @@ export default function OurStory() {
                 <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-800 flex items-center justify-center">
                   <Heart className="w-5 h-5" />
                 </div>
-                <h3 className="font-dm text-lg text-black font-semibold">Direct Trade</h3>
+                <h3 className="font-dm text-lg text-black font-semibold">Order Support</h3>
                 <p className="font-inter text-xs text-black/55 leading-relaxed">
-                  Fair wages and premium working conditions for our local Ooty harvesting partners.
+                  Get help with product questions, checkout and order tracking.
                 </p>
               </div>
             </div>
@@ -121,39 +121,39 @@ export default function OurStory() {
             Our Journey
           </span>
           <h2 className="font-dm font-normal text-3xl sm:text-5xl text-black tracking-[-0.04em] mb-12">
-            Purity has a timeline.
+            Your journey, clearly explained.
           </h2>
 
           <div className="space-y-8 text-left max-w-2xl mx-auto">
             <div className="relative pl-8 border-l border-emerald-800/20 pb-4">
               <div className="absolute top-1.5 -left-1.5 w-3 h-3 rounded-full bg-emerald-800" />
-              <span className="font-dm font-bold text-emerald-800 text-sm">Step 1: Dawn Harvest</span>
+              <span className="font-dm font-bold text-emerald-800 text-sm">Step 1: Explore</span>
               <p className="font-inter text-xs text-black/60 mt-1 leading-relaxed">
-                Leaves are hand-picked at dawn when nutrient density is at its highest, before the intense afternoon sun.
+                Browse the live collection for currently available products.
               </p>
             </div>
 
             <div className="relative pl-8 border-l border-emerald-800/20 pb-4">
               <div className="absolute top-1.5 -left-1.5 w-3 h-3 rounded-full bg-emerald-800" />
-              <span className="font-dm font-bold text-emerald-800 text-sm">Step 2: Triple-Washing</span>
+              <span className="font-dm font-bold text-emerald-800 text-sm">Step 2: Review</span>
               <p className="font-inter text-xs text-black/60 mt-1 leading-relaxed">
-                Leaves undergo sanitizing washes using RO purified water to remove environmental residues while retaining structure.
+                Read the product details and label directions before choosing.
               </p>
             </div>
 
             <div className="relative pl-8 border-l border-emerald-800/20 pb-4">
               <div className="absolute top-1.5 -left-1.5 w-3 h-3 rounded-full bg-emerald-800" />
-              <span className="font-dm font-bold text-emerald-800 text-sm">Step 3: Slow Dehydration</span>
+              <span className="font-dm font-bold text-emerald-800 text-sm">Step 3: Ask</span>
               <p className="font-inter text-xs text-black/60 mt-1 leading-relaxed">
-                Shade-dehydrated over 18 hours in temperature-controlled spaces, locking in green pigments and bio-actives.
+                Contact our team with any questions about ingredients or your order.
               </p>
             </div>
 
             <div className="relative pl-8">
               <div className="absolute top-1.5 -left-1.5 w-3 h-3 rounded-full bg-emerald-800" />
-              <span className="font-dm font-bold text-emerald-800 text-sm">Step 4: Milled & Sealed</span>
+              <span className="font-dm font-bold text-emerald-800 text-sm">Step 4: Order</span>
               <p className="font-inter text-xs text-black/60 mt-1 leading-relaxed">
-                Milled into micro-fine particles and packed instantly into UV-blocking airtight pouches for ultimate freshness.
+                Add a listed product to your cart and review your details at checkout.
               </p>
             </div>
           </div>
@@ -167,7 +167,7 @@ export default function OurStory() {
             Experience the difference.
           </h2>
           <p className="font-inter text-base text-black/60 leading-relaxed mb-8">
-            Try our farm-fresh moringa powder or tablets, directly shipped from our botanical reserve.
+            Explore our current moringa products and choose the one that fits your routine.
           </p>
           <Link
             href="/#products"

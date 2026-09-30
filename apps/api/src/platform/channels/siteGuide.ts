@@ -6,7 +6,6 @@ const pages: SiteDestination[] = [
   ['products', 'Products', '/', 'products', 'Current products and live prices'],
   ['cart', 'Your cart', '/cart', null, 'Review products and quantities before checkout'],
   ['home_benefits', 'Moringa benefits', '/', 'benefits', 'Homepage benefits overview'],
-  ['home_testimonials', 'Customer stories', '/', 'testimonials', 'Homepage testimonials'],
   ['home_faq', 'Common questions', '/', 'faq', 'Homepage FAQs'],
   ['our_story', 'Our story', '/our-story', null, 'Earthora farm and brand story'],
   ['health_benefits', 'Health benefits', '/health-benefits', null, 'Moringa benefits page'],

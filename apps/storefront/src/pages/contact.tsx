@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Mail, Phone, MapPin, Clock, Send, MessageSquare } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
@@ -9,7 +9,7 @@ import { supabase } from "@/lib/supabase";
 const contactInfo = [
   { icon: Mail, label: "Email", value: "contactus@earthorafarms.com", href: "mailto:contactus@earthorafarms.com" },
   { icon: Phone, label: "Phone", value: "+91 9228153821", href: "tel:+919228153821" },
-  { icon: MapPin, label: "Farm Location", value: "Warehouse No. E-34, Mascot Industrial Park, Jadavpura Cross Road, Kadi-Vithalapur Highway, Kadi, Mehsana, Gujarat" },
+  { icon: MapPin, label: "Warehouse & Contact Address", value: "Warehouse No. E-34, Mascot Industrial Park, Jadavpura Cross Road, Kadi-Vithalapur Highway, Kadi, Mehsana, Gujarat" },
   { icon: Clock, label: "Operating Hours", value: "Mon – Fri, 9 AM – 6 PM IST" },
 ];
 
@@ -21,7 +21,7 @@ export default function Contact() {
     topic: "",
     message: "",
   });
-  const [allowMarketing, setAllowMarketing] = useState(true);
+  const [allowMarketing, setAllowMarketing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const { toast } = useToast();
@@ -97,6 +97,7 @@ export default function Contact() {
       // The API queues the acknowledgement + team notification emails.
 
       setForm({ name: "", email: "", phone: "", topic: "", message: "" });
+      setAllowMarketing(false);
       toast({ title: "Message sent", description: "Thanks for reaching out. We will reply as soon as possible." });
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Unable to send your message right now.";
@@ -136,7 +137,7 @@ export default function Contact() {
             transition={{ delay: 0.2 }}
             className="font-inter text-base sm:text-lg text-black/60 leading-relaxed"
           >
-            Have questions about our moringa, order tracking, or wholesale options? Drop us a note below and our farm team will reply within 24 hours.
+            Have questions about our moringa, order tracking, or wholesale options? Drop us a note below and our team will reply.
           </motion.p>
         </div>
       </section>
@@ -189,7 +190,7 @@ export default function Contact() {
                   Send a Message
                 </h2>
                 <p className="font-inter text-sm text-black/60 mb-8">
-                  Fill out the form below and our wellness support team will reply within 24 hours.
+                  Fill out the form below and our wellness support team will follow up.
                 </p>
 
                 {error && (
@@ -213,11 +214,14 @@ export default function Contact() {
                 >
                   <div className="grid sm:grid-cols-2 gap-6">
                     <div>
-                      <label className="font-inter text-xs uppercase tracking-wider text-black/60 font-medium block mb-2">
+                      <label htmlFor="contact-name" className="font-inter text-xs uppercase tracking-wider text-black/60 font-medium block mb-2">
                         Full Name
                       </label>
                       <input
+                        id="contact-name"
+                        name="name"
                         type="text"
+                        autoComplete="name"
                         required
                         value={form.name}
                         onChange={(e) => setForm({ ...form, name: sanitizeInput(e.target.value) })}
@@ -227,11 +231,14 @@ export default function Contact() {
                     </div>
 
                     <div>
-                      <label className="font-inter text-xs uppercase tracking-wider text-black/60 font-medium block mb-2">
+                      <label htmlFor="contact-email" className="font-inter text-xs uppercase tracking-wider text-black/60 font-medium block mb-2">
                         Email Address
                       </label>
                       <input
+                        id="contact-email"
+                        name="email"
                         type="email"
+                        autoComplete="email"
                         required
                         value={form.email}
                         onChange={(e) => setForm({ ...form, email: e.target.value.replace(/[<>{}]/g, "") })}
@@ -243,11 +250,14 @@ export default function Contact() {
 
                   <div className="grid sm:grid-cols-2 gap-6">
                     <div>
-                      <label className="font-inter text-xs uppercase tracking-wider text-black/60 font-medium block mb-2">
+                      <label htmlFor="contact-phone" className="font-inter text-xs uppercase tracking-wider text-black/60 font-medium block mb-2">
                         Phone Number
                       </label>
                       <input
+                        id="contact-phone"
+                        name="phone"
                         type="tel"
+                        autoComplete="tel"
                         value={form.phone}
                         onChange={(e) => setForm({ ...form, phone: sanitizeInput(e.target.value) })}
                         placeholder="+1 (555) 000-0000"
@@ -256,10 +266,12 @@ export default function Contact() {
                     </div>
 
                     <div>
-                      <label className="font-inter text-xs uppercase tracking-wider text-black/60 font-medium block mb-2">
+                      <label htmlFor="contact-topic" className="font-inter text-xs uppercase tracking-wider text-black/60 font-medium block mb-2">
                         Topic
                       </label>
                       <input
+                        id="contact-topic"
+                        name="topic"
                         type="text"
                         value={form.topic}
                         onChange={(e) => setForm({ ...form, topic: sanitizeInput(e.target.value) })}
@@ -270,10 +282,12 @@ export default function Contact() {
                   </div>
 
                   <div>
-                    <label className="font-inter text-xs uppercase tracking-wider text-black/60 font-medium block mb-2">
+                    <label htmlFor="contact-message" className="font-inter text-xs uppercase tracking-wider text-black/60 font-medium block mb-2">
                       Message
                     </label>
                     <textarea
+                      id="contact-message"
+                      name="message"
                       required
                       rows={5}
                       value={form.message}
@@ -286,6 +300,8 @@ export default function Contact() {
                   <div className="pt-2">
                     <label className="flex items-start gap-3 cursor-pointer group select-none">
                       <input
+                        id="contact-marketing-consent"
+                        name="marketingConsent"
                         type="checkbox"
                         checked={allowMarketing}
                         onChange={(e) => setAllowMarketing(e.target.checked)}

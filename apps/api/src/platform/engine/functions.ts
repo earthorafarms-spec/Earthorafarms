@@ -37,7 +37,7 @@ export const BUILTINS: BuiltinFunction[] = [
     description: 'List Earthora products with live price and stock. Use to see the catalogue or find a product by name.',
     parameters: { type: 'object', properties: { query: { type: 'string', description: 'Optional name/keyword filter' } } },
     run: async (args) => {
-      const products = await listProducts();
+      const products = (await listProducts()).filter(product => product.status === 'active');
       const q = str(args.query).toLowerCase().trim();
       const filtered = q ? products.filter((p) => p.name.toLowerCase().includes(q) || p.slug.includes(q) || p.description.toLowerCase().includes(q)) : products;
       const list = (filtered.length ? filtered : products).map((p) => ({ id: p.id, name: p.name, price: p.price, mrp: p.mrp, currency: 'INR', stock: p.stockQty > 0 ? (p.stockQty > p.lowStockThreshold ? 'in stock' : 'low stock') : 'out of stock' }));
@@ -51,7 +51,7 @@ export const BUILTINS: BuiltinFunction[] = [
     run: async (args) => {
       const products = await listProducts();
       const p = resolveProduct(products, str(args.productId));
-      if (!p) return { ok: false, message: 'Product not found' };
+      if (!p || p.status !== 'active') return { ok: false, message: 'Product not found' };
       return { ok: true, data: { id: p.id, name: p.name, description: p.description, highlights: p.highlights, price: p.price, mrp: p.mrp, currency: 'INR', stock: p.stockQty, image: p.images.find((i) => i.is_primary)?.url ?? p.images[0]?.url ?? null } };
     },
   },

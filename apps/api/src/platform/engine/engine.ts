@@ -3,10 +3,11 @@ import { getLlm } from '../providers/index.js';
 import type { ChatMessage } from '../providers/types.js';
 import { retrieve, evidenceBlock } from '../kb/retrieve.js';
 import { routeTurn, type WorkflowRow } from './router.js';
-import { BUILTIN_MAP, toolDefsFor, type FunctionContext } from './functions.js';
+import { BUILTIN_MAP, toolDefsFor, type FunctionContext, type FunctionResult } from './functions.js';
 import { checkOutput, safeDeflection } from './outputPolicy.js';
 import { inVoiceScope } from '../providers/voiceScope.js';
 import { checkVoiceOutput, collectLiveAmounts, safeVoiceReply, spokenLanguageInstruction, voiceTurnLanguageRule } from './voicePolicy.js';
+import { CHAT_CATALOGUE_RULE, CHAT_LOCATION_RULE, groundedChatCompanyReply } from './chatGrounding.js';
 
 const LANG_NAME: Record<string, string> = { en: 'English', hi: 'Hindi', gu: 'Gujarati' };
 
@@ -39,6 +40,21 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
 
   const [wf] = route.workflowId ? await sql<WorkflowRow[]>`SELECT id, slug, name, description, mode, priority, published_definition AS definition, is_fallback FROM workflows WHERE id = ${route.workflowId}` : [null as any];
   const def = wf?.definition || {};
+
+  // Typed chat uses the same live product source as the store. Its older persona
+  // and page index are not authoritative for current availability or farm location.
+  let chatCatalogue: FunctionResult | null = null;
+  if (!voice && input.channelType === 'chat') {
+    try {
+      chatCatalogue = await BUILTIN_MAP.get('list_products')!.run({}, { conversationId: input.conversationId, channelType: input.channelType, state: input.state, contact: input.contact, workflowId: wf?.id });
+    } catch { chatCatalogue = { ok: false, message: 'Current catalogue lookup unavailable' }; }
+    const factualReply = groundedChatCompanyReply(input.message, chatCatalogue, language);
+    if (factualReply) {
+      const toolCalls = [{ name: 'list_products', ok: chatCatalogue.ok }];
+      await persistTrace(input.conversationId, route, { evidence: [], tools: toolCalls }, { ...timings, total: Date.now() - t0 }, wf?.slug ?? 'general');
+      return { reply: factualReply, state: input.state, workflow: route.slug, confidence: route.confidence, toolCalls, sources: [], trace: { route: route.reason, grounding: 'live-catalogue-and-location-uncertainty' } };
+    }
+  }
 
   // Slot filling: ask one missing required slot (deterministic short-circuit, no retrieval).
   const requiredSlots: any[] = (def.slots || []).filter((s: any) => s.required);
@@ -74,6 +90,9 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
       evidence += `\n\nLIVE CATALOGUE (current prices and stock):\n${JSON.stringify(catalogue.data)}`;
     }
   }
+  if (chatCatalogue) evidence += chatCatalogue.ok && Array.isArray(chatCatalogue.data)
+    ? `\n\nLIVE CATALOGUE (current listed products, prices and stock; supersedes website/persona claims):\n${JSON.stringify(chatCatalogue.data)}`
+    : '\n\nLIVE CATALOGUE: lookup unavailable. This does not mean there are no products; do not invent availability.';
 
   const system = compilePrompt({ persona: input.persona, workflow: def, language, evidence, cart: input.state.cart, checkout: input.state.checkout, channel: input.channelType });
   const toolNames: string[] = uniq([...(def.tools || []).map((t: any) => t.function), 'search_knowledge', 'capture_callback']).filter((n) => BUILTIN_MAP.has(n));
@@ -125,7 +144,7 @@ function compilePrompt(a: { persona?: PersonaConfig; workflow: any; language: st
   const wordCap = a.channel === 'voice' || a.channel === 'calls' ? 'Keep replies to 1-2 short spoken sentences.' : 'Keep replies concise — a few short lines, no long essays.';
   const blocks: string[] = [];
   blocks.push(inVoiceScope() ? spokenLanguageInstruction(a.language) : `LANGUAGE: Reply only in ${lang}. Match the customer's language and script. Localise rupee amounts (₹), dates and units; never translate a product's canonical name.`);
-  blocks.push(`# Identity\nYou are ${p.name || 'Eva'}, the assistant for Earthora Farms — a single-origin organic Moringa brand (tablets and powder) from India. ${p.personality || 'Warm, precise, genuinely helpful; you sound like a real person, not a script.'}`);
+  blocks.push(`# Identity\nYou are ${p.name || 'Eva'}, the assistant for Earthora Farms. Use current evidence for product names and company facts. ${p.personality || 'Warm, precise, genuinely helpful; you sound like a real person, not a script.'}`);
   if (p.environment) blocks.push(`# Context\n${p.environment}`);
   blocks.push(`# Objective\n${a.workflow.prompt?.objective || p.objective || 'Help the customer with product questions, recommendations, orders and support.'}`);
   if (a.workflow.prompt?.playbook?.length) blocks.push(`# Playbook\n${(a.workflow.prompt.playbook as string[]).map((s, i) => `${i + 1}. ${s}`).join('\n')}`);
@@ -139,6 +158,7 @@ function compilePrompt(a: { persona?: PersonaConfig; workflow: any; language: st
   ].filter(Boolean);
   blocks.push(`# Rules\n${rules.map((r) => `- ${r}`).join('\n')}`);
   if (p.custom) blocks.push(`# Notes\n${p.custom}`);
+  if (a.channel === 'chat') blocks.push(`# Current factual boundaries\n- ${CHAT_CATALOGUE_RULE}\n- ${CHAT_LOCATION_RULE}`);
   if (a.cart.length) blocks.push(`# Current cart\n${a.cart.map((c) => `${c.name} x${c.quantity} @ ₹${c.unitPrice}`).join('\n')}`);
   const known = Object.entries(a.checkout).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`);
   if (known.length) blocks.push(`# Known customer details\n${known.join('\n')}`);

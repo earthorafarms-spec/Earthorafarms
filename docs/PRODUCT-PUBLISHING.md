@@ -23,6 +23,29 @@ The voice assistant's catalogue and product tools already read this same live
 database. Publishing a product does not require restarting the GPU models or
 Voice Studio, and does not automatically approve medical/product knowledge.
 
+### Product propagation safeguards, 30 September 2026
+
+Public catalogue/detail endpoints and the storefront accept only `active`
+products. Draft and archived products are excluded; authenticated staff still
+use the separate admin gateway to manage them. Voice and phone catalogue reads
+refresh within the existing conversation without publishing a new Studio
+configuration. A voice context prefetched while the visitor speaks can be less
+than 20 seconds old; an explicit product tool request reads the database again.
+
+Product indexing batches writes by minute and runs each batch after that minute
+closes (up to 60 seconds of intentional delay, plus worker/embedding time). This
+prevents the unpublished insert or stock save from consuming the final product
+publication's sync job. A product-specific database lock serializes indexing
+jobs, including manual syncs. A renamed product keeps its indexed document
+identity through its product UUID, and old duplicate product copies are removed
+only after the current copy is successfully indexed. No model training is needed.
+
+Catalogue names, current prices/stock and approved effective product facts are
+read directly and do not wait for this index. Description/FAQ keyword search
+does depend on successful indexing. The default ten-minute automatic schedule
+remains a recovery path for failed enqueue operations; a busy or failing worker
+can take longer, and its job status should be checked in the Knowledgebase panel.
+
 ## Voice knowledge audit, 28 September 2026
 
 The owner reported that the voice assistant's knowledge base looked static and

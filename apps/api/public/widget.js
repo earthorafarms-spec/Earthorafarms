@@ -171,6 +171,7 @@
     var bubble = addMsg('a', '');
     bubble.innerHTML = '<span class="ea-dot"></span><span class="ea-sr">Assistant is typing</span>';
     sendBtn.disabled = true;
+    var completed = false;
 
     fetch(API + '/api/platform/chat/send', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -190,18 +191,26 @@
               var j; try { j = JSON.parse(d); } catch (e) { return; }
               if (ev === 'meta') convId = j.conversationId;
               else if (ev === 'delta') { if (first) { bubble.textContent = ''; first = false; } bubble.textContent += j.text; msgs.scrollTop = msgs.scrollHeight; }
-              else if (ev === 'done') { bubble.textContent = j.reply; convId = j.conversationId; }
-              else if (ev === 'error') { bubble.className = 'ea-b err'; bubble.textContent = j.message; }
+              else if (ev === 'done') { bubble.textContent = j.reply; convId = j.conversationId; completed = true; }
+              else if (ev === 'error') { bubble.className = 'ea-b err'; bubble.textContent = j.message; completed = false; }
             });
             return pump();
           });
         })();
       })
       .catch(function () {
+        completed = false;
         bubble.className = 'ea-b err';
         bubble.textContent = 'Sorry, I could not reach the assistant. Please check your connection and try again.';
       })
-      .then(function () { sendBtn.disabled = false; input.focus(); });
+      .then(function () {
+        sendBtn.disabled = false;
+        input.focus();
+        // Embedding storefronts may act on an explicit visitor request after
+        // the text turn succeeds. The widget itself never trusts reply prose
+        // as a navigation command and remains mounted across route changes.
+        if (completed) window.dispatchEvent(new CustomEvent('earthora:chat:completed', { detail: { message: text } }));
+      });
   }
   sendBtn.onclick = function () { send(); };
   input.addEventListener('keydown', function (e) {

@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import leafImg from "@assets/generated_images/hero_leaves.jpg";
-import productPowder from "@assets/generated_images/product_powder.jpg";
+import tabletProduct from "@assets/generated_images/morilife_hero_product.webp";
 
 const PILL_LABEL = "BENEFITS";
 
@@ -35,18 +35,18 @@ export function HomeBenefits() {
           {/* Row 1 */}
           <BenefitTextCard
             className="md:col-span-2 md:row-span-1 bg-[#2B4B2E] text-white"
-            stat="8h+"
-            statLabel="LASTING VITALITY"
-            title="Sustained Energy"
-            body="No crashes. No spikes. Just pure, steady cellular energy from morning through evening."
+            stat="01"
+            statLabel="PRODUCT FOCUS"
+            title="Everyday Energy"
+            body="The current Morilife+ description lists energy among the areas its moringa leaf tablets are intended to support."
           />
 
           <BenefitTextCard
             className="md:col-span-2 md:row-span-1 bg-[#E6C670] text-[#2B1F0E]"
-            stat="46×"
-            statLabel="ANTIOXIDANTS"
+            stat="02"
+            statLabel="PRODUCT FOCUS"
             title="Immune Support"
-            body="Densely packed with antioxidants, quercetin, and essential vitamins to fortify daily defenses."
+            body="The product description says the tablets are rich in antioxidants, vitamins and minerals and are intended to support immunity."
           />
 
           <BenefitImageCard
@@ -58,33 +58,33 @@ export function HomeBenefits() {
           {/* Row 2 */}
           <BenefitImageCard
             className="md:col-span-2 md:row-span-1"
-            src={productPowder}
-            alt="Moringa powder"
+            src={tabletProduct}
+            alt="Morilife+ moringa leaf tablets"
           />
 
           <BenefitTextCard
             className="md:col-span-2 md:row-span-1 bg-[#FEFDF9] text-black border border-black/8"
-            stat="18"
-            statLabel="AMINO ACIDS"
-            title="Cognitive Clarity"
-            body="Plant-based iron and zinc nourish neural pathways for sharper focus, memory, and mental stamina."
+            stat="03"
+            statLabel="PRODUCT FOCUS"
+            title="Digestion"
+            body="Digestion is another area of intended support listed in the current Morilife+ product description."
           />
 
           {/* Row 3 */}
           <BenefitTextCard
             className="md:col-span-3 bg-[#FEFDF9] text-black border border-black/8"
-            stat="90+"
-            statLabel="NUTRIENTS"
-            title="Cellular Radiance"
-            body="Vitamins A and E promote healthy skin regeneration and glowing complexion from within."
+            stat="04"
+            statLabel="PRODUCT FOCUS"
+            title="Skin & Hair"
+            body="The current product description lists skin and hair among the areas the tablets are intended to support."
           />
 
           <BenefitTextCard
             className="md:col-span-3 bg-[#0E0E0E] text-white"
-            stat="0"
-            statLabel="ADDITIVES"
-            title="Pure Alkalinity"
-            body="Raw green chlorophyll gently balances body pH levels and counteracts chronic dietary acidity — nothing synthetic, ever."
+            stat="05"
+            statLabel="PRODUCT FOCUS"
+            title="Overall Wellness"
+            body="Explore the live product page for its full description, current ingredients, price and label directions."
           />
         </div>
       </div>

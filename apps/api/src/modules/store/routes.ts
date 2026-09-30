@@ -32,7 +32,7 @@ export async function storeRoutes(app: FastifyInstance): Promise<void> {
     ]);
     reply.header('Cache-Control', 'no-store');
     return {
-      products: products.map((p) => ({ id: p.id, name: p.name, slug: p.slug, price: p.price, mrp: p.mrp, status: p.status, tag: p.tag, badge: p.badge, description: p.description, highlights: p.highlights, images: p.images, rating: p.rating, created_at: p.created_at, inventory: [{ total_stock: p.stockQty }] })),
+      products: products.filter(p => p.status === 'active').map((p) => ({ id: p.id, name: p.name, slug: p.slug, price: p.price, mrp: p.mrp, status: p.status, tag: p.tag, badge: p.badge, description: p.description, highlights: p.highlights, images: p.images, rating: p.rating, created_at: p.created_at, inventory: [{ total_stock: p.stockQty }] })),
       deals: deals.map((d) => ({ id: String(d.id), festival_name: d.name, festival_status: 'active', discount_type: d.discountType, discount_value: d.discountValue, festival_deal_products: d.productIds.map((product_id) => ({ product_id })), festival_start_date: new Date(0).toISOString(), festival_end_date: new Date(8640000000000000).toISOString() })),
       reviews,
     };
@@ -41,7 +41,7 @@ export async function storeRoutes(app: FastifyInstance): Promise<void> {
   app.get('/store/products/:slug', async (req) => {
     const { slug } = req.params as { slug: string };
     const products = await listProducts();
-    const p = products.find((x) => x.slug === slug || x.id === slug);
+    const p = products.find((x) => x.status === 'active' && (x.slug === slug || x.id === slug));
     if (!p) throw notFound('Product not found');
     return { product: p };
   });

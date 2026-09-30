@@ -11,6 +11,15 @@ import {sql} from '../../db/client.js';
 const context=():FunctionContext=>({conversationId:'c1',channelType:'voice',contact:{},state:{cart:[],language:'en',checkout:{name:'Synthetic',email:'synthetic@example.invalid',phone:'9876543210',address:'Test road 12',city:'Ahmedabad',state:'Gujarat',zip:'380001',country:'India'}}});
 beforeEach(()=>{vi.clearAllMocks();vi.mocked(listProducts).mockResolvedValue([{id:'p1',slug:'product',name:'Product',status:'active',stockQty:3,price:10}] as any);vi.mocked(priceCart).mockResolvedValue({lines:[],total:20,unavailable:[],outOfStock:[]} as any);});
 describe('voice purchase preparation',()=>{
+  it('lists only active catalogue products, including when archived or draft names match the search',async()=>{
+    vi.mocked(listProducts).mockResolvedValue([
+      {id:'p1',slug:'tablets',name:'Current Tablets',description:'Leaf powder pressed into tablets',status:'active',stockQty:3,price:999},
+      {id:'p2',slug:'powder',name:'Old Powder',description:'Powder',status:'archived',stockQty:3,price:799},
+      {id:'p3',slug:'new',name:'Unpublished Draft',description:'Draft',status:'draft',stockQty:3,price:599},
+    ] as any);
+    const result=await BUILTIN_MAP.get('list_products')!.run({query:'Old Powder'},context());
+    expect(result.data).toEqual([expect.objectContaining({id:'p1',name:'Current Tablets'})]);
+  });
   it('checks resulting quantity on repeat add and stock on updates',async()=>{
     const ctx=context();
     expect((await BUILTIN_MAP.get('add_to_cart')!.run({productId:'p1',quantity:2},ctx)).ok).toBe(true);

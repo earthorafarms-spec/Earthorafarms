@@ -20,6 +20,11 @@ const STAFF_PREFIXES = ['/sun-earthora', '/kacc', '/developer'];
 const CHANNEL_KEY = import.meta.env.VITE_ASSISTANT_CHANNEL_KEY as string | undefined;
 const API_ORIGIN = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
 const SCRIPT_ID = 'earthora-assistant-widget';
+const WIDGET_VERSION = 'assistant20260930d';
+
+export function widgetScriptUrl(apiOrigin: string): string {
+  return `${apiOrigin}/widget.js?v=${WIDGET_VERSION}`;
+}
 
 export function AssistantWidget() {
   const [location] = useLocation();
@@ -36,7 +41,7 @@ export function AssistantWidget() {
       if (cancelled || document.getElementById(SCRIPT_ID)) return;
       const script = document.createElement('script');
       script.id = SCRIPT_ID;
-      script.src = `${API_ORIGIN}/widget.js`;
+      script.src = widgetScriptUrl(API_ORIGIN);
       script.defer = true;
       script.dataset.channel = CHANNEL_KEY;
       if (API_ORIGIN) script.dataset.api = API_ORIGIN;

@@ -25,10 +25,9 @@ import { Footer } from "@/components/layout/Footer";
 import { useCart } from "@/contexts/cart-context";
 import { useCheckout } from "@/hooks/useCheckout";
 import { useToast } from "@/hooks/use-toast";
-import { fetchReviews } from "@/lib/api";
 import { publicProductsQuery } from "@/lib/catalogQuery";
 import type { Product } from "@/types";
-import powderImg from "@assets/generated_images/product_powder.jpg";
+import tabletsImg from "@assets/generated_images/product_tablets.jpg";
 
 const WISHLIST_KEY = "earthora-wishlist";
 
@@ -39,12 +38,6 @@ export default function ProductDetail() {
 
   const { data: products = [], isLoading } = useQuery<Product[]>({
     ...publicProductsQuery,
-  });
-
-  const { data: dbReviews = [] } = useQuery<any[]>({
-    queryKey: ["product-reviews"],
-    queryFn: fetchReviews,
-    staleTime: 1000 * 60 * 5,
   });
 
   const product = useMemo(() => {
@@ -77,7 +70,7 @@ export default function ProductDetail() {
 
   useEffect(() => {
     if (product) {
-      setSelectedImage(product.imageMain || powderImg);
+      setSelectedImage(product.imageMain || tabletsImg);
       setQuantity(1);
     }
   }, [product]);
@@ -152,11 +145,6 @@ export default function ProductDetail() {
     setBuyingNow(false);
     if (result) setLocation("/cart");
   };
-
-  const productReviews = useMemo(() => {
-    if (!product) return [];
-    return dbReviews.filter((r: any) => r.review_product_id === product.id);
-  }, [dbReviews, product]);
 
   const relatedProducts = useMemo(() => {
     if (!product) return [];
@@ -264,22 +252,22 @@ export default function ProductDetail() {
                 </div>
               )}
 
-              {/* Trust Badges */}
+              {/* Product information; certifications are listed only when verified. */}
               <div className="grid grid-cols-3 gap-3 pt-4 border-t border-black/8">
                 <div className="p-3.5 rounded-2xl bg-white/70 border border-black/5 text-center flex flex-col items-center gap-1.5">
                   <Leaf className="w-5 h-5 text-emerald-800" />
-                  <span className="text-[11px] font-inter font-medium text-black/80">100% Organic</span>
-                  <span className="text-[10px] font-inter text-black/45">Pure single origin</span>
+                  <span className="text-[11px] font-inter font-medium text-black/80">Moringa Leaf</span>
+                  <span className="text-[10px] font-inter text-black/45">Tablet format</span>
                 </div>
                 <div className="p-3.5 rounded-2xl bg-white/70 border border-black/5 text-center flex flex-col items-center gap-1.5">
                   <ShieldCheck className="w-5 h-5 text-emerald-800" />
-                  <span className="text-[11px] font-inter font-medium text-black/80">Lab Certified</span>
-                  <span className="text-[10px] font-inter text-black/45">Heavy-metal tested</span>
+                  <span className="text-[11px] font-inter font-medium text-black/80">Current Details</span>
+                  <span className="text-[10px] font-inter text-black/45">Check the label</span>
                 </div>
                 <div className="p-3.5 rounded-2xl bg-white/70 border border-black/5 text-center flex flex-col items-center gap-1.5">
                   <Truck className="w-5 h-5 text-emerald-800" />
-                  <span className="text-[11px] font-inter font-medium text-black/80">Fast Shipping</span>
-                  <span className="text-[10px] font-inter text-black/45">Dispatched in 24h</span>
+                  <span className="text-[11px] font-inter font-medium text-black/80">Shipping Terms</span>
+                  <span className="text-[10px] font-inter text-black/45">See policy</span>
                 </div>
               </div>
             </div>
@@ -298,14 +286,14 @@ export default function ProductDetail() {
                 {product.name}
               </h1>
 
-              {/* Rating row */}
-              <div className="flex items-center gap-3 mb-6">
+              {/* Ratings are displayed only when backed by customer reviews. */}
+              {product.reviewCount > 0 && <div className="flex items-center gap-3 mb-6">
                 <div className="flex items-center gap-1">
                   {Array.from({ length: 5 }).map((_, i) => (
                     <Star
                       key={i}
                       className={`w-4 h-4 ${
-                        i < Math.floor(product.rating || 5)
+                        i < Math.floor(product.rating)
                           ? "fill-amber-500 text-amber-500"
                           : "fill-amber-500/20 text-amber-500/30"
                       }`}
@@ -313,12 +301,12 @@ export default function ProductDetail() {
                   ))}
                 </div>
                 <span className="text-sm font-inter font-semibold text-black">
-                  {product.rating ? Number(product.rating).toFixed(1) : "4.9"}
+                  {Number(product.rating).toFixed(1)}
                 </span>
                 <span className="text-xs font-inter text-black/40">
-                  ({product.reviewCount || productReviews.length || 28} verified reviews)
+                  ({product.reviewCount} customer reviews)
                 </span>
-              </div>
+              </div>}
 
               {/* Price Row */}
               <div className="p-5 rounded-2xl bg-white/80 border border-black/8 mb-6 flex flex-col gap-2">
@@ -488,9 +476,9 @@ export default function ProductDetail() {
                         className="overflow-hidden"
                       >
                         <div className="px-5 pb-5 pt-1 text-sm font-inter text-black/75 leading-relaxed space-y-2 border-t border-black/5">
-                          <p>• <strong>Full-Spectrum Bio-Nutrients:</strong> Delivers 90+ vital micronutrients, 46 active antioxidants, and all 9 essential amino acids for deep cellular replenishment.</p>
-                          <p>• <strong>Sustained Vitality:</strong> Generates clean, lasting physical stamina without the nervous caffeine spikes or afternoon crashes.</p>
-                          <p>• <strong>Immune & Metabolic Support:</strong> Naturally promotes healthy glucose response, gut balance, and systemic recovery.</p>
+                          <p>• <strong>Product description:</strong> Morilife+ Moringa Leaf Tablets are described as rich in antioxidants, vitamins and minerals.</p>
+                          <p>• <strong>Intended support:</strong> The current listing names immunity, digestion, energy, skin, hair and overall wellness.</p>
+                          <p>• <strong>Before use:</strong> Check the current product label for ingredients and directions.</p>
                         </div>
                       </motion.div>
                     )}
@@ -529,9 +517,8 @@ export default function ProductDetail() {
                         className="overflow-hidden"
                       >
                         <div className="px-5 pb-5 pt-1 text-sm font-inter text-black/75 leading-relaxed space-y-2 border-t border-black/5">
-                          <p>• <strong>Tablets:</strong> Take 2 tablets twice daily with warm water or herbal tea, ideally after morning and evening meals.</p>
-                          <p>• <strong>Powder:</strong> Blend 1 level teaspoon (~3g) into morning green smoothies, warm broths, or fresh citrus water.</p>
-                          <p>• <strong>Ritual Consistency:</strong> For peak bio-availability, maintain daily intake for at least 21 days.</p>
+                          <p>• <strong>Morilife+ Moringa Leaf Tablets:</strong> The approved label says to take 1–2 tablets once or twice daily, before breakfast or dinner.</p>
+                          <p>• Follow the product label and ask a healthcare professional if you need individual advice.</p>
                         </div>
                       </motion.div>
                     )}
@@ -570,9 +557,8 @@ export default function ProductDetail() {
                         className="overflow-hidden"
                       >
                         <div className="px-5 pb-5 pt-1 text-sm font-inter text-black/75 leading-relaxed space-y-2 border-t border-black/5">
-                          <p>• <strong>Single Origin:</strong> 100% grown, nurtured, and harvested on chemical-free organic soils in Gujarat, India.</p>
-                          <p>• <strong>Solar Shade Drying:</strong> Leaves are picked at dawn and gently dehydrated below 40°C in climate-controlled dark rooms, locking in delicate chlorophyll and active enzymes.</p>
-                          <p>• <strong>Purity Guarantee:</strong> Zero added preservatives, zero synthetic binders, GMO-free, and independently batch-tested for heavy metals.</p>
+                          <p>• Review the current product label for ingredients, origin and manufacturing information.</p>
+                          <p>• Contact our team if you need to confirm an ingredient or request batch-specific documentation.</p>
                         </div>
                       </motion.div>
                     )}
@@ -583,7 +569,7 @@ export default function ProductDetail() {
           </div>
 
           {/* View Similar Products Section */}
-          <div className="mt-20 lg:mt-32 pt-14 border-t border-black/8">
+          {relatedProducts.length > 0 && <div className="mt-20 lg:mt-32 pt-14 border-t border-black/8">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
               <div>
                 <span className="text-[10px] font-inter font-semibold tracking-[0.2em] uppercase text-black/45 block mb-1">
@@ -593,7 +579,7 @@ export default function ProductDetail() {
                   View Similar Products
                 </h2>
                 <p className="font-inter text-xs sm:text-sm text-black/60 mt-1 max-w-xl">
-                  Pure, single-origin botanical superfoods harvested directly from our certified organic farm.
+                  Other products currently available in our live collection.
                 </p>
               </div>
 
@@ -606,9 +592,7 @@ export default function ProductDetail() {
               </Link>
             </div>
 
-            {/* If other live products exist in DB, display them */}
-            {relatedProducts.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {relatedProducts.map((p) => (
                   <Link
                     key={p.id}
@@ -638,62 +622,8 @@ export default function ProductDetail() {
                     </div>
                   </Link>
                 ))}
-              </div>
-            ) : (
-              /* When only 1 product in DB, display upcoming companion harvests */
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div className="bg-white/80 rounded-3xl border border-black/8 overflow-hidden p-5 flex flex-col transition-all duration-300 hover:shadow-lg">
-                  <div className="relative aspect-square rounded-2xl overflow-hidden bg-[#F3F1EA] mb-4">
-                    <span className="absolute top-3 left-3 z-10 px-2.5 py-1 rounded-full bg-[#0E1F13] text-white text-[9px] font-inter font-semibold tracking-[0.2em] uppercase">
-                      Coming Soon
-                    </span>
-                    <img
-                      src={powderImg}
-                      alt="Organic Moringa Leaf Powder"
-                      className="w-full h-full object-cover opacity-90"
-                    />
-                  </div>
-                  <h3 className="font-dm text-base font-medium text-black line-clamp-1 mb-1">
-                    Organic Moringa Leaf Powder (100g)
-                  </h3>
-                  <p className="text-xs font-inter text-black/50 mb-3 line-clamp-2">
-                    100% shade-dried organic moringa leaves milled to fine bio-active vitality powder.
-                  </p>
-                  <div className="flex items-center justify-between mt-auto pt-2 border-t border-black/5">
-                    <span className="font-dm text-base font-normal text-[#0E1F13]">₹349</span>
-                    <span className="text-[10px] font-inter font-medium text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full">
-                      Next Farm Harvest
-                    </span>
-                  </div>
-                </div>
-
-                <div className="bg-white/80 rounded-3xl border border-black/8 overflow-hidden p-5 flex flex-col transition-all duration-300 hover:shadow-lg">
-                  <div className="relative aspect-square rounded-2xl overflow-hidden bg-[#F3F1EA] mb-4">
-                    <span className="absolute top-3 left-3 z-10 px-2.5 py-1 rounded-full bg-[#0E1F13] text-white text-[9px] font-inter font-semibold tracking-[0.2em] uppercase">
-                      In Preparation
-                    </span>
-                    <img
-                      src={product.imageMain}
-                      alt="Wild Amla Vitamin C Tablets"
-                      className="w-full h-full object-cover opacity-90"
-                    />
-                  </div>
-                  <h3 className="font-dm text-base font-medium text-black line-clamp-1 mb-1">
-                    Wild Amla Vitamin C Tablets (60 Tabs)
-                  </h3>
-                  <p className="text-xs font-inter text-black/50 mb-3 line-clamp-2">
-                    Sun-ripened forest amla berries rich in natural bio-available antioxidant Vitamin C.
-                  </p>
-                  <div className="flex items-center justify-between mt-auto pt-2 border-t border-black/5">
-                    <span className="font-dm text-base font-normal text-[#0E1F13]">₹449</span>
-                    <span className="text-[10px] font-inter font-medium text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-full">
-                      Formulation Ready
-                    </span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+            </div>
+          </div>}
         </div>
       </main>
 
